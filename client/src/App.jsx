@@ -2,13 +2,9 @@ import React, { useState, useEffect } from 'react'
 import DatePicker from 'react-datepicker'
 import 'react-datepicker/dist/react-datepicker.css'
 import { format, addDays, setHours, setMinutes, isWeekend, isBefore, startOfDay } from 'date-fns'
+import config from './config'
 
-const PHYSICAL_LOCATIONS = [
-  'Main Office - 123 Main St, Suite 100',
-  'Downtown Branch - 456 Center Ave',
-  'University Campus - Building A, Room 201',
-  'Community Center - 789 Park Road'
-]
+const CUSTOM_LOCATION_VALUE = '__CUSTOM__'
 
 function App() {
   const [step, setStep] = useState(1)
@@ -17,6 +13,7 @@ function App() {
     time: null,
     meetingType: null, // 'google-meet' or 'physical'
     location: '',
+    customLocation: '',
     name: '',
     email: '',
     phone: '',
@@ -25,6 +22,7 @@ function App() {
   const [availableSlots, setAvailableSlots] = useState([])
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isBooked, setIsBooked] = useState(false)
+  const [isCustomLocation, setIsCustomLocation] = useState(false)
 
   // Generate time slots when date is selected
   useEffect(() => {
@@ -35,9 +33,7 @@ function App() {
 
   const generateTimeSlots = (date) => {
     const slots = []
-    const startHour = 9 // 9 AM
-    const endHour = 17 // 5 PM
-    const slotDuration = 60 // 60 minutes
+    const { startHour, endHour } = config.booking
 
     for (let hour = startHour; hour < endHour; hour++) {
       const slotTime = setMinutes(setHours(date, hour), 0)
@@ -51,8 +47,13 @@ function App() {
   }
 
   const isDateDisabled = (date) => {
-    // Disable weekends and past dates
-    return isWeekend(date) || isBefore(startOfDay(date), startOfDay(new Date()))
+    // Disable past dates
+    const isPastDate = isBefore(startOfDay(date), startOfDay(new Date()))
+
+    // Disable weekends if configured
+    const isWeekendDate = config.booking.allowWeekends ? false : isWeekend(date)
+
+    return isPastDate || isWeekendDate
   }
 
   const handleNext = () => {
@@ -80,7 +81,17 @@ function App() {
   }
 
   const handleLocationSelect = (location) => {
-    setBookingData({ ...bookingData, location })
+    if (location === CUSTOM_LOCATION_VALUE) {
+      setIsCustomLocation(true)
+      setBookingData({ ...bookingData, location: CUSTOM_LOCATION_VALUE, customLocation: '' })
+    } else {
+      setIsCustomLocation(false)
+      setBookingData({ ...bookingData, location, customLocation: '' })
+    }
+  }
+
+  const handleCustomLocationChange = (e) => {
+    setBookingData({ ...bookingData, customLocation: e.target.value })
   }
 
   const handleInputChange = (e) => {
@@ -92,12 +103,18 @@ function App() {
     setIsSubmitting(true)
 
     try {
+      // Prepare booking data with final location
+      const finalBookingData = {
+        ...bookingData,
+        location: isCustomLocation ? bookingData.customLocation : bookingData.location
+      }
+
       const response = await fetch('/api/bookings', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(bookingData)
+        body: JSON.stringify(finalBookingData)
       })
 
       if (response.ok) {
@@ -115,8 +132,17 @@ function App() {
 
   const canProceedFromStep1 = bookingData.date && bookingData.time
   const canProceedFromStep2 = bookingData.meetingType &&
-    (bookingData.meetingType === 'google-meet' || bookingData.location)
+    (bookingData.meetingType === 'google-meet' ||
+     (bookingData.location && (bookingData.location !== CUSTOM_LOCATION_VALUE || bookingData.customLocation.trim())))
   const canSubmit = bookingData.name && bookingData.email
+
+  // Get the final location for display
+  const getFinalLocation = () => {
+    if (bookingData.meetingType === 'google-meet') {
+      return 'Google Meet (link will be sent)'
+    }
+    return isCustomLocation ? bookingData.customLocation : bookingData.location
+  }
 
   if (isBooked) {
     return (
@@ -143,7 +169,7 @@ function App() {
               {bookingData.meetingType === 'physical' && (
                 <div className="summary-item">
                   <span className="summary-label">Location:</span>
-                  <span className="summary-value">{bookingData.location}</span>
+                  <span className="summary-value">{getFinalLocation()}</span>
                 </div>
               )}
               <div className="summary-item">
@@ -169,8 +195,8 @@ function App() {
   return (
     <div className="container">
       <div className="header">
-        <h1>Book a Session</h1>
-        <p>Schedule your tutoring session in just a few steps</p>
+        <h1>{config.businessName}</h1>
+        <p>{config.businessDescription}</p>
       </div>
 
       <div className="booking-card">
@@ -191,7 +217,7 @@ function App() {
                 onChange={handleDateSelect}
                 filterDate={(date) => !isDateDisabled(date)}
                 minDate={new Date()}
-                maxDate={addDays(new Date(), 90)}
+                maxDate={addDays(new Date(), config.booking.advanceBookingDays)}
                 inline
                 calendarClassName="booking-calendar"
               />
@@ -232,27 +258,31 @@ function App() {
             <h2>Choose Meeting Type</h2>
 
             <div className="meeting-options">
-              <div
-                className={`meeting-option ${bookingData.meetingType === 'google-meet' ? 'selected' : ''}`}
-                onClick={() => handleMeetingTypeSelect('google-meet')}
-              >
-                <div className="meeting-option-icon">📹</div>
-                <div className="meeting-option-content">
-                  <h3>Google Meet</h3>
-                  <p>Join remotely via video call. A Google Meet link will be generated and sent to you.</p>
+              {config.meetingTypes.googleMeet.enabled && (
+                <div
+                  className={`meeting-option ${bookingData.meetingType === 'google-meet' ? 'selected' : ''}`}
+                  onClick={() => handleMeetingTypeSelect('google-meet')}
+                >
+                  <div className="meeting-option-icon">{config.meetingTypes.googleMeet.icon}</div>
+                  <div className="meeting-option-content">
+                    <h3>{config.meetingTypes.googleMeet.label}</h3>
+                    <p>{config.meetingTypes.googleMeet.description}</p>
+                  </div>
                 </div>
-              </div>
+              )}
 
-              <div
-                className={`meeting-option ${bookingData.meetingType === 'physical' ? 'selected' : ''}`}
-                onClick={() => handleMeetingTypeSelect('physical')}
-              >
-                <div className="meeting-option-icon">📍</div>
-                <div className="meeting-option-content">
-                  <h3>Physical Location</h3>
-                  <p>Meet in person at one of our locations.</p>
+              {config.meetingTypes.physical.enabled && (
+                <div
+                  className={`meeting-option ${bookingData.meetingType === 'physical' ? 'selected' : ''}`}
+                  onClick={() => handleMeetingTypeSelect('physical')}
+                >
+                  <div className="meeting-option-icon">{config.meetingTypes.physical.icon}</div>
+                  <div className="meeting-option-content">
+                    <h3>{config.meetingTypes.physical.label}</h3>
+                    <p>{config.meetingTypes.physical.description}</p>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
 
             {bookingData.meetingType === 'physical' && (
@@ -263,12 +293,34 @@ function App() {
                   onChange={(e) => handleLocationSelect(e.target.value)}
                 >
                   <option value="">Choose a location...</option>
-                  {PHYSICAL_LOCATIONS.map((location, index) => (
+                  {config.physicalLocations.map((location, index) => (
                     <option key={index} value={location}>
                       {location}
                     </option>
                   ))}
+                  {config.locationOptions.allowCustomLocation && (
+                    <option value={CUSTOM_LOCATION_VALUE}>✏️ Enter Custom Location</option>
+                  )}
                 </select>
+
+                {isCustomLocation && (
+                  <div style={{ marginTop: '1rem' }}>
+                    <input
+                      type="text"
+                      value={bookingData.customLocation}
+                      onChange={handleCustomLocationChange}
+                      placeholder={config.locationOptions.customLocationPlaceholder}
+                      style={{ width: '100%' }}
+                    />
+                    <p style={{
+                      fontSize: '0.875rem',
+                      color: 'var(--text-secondary)',
+                      marginTop: '0.5rem'
+                    }}>
+                      {config.locationOptions.customLocationHelp}
+                    </p>
+                  </div>
+                )}
               </div>
             )}
 
@@ -301,7 +353,7 @@ function App() {
               <div className="summary-item">
                 <span className="summary-label">Meeting Type:</span>
                 <span className="summary-value">
-                  {bookingData.meetingType === 'google-meet' ? 'Google Meet (link will be sent)' : bookingData.location}
+                  {getFinalLocation()}
                 </span>
               </div>
             </div>

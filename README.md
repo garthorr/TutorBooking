@@ -6,7 +6,9 @@ A self-hosted booking application similar to Calendly, built for scheduling tuto
 
 - 📅 **Date & Time Selection**: Interactive calendar with available time slots
 - 📹 **Google Meet Integration**: Automatically generates Google Meet links for virtual sessions
-- 📍 **Physical Location Options**: Select from predefined physical meeting locations
+- 📍 **Physical Location Options**: Select from predefined locations or enter custom locations
+- ✏️ **Custom Location Entry**: Allow clients to specify their own meeting location
+- ⚙️ **Easy Configuration**: Centralized config file for all customization options
 - 🔄 **Google Calendar Sync**: Real-time availability checking and automatic calendar event creation
 - 📧 **Email Notifications**: Automatic confirmation emails sent to clients
 - 🎨 **Modern UI**: Clean, responsive design that works on all devices
@@ -98,17 +100,46 @@ GOOGLE_CALENDAR_ID=primary
 TIMEZONE=America/New_York
 \`\`\`
 
-### 4. Customize Physical Locations
+### 4. Configure Your Booking Settings
 
-Edit the `PHYSICAL_LOCATIONS` array in `client/src/App.jsx` to match your actual locations:
+All customization options are centralized in `client/src/config.js`. Edit this file to:
 
+**Business Information:**
 \`\`\`javascript
-const PHYSICAL_LOCATIONS = [
+businessName: 'Your Business Name',
+businessDescription: 'Your booking page description',
+\`\`\`
+
+**Physical Locations:**
+\`\`\`javascript
+physicalLocations: [
   'Your Office - Address Line 1',
   'Second Location - Address Line 2',
   // Add more locations as needed
 ]
 \`\`\`
+
+**Location Options:**
+\`\`\`javascript
+locationOptions: {
+  allowCustomLocation: true, // Enable/disable custom location entry
+  customLocationPlaceholder: 'Enter your preferred meeting location...',
+  customLocationHelp: 'Please provide a specific address or location name'
+}
+\`\`\`
+
+**Working Hours:**
+\`\`\`javascript
+booking: {
+  startHour: 9,  // 9 AM
+  endHour: 17,   // 5 PM
+  sessionDuration: 60,  // 60 minutes
+  advanceBookingDays: 90,  // How far in advance can clients book?
+  allowWeekends: false  // Allow booking on weekends?
+}
+\`\`\`
+
+See `client/src/config.js` for all available options.
 
 ## Development
 
@@ -217,27 +248,75 @@ Check server health and Google Calendar connection status.
 
 ## Customization
 
-### Working Hours
+Most settings can be customized in `client/src/config.js`. Here are the key options:
 
-Edit the time slot generation in `client/src/App.jsx`:
+### Business Settings
 
 \`\`\`javascript
-const startHour = 9  // 9 AM
-const endHour = 17   // 5 PM
-const slotDuration = 60 // 60 minutes
+businessName: 'Tutoring Services',
+businessDescription: 'Schedule your tutoring session in just a few steps',
 \`\`\`
 
-### Session Duration
-
-Change the duration in `server/server.js`:
+### Booking Hours & Rules
 
 \`\`\`javascript
+booking: {
+  startHour: 9,           // Start time (24-hour format)
+  endHour: 17,            // End time (24-hour format)
+  sessionDuration: 60,    // Duration in minutes
+  advanceBookingDays: 90, // How far ahead clients can book
+  allowWeekends: false    // Allow weekend bookings
+}
+\`\`\`
+
+### Location Configuration
+
+\`\`\`javascript
+// Predefined locations
+physicalLocations: [
+  'Main Office - 123 Main St, Suite 100',
+  'Downtown Branch - 456 Center Ave'
+],
+
+// Custom location options
+locationOptions: {
+  allowCustomLocation: true,  // Enable custom location entry
+  customLocationPlaceholder: 'Enter your preferred meeting location...',
+  customLocationHelp: 'Please provide a specific address or location name'
+}
+\`\`\`
+
+### Meeting Types
+
+Enable or disable meeting types and customize labels:
+
+\`\`\`javascript
+meetingTypes: {
+  googleMeet: {
+    enabled: true,
+    label: 'Google Meet',
+    description: 'Join remotely via video call...',
+    icon: '📹'
+  },
+  physical: {
+    enabled: true,
+    label: 'Physical Location',
+    description: 'Meet in person at a location of your choice.',
+    icon: '📍'
+  }
+}
+\`\`\`
+
+### Session Duration (Backend)
+
+For different session durations, also update `server/server.js`:
+
+\`\`\`javascript
+// Line ~158
 const endDateTime = new Date(startDateTime.getTime() + 60 * 60 * 1000) // 1 hour
 \`\`\`
 
-### Available Days
-
-Modify the `isDateDisabled` function in `client/src/App.jsx` to change which days are bookable.
+Change `60 * 60 * 1000` to match your session duration in milliseconds.
 
 ## Troubleshooting
 
