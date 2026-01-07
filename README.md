@@ -30,11 +30,21 @@ A self-hosted booking application similar to Calendly, built for scheduling tuto
 
 ## Prerequisites
 
+### For Docker Deployment (Recommended)
+- Docker and Docker Compose installed
+- Google Account with Calendar access
+- Ubuntu server (for deployment)
+
+### For Manual Installation
 - Node.js 18+ and npm
 - Google Account with Calendar access
 - Ubuntu server (for deployment)
 
 ## Installation
+
+**🐳 Using Docker? Skip to [Docker Deployment](#docker-deployment-recommended) for the easiest setup.**
+
+### Manual Installation Steps
 
 ### 1. Clone the Repository
 
@@ -141,11 +151,180 @@ booking: {
 
 See `client/src/config.js` for all available options.
 
-## Development
+## Docker Deployment (Recommended)
 
-Run the development servers:
+Docker makes deployment simple and consistent across environments.
+
+### Quick Start with Docker
+
+1. **Configure environment variables:**
+   ```bash
+   cd server
+   cp .env.example .env
+   # Edit .env with your Google Calendar credentials
+   ```
+
+2. **Build and start containers:**
+   ```bash
+   cd ..  # Back to project root
+   docker-compose up -d
+   ```
+
+3. **Access the application:**
+   - Frontend: http://localhost (or http://your-server-ip)
+   - Backend API: http://localhost:5000 (or http://your-server-ip:5000)
+
+### Docker Commands
+
+```bash
+# Start containers
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# View specific service logs
+docker-compose logs -f server
+docker-compose logs -f client
+
+# Stop containers
+docker-compose down
+
+# Rebuild containers after code changes
+docker-compose up -d --build
+
+# Stop and remove containers, networks, and volumes
+docker-compose down -v
+```
+
+### Production Docker Deployment
+
+For production on your Ubuntu server:
+
+1. **Install Docker and Docker Compose:**
+   ```bash
+   # Update package index
+   sudo apt update
+
+   # Install Docker
+   curl -fsSL https://get.docker.com -o get-docker.sh
+   sudo sh get-docker.sh
+
+   # Install Docker Compose
+   sudo apt install docker-compose
+
+   # Add your user to docker group (optional, to run without sudo)
+   sudo usermod -aG docker $USER
+   newgrp docker
+   ```
+
+2. **Clone and configure:**
+   ```bash
+   git clone <your-repo-url>
+   cd TutorBooking
+
+   # Configure environment
+   cd server
+   cp .env.example .env
+   nano .env  # Edit with your credentials
+
+   # Configure booking settings
+   cd ../client/src
+   nano config.js  # Customize your settings
+   ```
+
+3. **Get Google Calendar refresh token:**
+   ```bash
+   # Install dependencies temporarily
+   cd ../../server
+   npm install
+   node get-refresh-token.js
+   # Follow instructions, then add token to .env
+   ```
+
+4. **Deploy with Docker:**
+   ```bash
+   cd ..  # Back to project root
+   docker-compose up -d --build
+   ```
+
+5. **Configure firewall:**
+   ```bash
+   # Allow HTTP traffic
+   sudo ufw allow 80/tcp
+   sudo ufw allow 5000/tcp  # If you want direct API access
+   sudo ufw enable
+   ```
+
+6. **Set up auto-restart:**
+   Docker Compose containers are configured with `restart: unless-stopped`, so they'll automatically restart on server reboot.
+
+### HTTPS with Docker and Nginx Proxy
+
+For production with SSL, use a reverse proxy like Nginx Proxy Manager or Traefik:
+
+**Option 1: Using Nginx Proxy Manager (Easiest)**
+
+1. Install Nginx Proxy Manager in Docker
+2. Point it to http://localhost:80 for your booking app
+3. Configure SSL certificate through the UI
+
+**Option 2: Using Let's Encrypt with Certbot**
+
+1. Install Certbot on host:
+   ```bash
+   sudo apt install certbot
+   ```
+
+2. Stop containers temporarily:
+   ```bash
+   docker-compose down
+   ```
+
+3. Get certificate:
+   ```bash
+   sudo certbot certonly --standalone -d your-domain.com
+   ```
+
+4. Update `docker-compose.yml` to mount certificates:
+   ```yaml
+   client:
+     volumes:
+       - /etc/letsencrypt:/etc/letsencrypt:ro
+   ```
+
+5. Update `client/nginx.conf` to use SSL
+
+### Docker Health Checks
+
+The containers include health checks:
+- Server health check: `http://localhost:5000/api/health`
+- Client health check: Nginx availability
+
+View health status:
+```bash
+docker-compose ps
+```
+
+### Updating the Application
+
+```bash
+# Pull latest changes
+git pull
+
+# Rebuild and restart containers
+docker-compose up -d --build
+
+# View logs to ensure everything started correctly
+docker-compose logs -f
+```
+
+## Manual Development (Without Docker)
+
+If you prefer to develop without Docker:
 
 \`\`\`bash
+npm run install-all
 npm run dev
 \`\`\`
 
@@ -153,7 +332,9 @@ This starts:
 - Frontend: http://localhost:3000
 - Backend: http://localhost:5000
 
-## Production Deployment
+## Manual Production Deployment
+
+**Note:** Docker deployment is recommended. Use manual deployment only if Docker is not available.
 
 ### Build the Frontend
 
