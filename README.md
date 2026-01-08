@@ -120,36 +120,61 @@ businessName: 'Your Business Name',
 businessDescription: 'Your booking page description',
 \`\`\`
 
-**Physical Locations:**
+**Schools (Each with Different Session Lengths & Schedules):**
 \`\`\`javascript
-physicalLocations: [
-  'Your Office - Address Line 1',
-  'Second Location - Address Line 2',
-  // Add more locations as needed
+schools: [
+  {
+    id: 'school-1',
+    name: 'Elementary School',
+    address: '123 Main St',
+    sessionDuration: 30, // 30-minute sessions
+
+    // Available time blocks by day of week (0=Sun, 1=Mon, etc.)
+    availability: {
+      1: [{ start: '08:00', end: '15:00' }], // Monday 8am-3pm
+      2: [{ start: '08:00', end: '15:00' }], // Tuesday 8am-3pm
+      // Add more days...
+    }
+  },
+  {
+    id: 'school-2',
+    name: 'High School',
+    address: '456 Oak Ave',
+    sessionDuration: 60, // 60-minute sessions
+
+    availability: {
+      1: [{ start: '15:30', end: '18:00' }], // Monday 3:30pm-6pm
+      // Different schedule than elementary!
+    }
+  }
 ]
 \`\`\`
 
-**Location Options:**
+**Google Meet Settings:**
+\`\`\`javascript
+googleMeet: {
+  sessionDuration: 60,
+  availability: {
+    1: [{ start: '09:00', end: '17:00' }], // Monday
+    2: [{ start: '09:00', end: '17:00' }], // Tuesday
+    // ... more days
+  }
+}
+\`\`\`
+
+**Custom Location Options:**
 \`\`\`javascript
 locationOptions: {
-  allowCustomLocation: true, // Enable/disable custom location entry
-  customLocationPlaceholder: 'Enter your preferred meeting location...',
-  customLocationHelp: 'Please provide a specific address or location name'
+  allowCustomLocation: true,
+  customLocationSessionDuration: 60,
+  customLocationAvailability: {
+    1: [{ start: '09:00', end: '17:00' }],
+    // ... more days
+  }
 }
 \`\`\`
 
-**Working Hours:**
-\`\`\`javascript
-booking: {
-  startHour: 9,  // 9 AM
-  endHour: 17,   // 5 PM
-  sessionDuration: 60,  // 60 minutes
-  advanceBookingDays: 90,  // How far in advance can clients book?
-  allowWeekends: false  // Allow booking on weekends?
-}
-\`\`\`
-
-See `client/src/config.js` for all available options.
+See `client/src/config.js` for the complete configuration with all 4 example schools.
 
 ## Docker Deployment (Recommended)
 
@@ -438,38 +463,110 @@ businessName: 'Tutoring Services',
 businessDescription: 'Schedule your tutoring session in just a few steps',
 \`\`\`
 
-### Booking Hours & Rules
+### Booking Rules
 
 \`\`\`javascript
 booking: {
-  startHour: 9,           // Start time (24-hour format)
-  endHour: 17,            // End time (24-hour format)
-  sessionDuration: 60,    // Duration in minutes
-  advanceBookingDays: 90, // How far ahead clients can book
-  allowWeekends: false    // Allow weekend bookings
+  advanceBookingDays: 90,  // How far ahead clients can book
+  allowWeekends: false     // Global weekend setting (can be overridden per school)
 }
 \`\`\`
 
-### Location Configuration
+### School Configuration
+
+**Each school can have its own session duration and availability schedule:**
 
 \`\`\`javascript
-// Predefined locations
-physicalLocations: [
-  'Main Office - 123 Main St, Suite 100',
-  'Downtown Branch - 456 Center Ave'
-],
+schools: [
+  {
+    id: 'elementary-school',
+    name: 'Lincoln Elementary School',
+    address: '123 Main St, Springfield',
+    sessionDuration: 30, // 30 minute sessions
 
-// Custom location options
-locationOptions: {
-  allowCustomLocation: true,  // Enable custom location entry
-  customLocationPlaceholder: 'Enter your preferred meeting location...',
-  customLocationHelp: 'Please provide a specific address or location name'
+    // Available time blocks per day of week
+    // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+    availability: {
+      1: [ // Monday
+        { start: '08:00', end: '12:00' },
+        { start: '13:00', end: '15:30' }
+      ],
+      2: [ // Tuesday
+        { start: '08:00', end: '12:00' },
+        { start: '13:00', end: '15:30' }
+      ],
+      // ... more days
+    }
+  },
+  {
+    id: 'high-school',
+    name: 'Jefferson High School',
+    address: '789 Elm Street, Springfield',
+    sessionDuration: 60, // 60 minute sessions
+
+    availability: {
+      1: [{ start: '15:30', end: '18:00' }], // Monday
+      2: [{ start: '15:30', end: '18:00' }], // Tuesday
+      // ... more days
+    }
+  }
+]
+\`\`\`
+
+**Key Features:**
+- ✅ **Different session lengths** per school (30, 45, 60 minutes, etc.)
+- ✅ **Custom schedules** per school with multiple time blocks per day
+- ✅ **Flexible availability** - some schools can have weekend hours
+- ✅ **Multiple time blocks** - e.g., morning and afternoon sessions
+
+### Google Meet Configuration
+
+\`\`\`javascript
+googleMeet: {
+  enabled: true,
+  sessionDuration: 60, // Default session duration for Google Meet
+
+  // Available time blocks for Google Meet sessions
+  availability: {
+    1: [{ start: '09:00', end: '17:00' }], // Monday
+    2: [{ start: '09:00', end: '17:00' }], // Tuesday
+    // ... more days
+  }
 }
 \`\`\`
 
-### Meeting Types
+### Custom Location Options
 
-Enable or disable meeting types and customize labels:
+\`\`\`javascript
+locationOptions: {
+  allowCustomLocation: true,
+  customLocationSessionDuration: 60, // Session duration for custom locations
+  customLocationPlaceholder: 'Enter your preferred meeting location...',
+  customLocationHelp: 'Please provide a specific address or location name',
+
+  // Availability schedule for custom locations
+  customLocationAvailability: {
+    1: [{ start: '09:00', end: '17:00' }],
+    2: [{ start: '09:00', end: '17:00' }],
+    // ... more days
+  }
+}
+\`\`\`
+
+### How Scheduling Works
+
+1. **Client selects a school** → System loads that school's session duration and availability
+2. **Client picks a date** → Only dates with available time blocks are enabled
+3. **System generates time slots** → Based on the school's availability blocks and session duration
+4. **Booking created** → Calendar event created with the correct session length
+
+**Example:**
+- Elementary School: 30-min sessions, 8:00-12:00, 1:00-3:30
+  - Available slots: 8:00, 8:30, 9:00, 9:30... 1:00, 1:30, 2:00, 2:30, 3:00
+- High School: 60-min sessions, 3:30-6:00
+  - Available slots: 3:30, 4:30
+
+### Meeting Types
 
 \`\`\`javascript
 meetingTypes: {
@@ -481,23 +578,12 @@ meetingTypes: {
   },
   physical: {
     enabled: true,
-    label: 'Physical Location',
-    description: 'Meet in person at a location of your choice.',
-    icon: '📍'
+    label: 'School Location',
+    description: 'Meet in person at one of the schools.',
+    icon: '🏫'
   }
 }
 \`\`\`
-
-### Session Duration (Backend)
-
-For different session durations, also update `server/server.js`:
-
-\`\`\`javascript
-// Line ~158
-const endDateTime = new Date(startDateTime.getTime() + 60 * 60 * 1000) // 1 hour
-\`\`\`
-
-Change `60 * 60 * 1000` to match your session duration in milliseconds.
 
 ## Troubleshooting
 

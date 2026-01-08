@@ -118,7 +118,7 @@ app.get('/api/availability/:date', async (req, res) => {
 // Create a booking
 app.post('/api/bookings', async (req, res) => {
   try {
-    const { date, time, meetingType, location, name, email, phone, notes } = req.body
+    const { date, time, meetingType, location, name, email, phone, notes, sessionDuration } = req.body
 
     const booking = {
       id: Date.now().toString(),
@@ -130,13 +130,15 @@ app.post('/api/bookings', async (req, res) => {
       email,
       phone,
       notes,
+      sessionDuration: sessionDuration || 60, // Default to 60 minutes if not provided
       createdAt: new Date().toISOString()
     }
 
     // If Google Calendar is configured, create calendar event
     if (calendar) {
       const startDateTime = new Date(time)
-      const endDateTime = new Date(startDateTime.getTime() + 60 * 60 * 1000) // 1 hour duration
+      const durationMs = (sessionDuration || 60) * 60 * 1000 // Convert minutes to milliseconds
+      const endDateTime = new Date(startDateTime.getTime() + durationMs)
 
       const event = {
         summary: `Tutoring Session - ${name}`,
@@ -144,6 +146,8 @@ app.post('/api/bookings', async (req, res) => {
 Client: ${name}
 Email: ${email}
 ${phone ? `Phone: ${phone}` : ''}
+${location ? `Location: ${location}` : ''}
+Session Duration: ${sessionDuration || 60} minutes
 ${notes ? `Notes: ${notes}` : ''}
         `.trim(),
         start: {
@@ -202,7 +206,7 @@ ${notes ? `Notes: ${notes}` : ''}
 
     bookings.push(booking)
 
-    console.log(`✓ New booking created: ${name} - ${new Date(time).toLocaleString()}`)
+    console.log(`✓ New booking created: ${name} - ${new Date(time).toLocaleString()} (${sessionDuration || 60} min)`)
 
     res.status(201).json({
       success: true,
