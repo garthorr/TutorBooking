@@ -3,7 +3,7 @@
 
 export const config = {
   // Business Information
-  businessName: 'Tutoring Services',
+  businessName: 'EducatOrr',
   businessDescription: 'Schedule your tutoring session in just a few steps',
 
   // General Booking Settings
