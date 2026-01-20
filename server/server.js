@@ -4,6 +4,7 @@ import dotenv from 'dotenv'
 import { google } from 'googleapis'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import { getDriveTime } from './schoolConfig.js'
 
 dotenv.config()
 
@@ -50,9 +51,114 @@ function initializeGoogleCalendar() {
 
 calendar = initializeGoogleCalendar()
 
+// Helper function to get drive time buffer between schools
+function getDriveTimeBuffer(fromSchoolId, toSchoolId) {
+  return getDriveTime(fromSchoolId, toSchoolId)
+}
+
 // API Routes
 
-// Get available time slots
+// Get available time slots with drive time consideration
+app.post('/api/availability', async (req, res) => {
+  try {
+    const { date, schoolId, sessionDuration } = req.body
+    const selectedDate = new Date(date)
+
+    // If Google Calendar is configured, check actual availability
+    if (calendar) {
+      const timeMin = new Date(selectedDate)
+      timeMin.setHours(0, 0, 0, 0)
+
+      const timeMax = new Date(selectedDate)
+      timeMax.setHours(23, 59, 59, 999)
+
+      const response = await calendar.events.list({
+        calendarId: process.env.GOOGLE_CALENDAR_ID || 'primary',
+        timeMin: timeMin.toISOString(),
+        timeMax: timeMax.toISOString(),
+        singleEvents: true,
+        orderBy: 'startTime'
+      })
+
+      const events = response.data.items || []
+
+      // Generate available slots
+      const slots = []
+      const duration = sessionDuration || 60
+
+      // Start from midnight and check every potential slot
+      for (let minutes = 0; minutes < 24 * 60; minutes += duration) {
+        const slotStart = new Date(selectedDate)
+        slotStart.setHours(0, minutes, 0, 0)
+        const slotEnd = new Date(slotStart.getTime() + duration * 60 * 1000)
+
+        // Check if slot overlaps with any existing event
+        let isBlocked = false
+
+        for (const event of events) {
+          const eventStart = new Date(event.start.dateTime || event.start.date)
+          const eventEnd = new Date(event.end.dateTime || event.end.date)
+          const eventSchoolId = event.extendedProperties?.private?.schoolId
+
+          // Check for direct overlap
+          if (slotStart < eventEnd && slotEnd > eventStart) {
+            isBlocked = true
+            break
+          }
+
+          // Check if drive time buffer is needed BEFORE this slot
+          const driveTimeBeforeSlot = getDriveTimeBuffer(eventSchoolId, schoolId)
+          if (driveTimeBeforeSlot > 0) {
+            // Add buffer after the previous event
+            const bufferEnd = new Date(eventEnd.getTime() + driveTimeBeforeSlot * 60 * 1000)
+            if (slotStart < bufferEnd) {
+              isBlocked = true
+              break
+            }
+          }
+
+          // Check if drive time buffer is needed AFTER this slot
+          const driveTimeAfterSlot = getDriveTimeBuffer(schoolId, eventSchoolId)
+          if (driveTimeAfterSlot > 0) {
+            // Add buffer before the next event
+            const bufferStart = new Date(eventStart.getTime() - driveTimeAfterSlot * 60 * 1000)
+            if (slotEnd > bufferStart) {
+              isBlocked = true
+              break
+            }
+          }
+        }
+
+        // Only include slots that aren't blocked
+        if (!isBlocked) {
+          slots.push({
+            time: slotStart.toISOString(),
+            available: true
+          })
+        }
+      }
+
+      res.json({ slots })
+    } else {
+      // Return default slots if Google Calendar is not configured
+      const slots = []
+      for (let hour = 9; hour < 17; hour++) {
+        const slotTime = new Date(selectedDate)
+        slotTime.setHours(hour, 0, 0, 0)
+        slots.push({
+          time: slotTime.toISOString(),
+          available: true
+        })
+      }
+      res.json({ slots })
+    }
+  } catch (error) {
+    console.error('Error fetching availability:', error)
+    res.status(500).json({ error: 'Failed to fetch availability' })
+  }
+})
+
+// Legacy GET endpoint for backward compatibility
 app.get('/api/availability/:date', async (req, res) => {
   try {
     const { date } = req.params
@@ -118,7 +224,7 @@ app.get('/api/availability/:date', async (req, res) => {
 // Create a booking
 app.post('/api/bookings', async (req, res) => {
   try {
-    const { date, time, meetingType, location, name, email, phone, notes, sessionDuration } = req.body
+    const { date, time, meetingType, location, schoolId, name, email, phone, notes, sessionDuration } = req.body
 
     const booking = {
       id: Date.now().toString(),
@@ -126,6 +232,7 @@ app.post('/api/bookings', async (req, res) => {
       time,
       meetingType,
       location,
+      schoolId,
       name,
       email,
       phone,
@@ -152,11 +259,11 @@ ${notes ? `Notes: ${notes}` : ''}
         `.trim(),
         start: {
           dateTime: startDateTime.toISOString(),
-          timeZone: process.env.TIMEZONE || 'America/New_York'
+          timeZone: process.env.TIMEZONE || 'America/Chicago'
         },
         end: {
           dateTime: endDateTime.toISOString(),
-          timeZone: process.env.TIMEZONE || 'America/New_York'
+          timeZone: process.env.TIMEZONE || 'America/Chicago'
         },
         attendees: [
           { email: email }
@@ -167,6 +274,13 @@ ${notes ? `Notes: ${notes}` : ''}
             { method: 'email', minutes: 24 * 60 },
             { method: 'popup', minutes: 30 }
           ]
+        },
+        // Store schoolId in extended properties for drive time calculations
+        extendedProperties: {
+          private: {
+            schoolId: schoolId || '',
+            meetingType: meetingType
+          }
         }
       }
 
@@ -206,7 +320,7 @@ ${notes ? `Notes: ${notes}` : ''}
 
     bookings.push(booking)
 
-    console.log(`✓ New booking created: ${name} - ${new Date(time).toLocaleString()} (${sessionDuration || 60} min)`)
+    console.log(`✓ New booking created: ${name} - ${new Date(time).toLocaleString()} (${sessionDuration || 60} min)${schoolId ? ` at school: ${schoolId}` : ''}`)
 
     res.status(201).json({
       success: true,
@@ -231,6 +345,7 @@ app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
     googleCalendarConnected: calendar !== null,
+    driveTimeCalculation: 'actual drive time + 5 min walking, rounded to nearest 5 min',
     timestamp: new Date().toISOString()
   })
 })
@@ -247,6 +362,7 @@ if (process.env.NODE_ENV === 'production') {
 app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`)
   console.log(`📅 Google Calendar: ${calendar ? '✓ Connected' : '✗ Not configured'}`)
+  console.log(`🚗 Drive Time: Actual time + 5 min walking (rounded to nearest 5 min)`)
   console.log('\nTo configure Google Calendar:')
   console.log('1. Create a project in Google Cloud Console')
   console.log('2. Enable Google Calendar API')

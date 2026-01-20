@@ -7,6 +7,7 @@ A self-hosted booking application similar to Calendly, built for scheduling tuto
 - 📅 **Date & Time Selection**: Interactive calendar with available time slots
 - 📹 **Google Meet Integration**: Automatically generates Google Meet links for virtual sessions
 - 📍 **Physical Location Options**: Select from predefined locations or enter custom locations
+- 🚗 **Smart Drive Time Calculation**: Automatically accounts for travel time between different school locations
 - ✏️ **Custom Location Entry**: Allow clients to specify their own meeting location
 - ⚙️ **Easy Configuration**: Centralized config file for all customization options
 - 🔄 **Google Calendar Sync**: Real-time availability checking and automatic calendar event creation
@@ -419,8 +420,32 @@ sudo certbot --nginx -d your-domain.com
 
 ## API Endpoints
 
-### `GET /api/availability/:date`
-Get available time slots for a specific date.
+### `POST /api/availability`
+Get available time slots for a specific date with drive time consideration.
+
+**Request Body:**
+\`\`\`json
+{
+  "date": "2024-01-15T00:00:00.000Z",
+  "schoolId": "elementary-school",
+  "sessionDuration": 30
+}
+\`\`\`
+
+**Response:**
+\`\`\`json
+{
+  "slots": [
+    { "time": "2024-01-15T09:00:00.000Z", "available": true },
+    { "time": "2024-01-15T10:00:00.000Z", "available": true }
+  ]
+}
+\`\`\`
+
+**Note:** This endpoint automatically accounts for drive time between different school locations. Time slots that don't allow enough travel time from previous bookings are automatically filtered out.
+
+### `GET /api/availability/:date` (Legacy)
+Get available time slots for a specific date (without drive time consideration).
 
 **Response:**
 \`\`\`json
@@ -442,12 +467,16 @@ Create a new booking.
   "time": "2024-01-15T09:00:00.000Z",
   "meetingType": "google-meet",
   "location": "",
+  "schoolId": "elementary-school",
+  "sessionDuration": 30,
   "name": "John Doe",
   "email": "john@example.com",
   "phone": "+1234567890",
   "notes": "Need help with calculus"
 }
 \`\`\`
+
+**Note:** The `schoolId` is stored with the calendar event to enable drive time calculations for future bookings.
 
 ### `GET /api/health`
 Check server health and Google Calendar connection status.
@@ -552,6 +581,53 @@ locationOptions: {
   }
 }
 \`\`\`
+
+### Drive Time Between Locations
+
+The system automatically accounts for travel time between different school locations to prevent back-to-back bookings that don't allow enough time to travel.
+
+**Configuration:** Edit `server/schoolConfig.js` to define actual drive times between schools:
+
+\`\`\`javascript
+driveTimes: {
+  'elementary-school': {
+    'middle-school': 15,    // 15 minutes actual drive time
+    'high-school': 20,      // 20 minutes actual drive time
+    'community-center': 10  // 10 minutes actual drive time
+  },
+  'middle-school': {
+    'elementary-school': 15,
+    'high-school': 12,
+    'community-center': 18
+  },
+  // ... more schools
+}
+\`\`\`
+
+**How It Works:**
+
+1. **Actual Drive Time + Walking Buffer**: For each route, define the actual driving time in minutes. The system automatically adds 5 minutes for walking/parking.
+
+2. **Rounding**: Total time is rounded to the nearest 5 minutes for cleaner scheduling.
+
+3. **Automatic Blocking**: When a client tries to book at a different school than their previous session, the system checks if there's enough time to travel and blocks slots that are too close.
+
+**Example:**
+- Drive time from Elementary to Middle School: 15 minutes
+- Walking/parking buffer: +5 minutes
+- **Total buffer: 20 minutes** (rounded to nearest 5)
+- If you have a session at Elementary ending at 3:00 PM, the earliest available slot at Middle School is 3:20 PM
+
+**Special Cases:**
+- **Same school**: No drive time needed (buffer = 0)
+- **Google Meet sessions**: No drive time needed (virtual meetings)
+- **Undefined routes**: System defaults to 30 minutes and logs a warning
+
+**Benefits:**
+- ✅ Prevents impossible scheduling scenarios
+- ✅ Accounts for realistic travel time
+- ✅ Includes time for parking and walking
+- ✅ No manual buffer management needed
 
 ### How Scheduling Works
 

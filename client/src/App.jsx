@@ -39,27 +39,37 @@ function App() {
     return { hours, minutes }
   }
 
-  // Generate time slots based on location's availability schedule
-  const generateTimeSlots = (date) => {
-    const slots = []
+  // Generate time slots with drive time consideration
+  const generateTimeSlots = async (date) => {
     const dayOfWeek = getDay(date) // 0 = Sunday, 1 = Monday, etc.
 
     let availability = []
     let sessionDuration = 60 // default
+    let schoolId = ''
 
     // Determine which availability schedule to use
     if (bookingData.meetingType === 'google-meet') {
       availability = config.googleMeet.availability[dayOfWeek] || []
       sessionDuration = config.googleMeet.sessionDuration
+      schoolId = '' // No schoolId for Google Meet
     } else if (isCustomLocation) {
       availability = config.locationOptions.customLocationAvailability[dayOfWeek] || []
       sessionDuration = config.locationOptions.customLocationSessionDuration
+      schoolId = 'custom' // Use 'custom' as schoolId
     } else if (selectedSchool) {
       availability = selectedSchool.availability[dayOfWeek] || []
       sessionDuration = selectedSchool.sessionDuration
+      schoolId = selectedSchool.id
     }
 
-    // Generate slots for each availability block
+    // If no availability for this day, return empty
+    if (availability.length === 0) {
+      setAvailableSlots([])
+      return
+    }
+
+    // First generate potential slots based on availability blocks
+    const potentialSlots = []
     availability.forEach(block => {
       const startTime = parseTime(block.start)
       const endTime = parseTime(block.end)
@@ -76,10 +86,7 @@ function App() {
         // Check if there's enough time for a full session
         const sessionEnd = new Date(currentSlot.getTime() + sessionDuration * 60000)
         if (sessionEnd <= endDate) {
-          slots.push({
-            time: new Date(currentSlot),
-            available: true // This will be checked against Google Calendar later
-          })
+          potentialSlots.push(new Date(currentSlot))
         }
 
         // Move to next slot
@@ -87,7 +94,42 @@ function App() {
       }
     })
 
-    setAvailableSlots(slots)
+    // Call backend API to check availability with drive time consideration
+    try {
+      const response = await fetch('/api/availability', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          date: date.toISOString(),
+          schoolId,
+          sessionDuration
+        })
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        const availableSlotTimes = new Set(data.slots.map(slot => new Date(slot.time).getTime()))
+
+        // Filter potential slots to only those that are available (considering drive time)
+        const finalSlots = potentialSlots
+          .filter(slot => availableSlotTimes.has(slot.getTime()))
+          .map(slot => ({
+            time: slot,
+            available: true
+          }))
+
+        setAvailableSlots(finalSlots)
+      } else {
+        // Fallback to showing all potential slots if API fails
+        setAvailableSlots(potentialSlots.map(slot => ({ time: slot, available: true })))
+      }
+    } catch (error) {
+      console.error('Error fetching availability:', error)
+      // Fallback to showing all potential slots if API fails
+      setAvailableSlots(potentialSlots.map(slot => ({ time: slot, available: true })))
+    }
   }
 
   // Check if a date should be disabled
