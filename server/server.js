@@ -5,6 +5,7 @@ import { google } from 'googleapis'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { getDriveTime } from './schoolConfig.js'
+import { saveTokens, loadTokens, deleteTokens, hasTokens } from './tokenStorage.js'
 
 dotenv.config()
 
@@ -27,7 +28,7 @@ let calendar = null
 // Initialize Google Calendar API
 function initializeGoogleCalendar() {
   if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
-    console.log('⚠️  Google Calendar not configured. Set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and GOOGLE_REFRESH_TOKEN in .env')
+    console.log('⚠️  Google Calendar not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in .env')
     return null
   }
 
@@ -35,18 +36,41 @@ function initializeGoogleCalendar() {
     const oauth2Client = new google.auth.OAuth2(
       process.env.GOOGLE_CLIENT_ID,
       process.env.GOOGLE_CLIENT_SECRET,
-      process.env.GOOGLE_REDIRECT_URI || 'http://localhost:5000/oauth2callback'
+      process.env.GOOGLE_REDIRECT_URI || 'http://localhost:5000/auth/google/callback'
     )
 
-    oauth2Client.setCredentials({
-      refresh_token: process.env.GOOGLE_REFRESH_TOKEN
-    })
+    // Try to load tokens from file first (web OAuth flow)
+    const savedTokens = loadTokens()
+    if (savedTokens) {
+      oauth2Client.setCredentials(savedTokens)
+      console.log('✓ Loaded tokens from secure storage')
+      return google.calendar({ version: 'v3', auth: oauth2Client })
+    }
 
-    return google.calendar({ version: 'v3', auth: oauth2Client })
+    // Fall back to environment variable (manual setup)
+    if (process.env.GOOGLE_REFRESH_TOKEN) {
+      oauth2Client.setCredentials({
+        refresh_token: process.env.GOOGLE_REFRESH_TOKEN
+      })
+      console.log('✓ Using refresh token from environment variable')
+      return google.calendar({ version: 'v3', auth: oauth2Client })
+    }
+
+    console.log('⚠️  No tokens found. Use web interface to connect Google Calendar at /admin')
+    return null
   } catch (error) {
     console.error('Error initializing Google Calendar:', error.message)
     return null
   }
+}
+
+// Create OAuth client for authentication
+function getOAuthClient() {
+  return new google.auth.OAuth2(
+    process.env.GOOGLE_CLIENT_ID,
+    process.env.GOOGLE_CLIENT_SECRET,
+    process.env.GOOGLE_REDIRECT_URI || 'http://localhost:5000/auth/google/callback'
+  )
 }
 
 calendar = initializeGoogleCalendar()
@@ -340,6 +364,85 @@ app.get('/api/bookings', (req, res) => {
   res.json({ bookings })
 })
 
+// OAuth Routes
+
+// Initiate OAuth flow
+app.get('/auth/google', (req, res) => {
+  if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+    return res.status(500).json({
+      error: 'OAuth not configured',
+      message: 'Please set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in .env'
+    })
+  }
+
+  const oauth2Client = getOAuthClient()
+  const authUrl = oauth2Client.generateAuthUrl({
+    access_type: 'offline',
+    scope: [
+      'https://www.googleapis.com/auth/calendar',
+      'https://www.googleapis.com/auth/calendar.events'
+    ],
+    prompt: 'consent' // Force consent screen to ensure we get refresh token
+  })
+
+  res.redirect(authUrl)
+})
+
+// OAuth callback
+app.get('/auth/google/callback', async (req, res) => {
+  const { code, error } = req.query
+
+  if (error) {
+    console.error('OAuth error:', error)
+    return res.redirect('/admin?error=auth_failed')
+  }
+
+  if (!code) {
+    return res.redirect('/admin?error=no_code')
+  }
+
+  try {
+    const oauth2Client = getOAuthClient()
+    const { tokens } = await oauth2Client.getToken(code)
+
+    // Save tokens to encrypted file
+    const saved = saveTokens(tokens)
+
+    if (saved) {
+      // Reinitialize calendar with new tokens
+      calendar = initializeGoogleCalendar()
+
+      console.log('✓ OAuth successful - Google Calendar connected')
+      res.redirect('/admin?success=true')
+    } else {
+      res.redirect('/admin?error=save_failed')
+    }
+  } catch (error) {
+    console.error('Error exchanging code for tokens:', error)
+    res.redirect('/admin?error=token_exchange_failed')
+  }
+})
+
+// Check OAuth status
+app.get('/auth/status', (req, res) => {
+  res.json({
+    connected: calendar !== null,
+    hasStoredTokens: hasTokens(),
+    configured: !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET)
+  })
+})
+
+// Disconnect Google Calendar
+app.post('/auth/disconnect', (req, res) => {
+  const deleted = deleteTokens()
+  calendar = null
+
+  res.json({
+    success: deleted,
+    message: deleted ? 'Google Calendar disconnected' : 'Error disconnecting'
+  })
+})
+
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({
@@ -363,9 +466,12 @@ app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`)
   console.log(`📅 Google Calendar: ${calendar ? '✓ Connected' : '✗ Not configured'}`)
   console.log(`🚗 Drive Time: Actual time + 5 min walking (rounded to nearest 5 min)`)
-  console.log('\nTo configure Google Calendar:')
-  console.log('1. Create a project in Google Cloud Console')
-  console.log('2. Enable Google Calendar API')
-  console.log('3. Create OAuth 2.0 credentials')
-  console.log('4. Add credentials to .env file\n')
+
+  if (!calendar) {
+    console.log('\n⚙️  Setup Google Calendar:')
+    console.log(`   Visit: http://localhost:${PORT}/admin`)
+    console.log('   Or configure manually in .env file\n')
+  } else {
+    console.log(`\n⚙️  Admin Panel: http://localhost:${PORT}/admin\n`)
+  }
 })

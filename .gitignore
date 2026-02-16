@@ -7,6 +7,10 @@ node_modules/
 .env.local
 .env.*.local
 
+# OAuth tokens (encrypted)
+server/.tokens.json
+.tokens.json
+
 # Build output
 client/dist/
 dist/

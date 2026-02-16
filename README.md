@@ -11,6 +11,7 @@ A self-hosted booking application similar to Calendly, built for scheduling tuto
 - ✏️ **Custom Location Entry**: Allow clients to specify their own meeting location
 - ⚙️ **Easy Configuration**: Centralized config file for all customization options
 - 🔄 **Google Calendar Sync**: Real-time availability checking and automatic calendar event creation
+- 🔐 **Easy OAuth Setup**: Connect Google Calendar with a simple web login (no manual token generation)
 - 📧 **Email Notifications**: Automatic confirmation emails sent to clients
 - 🎨 **Modern UI**: Clean, responsive design that works on all devices
 - 🏠 **Self-Hosted**: Run on your own Ubuntu server with full control
@@ -77,39 +78,44 @@ This will install dependencies for the root, client, and server.
 
 1. Go to "APIs & Services" > "Credentials"
 2. Click "Create Credentials" > "OAuth client ID"
-3. Configure the OAuth consent screen if prompted
+3. Configure the OAuth consent screen if prompted:
+   - Add your email as a test user
+   - Add scopes: Google Calendar API
 4. Choose "Web application" as the application type
 5. Add authorized redirect URIs:
-   - `http://localhost:5000/oauth2callback` (for development)
-   - `http://your-server-ip:5000/oauth2callback` (for production)
+   - `http://localhost:5000/auth/google/callback` (for development)
+   - `http://your-domain.com/auth/google/callback` (for production)
 6. Save and note your **Client ID** and **Client Secret**
 
-#### Step 3: Get Refresh Token
-
-You'll need to run a one-time OAuth flow to get a refresh token. Here's a quick script:
-
-\`\`\`bash
-cd server
-node get-refresh-token.js
-\`\`\`
-
-Follow the URL, authorize the application, and copy the refresh token.
-
-#### Step 4: Configure Environment Variables
+#### Step 3: Configure Environment Variables
 
 \`\`\`bash
 cp .env.example .env
 \`\`\`
 
-Edit `.env` and add your credentials:
+Edit `.env` and add your OAuth credentials:
 
 \`\`\`env
 GOOGLE_CLIENT_ID=your_client_id_here
 GOOGLE_CLIENT_SECRET=your_client_secret_here
-GOOGLE_REFRESH_TOKEN=your_refresh_token_here
+GOOGLE_REDIRECT_URI=http://localhost:5000/auth/google/callback
 GOOGLE_CALENDAR_ID=primary
-TIMEZONE=America/New_York
+TIMEZONE=America/Chicago
+ENCRYPTION_KEY=your-random-encryption-key-here
 \`\`\`
+
+**Important:** Generate a secure random string for `ENCRYPTION_KEY` in production. This is used to encrypt OAuth tokens stored on your server.
+
+#### Step 4: Connect Google Calendar via Web Interface
+
+1. Start the server: `npm run dev` (or use Docker)
+2. Visit the admin panel: `http://localhost:5000/admin`
+3. Click "Connect Google Calendar"
+4. Sign in with your Google account
+5. Grant calendar access
+6. You're done! The app will automatically save and refresh tokens
+
+**That's it!** No manual token generation required. The OAuth tokens are encrypted and stored securely on your server.
 
 ### 4. Configure Your Booking Settings
 
@@ -259,22 +265,19 @@ For production on your Ubuntu server:
    nano config.js  # Customize your settings
    ```
 
-3. **Get Google Calendar refresh token:**
-   ```bash
-   # Install dependencies temporarily
-   cd ../../server
-   npm install
-   node get-refresh-token.js
-   # Follow instructions, then add token to .env
-   ```
-
-4. **Deploy with Docker:**
+3. **Deploy with Docker:**
    ```bash
    cd ..  # Back to project root
    docker-compose up -d --build
    ```
 
-5. **Configure firewall:**
+5. **Connect Google Calendar:**
+   - Open your browser and visit: `http://your-server-ip/admin`
+   - Click "Connect Google Calendar"
+   - Sign in and authorize
+   - Done! Tokens are encrypted and stored automatically
+
+6. **Configure firewall:**
    ```bash
    # Allow HTTP traffic
    sudo ufw allow 80/tcp
@@ -282,7 +285,7 @@ For production on your Ubuntu server:
    sudo ufw enable
    ```
 
-6. **Set up auto-restart:**
+7. **Set up auto-restart:**
    Docker Compose containers are configured with `restart: unless-stopped`, so they'll automatically restart on server reboot.
 
 ### HTTPS with Docker and Nginx Proxy
@@ -417,6 +420,47 @@ sudo apt update
 sudo apt install certbot python3-certbot-nginx
 sudo certbot --nginx -d your-domain.com
 \`\`\`
+
+## Admin Panel
+
+The application includes an admin panel at `/admin` for easy Google Calendar management.
+
+### Features
+
+- **Connection Status**: See if Google Calendar is connected
+- **One-Click OAuth**: Connect with a simple button click (no manual token generation)
+- **Secure Token Storage**: Tokens are encrypted and stored locally
+- **Easy Disconnect**: Disconnect and reconnect as needed
+
+### Accessing the Admin Panel
+
+1. **Development**: Visit `http://localhost:5000/admin`
+2. **Production**: Visit `http://your-domain.com/admin`
+
+### OAuth Setup Flow
+
+1. Click "Connect Google Calendar" in the admin panel
+2. Sign in with your Google account
+3. Grant calendar and event permissions
+4. Get redirected back with success confirmation
+5. Tokens are automatically saved and encrypted
+
+### Security
+
+- Tokens are encrypted using AES-256-GCM encryption
+- Encryption key is stored in environment variables
+- Tokens are never exposed in logs or responses
+- OAuth flow uses HTTPS in production (recommended)
+
+### Manual Token Setup (Alternative)
+
+If you prefer manual setup, you can still use environment variables:
+
+```env
+GOOGLE_REFRESH_TOKEN=your_refresh_token_here
+```
+
+The system will automatically use tokens from the web interface if available, or fall back to environment variables.
 
 ## API Endpoints
 
@@ -693,14 +737,15 @@ PORT=5001
 ## Future Enhancements
 
 - [ ] Database integration (PostgreSQL/MongoDB)
-- [ ] User authentication for multiple tutors
+- [ ] User authentication for multiple tutors with separate calendars
 - [ ] Email templates customization
 - [ ] SMS reminders via Twilio
 - [ ] Payment integration
 - [ ] Recurring sessions
-- [ ] Admin dashboard
-- [ ] Multiple timezone support
+- [ ] Booking history and management dashboard
+- [ ] Multiple timezone support for clients
 - [ ] Waiting list functionality
+- [ ] Client rescheduling and cancellation
 
 ## License
 
