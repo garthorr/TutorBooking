@@ -10,7 +10,8 @@ const DAYS = [
   { num: 6, label: 'Saturday' },
 ]
 
-const SESSION_DURATIONS = [15, 20, 30, 45, 60, 90, 120]
+// Session durations: 5-minute increments from 5 to 180 minutes
+const SESSION_DURATIONS = Array.from({ length: 36 }, (_, i) => (i + 1) * 5)
 
 function emptySchool() {
   return {
@@ -191,9 +192,16 @@ export default function SchoolForm({ initial, onSave, onCancel, mapsApiKey }) {
           value={school.sessionDuration}
           onChange={e => setSchool(s => ({ ...s, sessionDuration: Number(e.target.value) }))}
         >
-          {SESSION_DURATIONS.map(d => (
-            <option key={d} value={d}>{d} minutes</option>
-          ))}
+          {SESSION_DURATIONS.map(d => {
+            const label = d < 60
+              ? `${d} min`
+              : d === 60
+                ? '1 hr'
+                : d % 60 === 0
+                  ? `${d / 60} hr`
+                  : `${Math.floor(d / 60)} hr ${d % 60} min`
+            return <option key={d} value={d}>{label}</option>
+          })}
         </select>
       </div>
 

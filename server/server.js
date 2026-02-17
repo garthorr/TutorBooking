@@ -87,19 +87,72 @@ function getDriveTimeBuffer(fromSchoolId, toSchoolId) {
 
 // API Routes
 
-// Get available time slots with drive time consideration
+// Shared helper: generate available slots for a single day against a set of calendar events
+// availabilityBlocks: [{ start: 'HH:MM', end: 'HH:MM' }]
+function getAvailableSlotsForDay(date, availabilityBlocks, sessionDuration, events, schoolId) {
+  const slots = []
+  const duration = sessionDuration || 60
+
+  for (const block of availabilityBlocks) {
+    const [startH, startM] = block.start.split(':').map(Number)
+    const [endH, endM] = block.end.split(':').map(Number)
+
+    let slotStart = new Date(date)
+    slotStart.setHours(startH, startM, 0, 0)
+
+    const blockEnd = new Date(date)
+    blockEnd.setHours(endH, endM, 0, 0)
+
+    while (slotStart < blockEnd) {
+      const slotEnd = new Date(slotStart.getTime() + duration * 60 * 1000)
+      if (slotEnd > blockEnd) break // Not enough room for a full session
+
+      let isBlocked = false
+      for (const event of events) {
+        const eventStart = new Date(event.start.dateTime || event.start.date)
+        const eventEnd   = new Date(event.end.dateTime   || event.end.date)
+        const eventSchoolId = event.extendedProperties?.private?.schoolId
+
+        if (slotStart < eventEnd && slotEnd > eventStart) { isBlocked = true; break }
+
+        const driveTimeBefore = getDriveTimeBuffer(eventSchoolId, schoolId)
+        if (driveTimeBefore > 0) {
+          const bufferEnd = new Date(eventEnd.getTime() + driveTimeBefore * 60 * 1000)
+          if (slotStart < bufferEnd) { isBlocked = true; break }
+        }
+
+        const driveTimeAfter = getDriveTimeBuffer(schoolId, eventSchoolId)
+        if (driveTimeAfter > 0) {
+          const bufferStart = new Date(eventStart.getTime() - driveTimeAfter * 60 * 1000)
+          if (slotEnd > bufferStart) { isBlocked = true; break }
+        }
+      }
+
+      if (!isBlocked) slots.push({ time: slotStart.toISOString(), available: true })
+      slotStart = new Date(slotStart.getTime() + duration * 60 * 1000)
+    }
+  }
+  return slots
+}
+
+// Get available time slots for a specific date (with drive time consideration)
 app.post('/api/availability', async (req, res) => {
   try {
-    const { date, schoolId, sessionDuration } = req.body
+    const { date, schoolId, sessionDuration, availabilityBlocks } = req.body
     const selectedDate = new Date(date)
+    const dayOfWeek = selectedDate.getDay()
 
-    // If Google Calendar is configured, check actual availability
+    // Resolve availability blocks: use request body (sent by client) or server-stored school
+    let blocks = availabilityBlocks
+    if (!blocks) {
+      const schools = loadSchools()
+      const school = schools.find(s => s.id === schoolId)
+      blocks = school?.availability?.[dayOfWeek] || []
+    }
+
     if (calendar) {
-      const timeMin = new Date(selectedDate)
-      timeMin.setHours(0, 0, 0, 0)
-
-      const timeMax = new Date(selectedDate)
-      timeMax.setHours(23, 59, 59, 999)
+      const timeMin = new Date(selectedDate); timeMin.setHours(0, 0, 0, 0)
+      const timeMax = new Date(selectedDate); timeMax.setHours(23, 59, 59, 999)
 
       const response = await calendar.events.list({
         calendarId: process.env.GOOGLE_CALENDAR_ID || 'primary',
@@ -109,81 +162,81 @@ app.post('/api/availability', async (req, res) => {
         orderBy: 'startTime'
       })
 
-      const events = response.data.items || []
-
-      // Generate available slots
-      const slots = []
-      const duration = sessionDuration || 60
-
-      // Start from midnight and check every potential slot
-      for (let minutes = 0; minutes < 24 * 60; minutes += duration) {
-        const slotStart = new Date(selectedDate)
-        slotStart.setHours(0, minutes, 0, 0)
-        const slotEnd = new Date(slotStart.getTime() + duration * 60 * 1000)
-
-        // Check if slot overlaps with any existing event
-        let isBlocked = false
-
-        for (const event of events) {
-          const eventStart = new Date(event.start.dateTime || event.start.date)
-          const eventEnd = new Date(event.end.dateTime || event.end.date)
-          const eventSchoolId = event.extendedProperties?.private?.schoolId
-
-          // Check for direct overlap
-          if (slotStart < eventEnd && slotEnd > eventStart) {
-            isBlocked = true
-            break
-          }
-
-          // Check if drive time buffer is needed BEFORE this slot
-          const driveTimeBeforeSlot = getDriveTimeBuffer(eventSchoolId, schoolId)
-          if (driveTimeBeforeSlot > 0) {
-            // Add buffer after the previous event
-            const bufferEnd = new Date(eventEnd.getTime() + driveTimeBeforeSlot * 60 * 1000)
-            if (slotStart < bufferEnd) {
-              isBlocked = true
-              break
-            }
-          }
-
-          // Check if drive time buffer is needed AFTER this slot
-          const driveTimeAfterSlot = getDriveTimeBuffer(schoolId, eventSchoolId)
-          if (driveTimeAfterSlot > 0) {
-            // Add buffer before the next event
-            const bufferStart = new Date(eventStart.getTime() - driveTimeAfterSlot * 60 * 1000)
-            if (slotEnd > bufferStart) {
-              isBlocked = true
-              break
-            }
-          }
-        }
-
-        // Only include slots that aren't blocked
-        if (!isBlocked) {
-          slots.push({
-            time: slotStart.toISOString(),
-            available: true
-          })
-        }
-      }
-
+      const slots = getAvailableSlotsForDay(selectedDate, blocks, sessionDuration, response.data.items || [], schoolId)
       res.json({ slots })
     } else {
-      // Return default slots if Google Calendar is not configured
-      const slots = []
-      for (let hour = 9; hour < 17; hour++) {
-        const slotTime = new Date(selectedDate)
-        slotTime.setHours(hour, 0, 0, 0)
-        slots.push({
-          time: slotTime.toISOString(),
-          available: true
-        })
-      }
+      // No calendar — return all potential slots within blocks
+      const slots = getAvailableSlotsForDay(selectedDate, blocks, sessionDuration, [], schoolId)
       res.json({ slots })
     }
   } catch (error) {
     console.error('Error fetching availability:', error)
     res.status(500).json({ error: 'Failed to fetch availability' })
+  }
+})
+
+// Get which days in a month have at least one available slot
+app.post('/api/availability/days', async (req, res) => {
+  try {
+    const { year, month, schoolId, sessionDuration } = req.body // month: 0-indexed (JS convention)
+
+    // Load school availability from storage
+    const schools = loadSchools()
+    const school = schools.find(s => s.id === schoolId)
+    const availability = school?.availability || {}
+
+    const firstDay = new Date(year, month, 1)
+    const lastDay  = new Date(year, month + 1, 0)
+    const today    = new Date(); today.setHours(0, 0, 0, 0)
+
+    const availableDates = []
+
+    if (calendar) {
+      // Fetch all events for the month in one request
+      const response = await calendar.events.list({
+        calendarId: process.env.GOOGLE_CALENDAR_ID || 'primary',
+        timeMin: firstDay.toISOString(),
+        timeMax: new Date(lastDay.getFullYear(), lastDay.getMonth(), lastDay.getDate(), 23, 59, 59, 999).toISOString(),
+        singleEvents: true,
+        orderBy: 'startTime'
+      })
+      const allEvents = response.data.items || []
+
+      for (let d = 1; d <= lastDay.getDate(); d++) {
+        const date = new Date(year, month, d)
+        if (date < today) continue // Skip past dates
+
+        const dayOfWeek = date.getDay()
+        const blocks = availability[dayOfWeek] || []
+        if (blocks.length === 0) continue // No availability configured
+
+        // Filter events to just this day
+        const dayEvents = allEvents.filter(e => {
+          const start = new Date(e.start.dateTime || e.start.date)
+          return start.getFullYear() === year && start.getMonth() === month && start.getDate() === d
+        })
+
+        const slots = getAvailableSlotsForDay(date, blocks, sessionDuration, dayEvents, schoolId)
+        if (slots.length > 0) {
+          availableDates.push(`${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`)
+        }
+      }
+    } else {
+      // No calendar — return all days that have blocks configured and aren't in the past
+      for (let d = 1; d <= lastDay.getDate(); d++) {
+        const date = new Date(year, month, d)
+        if (date < today) continue
+        const blocks = availability[date.getDay()] || []
+        if (blocks.length > 0) {
+          availableDates.push(`${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`)
+        }
+      }
+    }
+
+    res.json({ availableDates })
+  } catch (error) {
+    console.error('Error fetching available days:', error)
+    res.status(500).json({ error: 'Failed to fetch available days' })
   }
 })
 

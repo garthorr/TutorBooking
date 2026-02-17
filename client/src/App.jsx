@@ -34,10 +34,59 @@ function App() {
     notes: ''
   })
   const [availableSlots, setAvailableSlots] = useState([])
+  const [availableDates, setAvailableDates] = useState(new Set()) // 'YYYY-MM-DD' strings
+  const [loadingDays, setLoadingDays] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isBooked, setIsBooked] = useState(false)
   const [isCustomLocation, setIsCustomLocation] = useState(false)
   const [selectedSchool, setSelectedSchool] = useState(null)
+
+  // Fetch available days whenever school/meetingType changes or user navigates months
+  const fetchAvailableDays = async (month, year, school, meetingType, isCustom) => {
+    let schoolId = ''
+    let sessionDuration = 60
+
+    if (meetingType === 'google-meet') {
+      schoolId = ''
+      sessionDuration = config.googleMeet.sessionDuration
+    } else if (isCustom) {
+      schoolId = 'custom'
+      sessionDuration = config.locationOptions.customLocationSessionDuration
+    } else if (school) {
+      schoolId = school.id
+      sessionDuration = school.sessionDuration
+    } else {
+      setAvailableDates(new Set())
+      return
+    }
+
+    setLoadingDays(true)
+    try {
+      const res = await fetch('/api/availability/days', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ year, month, schoolId, sessionDuration })
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setAvailableDates(new Set(data.availableDates))
+      }
+    } catch (err) {
+      console.error('Error fetching available days:', err)
+    } finally {
+      setLoadingDays(false)
+    }
+  }
+
+  // Refresh available days when location selection changes
+  useEffect(() => {
+    if (bookingData.meetingType === 'google-meet' || selectedSchool || isCustomLocation) {
+      const now = new Date()
+      fetchAvailableDays(now.getMonth(), now.getFullYear(), selectedSchool, bookingData.meetingType, isCustomLocation)
+    } else {
+      setAvailableDates(new Set())
+    }
+  }, [selectedSchool, isCustomLocation, bookingData.meetingType])
 
   // Regenerate time slots when date or location changes
   useEffect(() => {
@@ -117,7 +166,8 @@ function App() {
         body: JSON.stringify({
           date: date.toISOString(),
           schoolId,
-          sessionDuration
+          sessionDuration,
+          availabilityBlocks: availability
         })
       })
 
@@ -145,26 +195,32 @@ function App() {
     }
   }
 
-  // Check if a date should be disabled
+  // Check if a date should be disabled in the calendar
   const isDateDisabled = (date) => {
-    // Disable past dates
-    const isPastDate = isBefore(startOfDay(date), startOfDay(new Date()))
-    if (isPastDate) return true
+    if (isBefore(startOfDay(date), startOfDay(new Date()))) return true
 
-    // Check if the selected location has availability on this day
-    const dayOfWeek = getDay(date)
-
-    let availability = []
-    if (bookingData.meetingType === 'google-meet') {
-      availability = config.googleMeet.availability[dayOfWeek] || []
-    } else if (isCustomLocation) {
-      availability = config.locationOptions.customLocationAvailability[dayOfWeek] || []
-    } else if (selectedSchool) {
-      availability = selectedSchool.availability[dayOfWeek] || []
+    // If we have server-verified available dates, use those
+    if (availableDates.size > 0) {
+      const key = format(date, 'yyyy-MM-dd')
+      return !availableDates.has(key)
     }
 
-    // Disable if no availability on this day
-    return availability.length === 0
+    // Fallback: use local availability blocks while server data loads
+    const dayOfWeek = getDay(date)
+    let blocks = []
+    if (bookingData.meetingType === 'google-meet') {
+      blocks = config.googleMeet.availability[dayOfWeek] || []
+    } else if (isCustomLocation) {
+      blocks = config.locationOptions.customLocationAvailability[dayOfWeek] || []
+    } else if (selectedSchool) {
+      blocks = selectedSchool.availability[dayOfWeek] || []
+    }
+    return blocks.length === 0
+  }
+
+  // Called by DatePicker when user navigates to a different month
+  const handleMonthChange = (date) => {
+    fetchAvailableDays(date.getMonth(), date.getFullYear(), selectedSchool, bookingData.meetingType, isCustomLocation)
   }
 
   const handleNext = () => {
@@ -469,9 +525,15 @@ function App() {
 
             <div className="form-group">
               <label>Choose a Date</label>
+              {loadingDays && (
+                <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
+                  Checking availability…
+                </p>
+              )}
               <DatePicker
                 selected={bookingData.date}
                 onChange={handleDateSelect}
+                onMonthChange={handleMonthChange}
                 filterDate={(date) => !isDateDisabled(date)}
                 minDate={new Date()}
                 maxDate={addDays(new Date(), config.booking.advanceBookingDays)}
