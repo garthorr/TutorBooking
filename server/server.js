@@ -7,6 +7,7 @@ import { fileURLToPath } from 'url'
 import { getDriveTime } from './schoolConfig.js'
 import { saveTokens, loadTokens, deleteTokens, hasTokens, getTokenInfo } from './tokenStorage.js'
 import { loadSchools, saveSchools, loadDriveTimes, saveDriveTimes, getDriveTimeFromStorage } from './schoolsStorage.js'
+import { loadCalendarConfig, saveCalendarConfig } from './calendarStorage.js'
 
 dotenv.config()
 
@@ -85,6 +86,28 @@ function getDriveTimeBuffer(fromSchoolId, toSchoolId) {
     : getDriveTime(fromSchoolId, toSchoolId)
 }
 
+// Fetch events from all configured check-calendars in parallel and merge
+async function fetchEventsForPeriod(timeMin, timeMax) {
+  if (!calendar) return []
+  const { checkCalendars } = loadCalendarConfig()
+  const ids = checkCalendars.length > 0 ? checkCalendars : ['primary']
+  const results = await Promise.all(
+    ids.map(calId =>
+      calendar.events.list({
+        calendarId: calId,
+        timeMin: timeMin.toISOString(),
+        timeMax: timeMax.toISOString(),
+        singleEvents: true,
+        orderBy: 'startTime'
+      }).then(r => r.data.items || []).catch(err => {
+        console.warn(`⚠️  Could not fetch events from calendar "${calId}": ${err.message}`)
+        return []
+      })
+    )
+  )
+  return results.flat()
+}
+
 // API Routes
 
 // Shared helper: generate available slots for a single day against a set of calendar events
@@ -154,15 +177,8 @@ app.post('/api/availability', async (req, res) => {
       const timeMin = new Date(selectedDate); timeMin.setHours(0, 0, 0, 0)
       const timeMax = new Date(selectedDate); timeMax.setHours(23, 59, 59, 999)
 
-      const response = await calendar.events.list({
-        calendarId: process.env.GOOGLE_CALENDAR_ID || 'primary',
-        timeMin: timeMin.toISOString(),
-        timeMax: timeMax.toISOString(),
-        singleEvents: true,
-        orderBy: 'startTime'
-      })
-
-      const slots = getAvailableSlotsForDay(selectedDate, blocks, sessionDuration, response.data.items || [], schoolId)
+      const events = await fetchEventsForPeriod(timeMin, timeMax)
+      const slots = getAvailableSlotsForDay(selectedDate, blocks, sessionDuration, events, schoolId)
       res.json({ slots })
     } else {
       // No calendar — return all potential slots within blocks
@@ -192,15 +208,10 @@ app.post('/api/availability/days', async (req, res) => {
     const availableDates = []
 
     if (calendar) {
-      // Fetch all events for the month in one request
-      const response = await calendar.events.list({
-        calendarId: process.env.GOOGLE_CALENDAR_ID || 'primary',
-        timeMin: firstDay.toISOString(),
-        timeMax: new Date(lastDay.getFullYear(), lastDay.getMonth(), lastDay.getDate(), 23, 59, 59, 999).toISOString(),
-        singleEvents: true,
-        orderBy: 'startTime'
-      })
-      const allEvents = response.data.items || []
+      // Fetch all events for the month from all configured check-calendars
+      const timeMin = firstDay
+      const timeMax = new Date(lastDay.getFullYear(), lastDay.getMonth(), lastDay.getDate(), 23, 59, 59, 999)
+      const allEvents = await fetchEventsForPeriod(timeMin, timeMax)
 
       for (let d = 1; d <= lastDay.getDate(); d++) {
         const date = new Date(year, month, d)
@@ -379,10 +390,11 @@ ${notes ? `Notes: ${notes}` : ''}
         event.location = location
       }
 
+      const { bookingCalendar } = loadCalendarConfig()
       let calendarWarning = null
       try {
         const calendarEvent = await calendar.events.insert({
-          calendarId: process.env.GOOGLE_CALENDAR_ID || 'primary',
+          calendarId: bookingCalendar || 'primary',
           resource: event,
           conferenceDataVersion: meetingType === 'google-meet' ? 1 : 0,
           sendUpdates: 'all' // Send email to attendees
@@ -433,6 +445,45 @@ app.get('/api/config', (req, res) => {
   res.json({
     googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY || ''
   })
+})
+
+// List all Google Calendars accessible to the connected account
+app.get('/api/calendars', async (req, res) => {
+  if (!calendar) {
+    return res.status(503).json({ error: 'Google Calendar not connected' })
+  }
+  try {
+    const result = await calendar.calendarList.list({ maxResults: 250 })
+    const items = (result.data.items || []).map(c => ({
+      id: c.id,
+      summary: c.summary,
+      description: c.description || '',
+      primary: !!c.primary,
+      backgroundColor: c.backgroundColor || null
+    }))
+    res.json(items)
+  } catch (err) {
+    console.error('Error listing calendars:', err.message)
+    res.status(500).json({ error: 'Failed to list calendars', detail: err.message })
+  }
+})
+
+// Calendar selection config (which calendars to check / where to create bookings)
+app.get('/api/config/calendars', (req, res) => {
+  res.json(loadCalendarConfig())
+})
+
+app.put('/api/config/calendars', (req, res) => {
+  const { checkCalendars, bookingCalendar } = req.body
+  if (!Array.isArray(checkCalendars) || checkCalendars.length === 0) {
+    return res.status(400).json({ error: 'checkCalendars must be a non-empty array' })
+  }
+  if (typeof bookingCalendar !== 'string' || !bookingCalendar) {
+    return res.status(400).json({ error: 'bookingCalendar must be a non-empty string' })
+  }
+  const ok = saveCalendarConfig({ checkCalendars, bookingCalendar })
+  if (ok) res.json({ success: true })
+  else res.status(500).json({ error: 'Failed to save calendar config' })
 })
 
 // Schools CRUD

@@ -18,6 +18,10 @@ function Admin() {
   const [mapsLoaded, setMapsLoaded] = useState(false)
   const [testResult, setTestResult] = useState(null)
   const [testing, setTesting] = useState(false)
+  const [availableCalendars, setAvailableCalendars] = useState([])
+  const [calendarConfig, setCalendarConfig] = useState({ checkCalendars: ['primary'], bookingCalendar: 'primary' })
+  const [calendarConfigLoading, setCalendarConfigLoading] = useState(false)
+  const [savingCalConfig, setSavingCalConfig] = useState(false)
 
   useEffect(() => {
     checkStatus()
@@ -56,9 +60,57 @@ function Admin() {
       const response = await fetch('/auth/status')
       const data = await response.json()
       setStatus({ ...data, loading: false })
+      if (data.connected) {
+        loadCalendarList()
+        loadCalendarConfig()
+      }
     } catch {
       setStatus(prev => ({ ...prev, loading: false }))
     }
+  }
+
+  const loadCalendarList = async () => {
+    setCalendarConfigLoading(true)
+    try {
+      const res = await fetch('/api/calendars')
+      if (res.ok) setAvailableCalendars(await res.json())
+    } catch {}
+    setCalendarConfigLoading(false)
+  }
+
+  const loadCalendarConfig = async () => {
+    try {
+      const res = await fetch('/api/config/calendars')
+      if (res.ok) setCalendarConfig(await res.json())
+    } catch {}
+  }
+
+  const saveCalendarConfig = async () => {
+    setSavingCalConfig(true)
+    try {
+      const res = await fetch('/api/config/calendars', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(calendarConfig)
+      })
+      const data = await res.json()
+      if (data.success) showMessage('Calendar settings saved!', 'success')
+      else showMessage(data.error || 'Failed to save calendar settings', 'error')
+    } catch {
+      showMessage('Error saving calendar settings', 'error')
+    }
+    setSavingCalConfig(false)
+  }
+
+  const toggleCheckCalendar = (id) => {
+    setCalendarConfig(prev => {
+      const already = prev.checkCalendars.includes(id)
+      const next = already
+        ? prev.checkCalendars.filter(c => c !== id)
+        : [...prev.checkCalendars, id]
+      // Always keep at least one
+      return { ...prev, checkCalendars: next.length > 0 ? next : [id] }
+    })
   }
 
   const showMessage = (text, type) => {
@@ -240,6 +292,74 @@ function Admin() {
                 </div>
               )}
             </div>
+
+            {/* Calendar selection — only shown when connected and calendars loaded */}
+            {status.connected && (
+              <div className="calendar-picker-section">
+                <h2>Calendar Settings</h2>
+                <p className="calendar-picker-desc">
+                  Choose which calendars to check when determining availability, and which calendar
+                  new bookings are added to.
+                </p>
+
+                {calendarConfigLoading ? (
+                  <p className="cal-loading">Loading calendars…</p>
+                ) : availableCalendars.length === 0 ? (
+                  <p className="cal-empty">No calendars found. Make sure the Google Calendar API is enabled and the account has calendars.</p>
+                ) : (
+                  <>
+                    <div className="cal-table">
+                      <div className="cal-table-header">
+                        <span>Calendar</span>
+                        <span className="cal-col-center">Check Availability</span>
+                        <span className="cal-col-center">Add Bookings To</span>
+                      </div>
+
+                      {availableCalendars.map(cal => (
+                        <div key={cal.id} className="cal-table-row">
+                          <div className="cal-name">
+                            {cal.backgroundColor && (
+                              <span
+                                className="cal-dot"
+                                style={{ background: cal.backgroundColor }}
+                              />
+                            )}
+                            <span>{cal.summary}</span>
+                            {cal.primary && <span className="cal-badge">primary</span>}
+                          </div>
+
+                          <div className="cal-col-center">
+                            <input
+                              type="checkbox"
+                              checked={calendarConfig.checkCalendars.includes(cal.id)}
+                              onChange={() => toggleCheckCalendar(cal.id)}
+                            />
+                          </div>
+
+                          <div className="cal-col-center">
+                            <input
+                              type="radio"
+                              name="bookingCalendar"
+                              checked={calendarConfig.bookingCalendar === cal.id}
+                              onChange={() => setCalendarConfig(prev => ({ ...prev, bookingCalendar: cal.id }))}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <button
+                      className="btn btn-primary"
+                      onClick={saveCalendarConfig}
+                      disabled={savingCalConfig}
+                      style={{ marginTop: '1rem' }}
+                    >
+                      {savingCalConfig ? 'Saving…' : 'Save Calendar Settings'}
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         )}
 
