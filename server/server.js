@@ -112,6 +112,12 @@ async function fetchEventsForPeriod(timeMin, timeMax) {
 
 // Shared helper: generate available slots for a single day against a set of calendar events
 // availabilityBlocks: [{ start: 'HH:MM', end: 'HH:MM' }]
+//
+// Buffer rules:
+//   - Same schoolId on both sides  → 0 min buffer (back-to-back OK at same location)
+//   - No schoolId on either side   → 0 min buffer (Google Meet / online sessions)
+//   - One side has no schoolId     → 0 min buffer (online ↔ physical needs no travel)
+//   - Different schoolIds          → drive time + 5 min walking, rounded to nearest 5
 function getAvailableSlotsForDay(date, availabilityBlocks, sessionDuration, events, schoolId) {
   const slots = []
   const duration = sessionDuration || 60

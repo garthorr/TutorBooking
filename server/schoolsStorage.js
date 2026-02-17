@@ -69,8 +69,8 @@ export function getDriveTimeFromStorage(fromSchoolId, toSchoolId) {
   const driveTimes = loadDriveTimes()
   const minutes = driveTimes[fromSchoolId]?.[toSchoolId]
   if (minutes === undefined) {
-    console.warn(`⚠️  No drive time for ${fromSchoolId} → ${toSchoolId}, defaulting to 30 min`)
-    return 30
+    console.warn(`⚠️  No drive time for ${fromSchoolId} → ${toSchoolId}, defaulting to 30 min drive`)
+    return Math.round((30 + 5) / 5) * 5 // 35 min total (30 drive + 5 walking), consistent with known pairs
   }
   return Math.round((minutes + 5) / 5) * 5
 }
