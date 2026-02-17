@@ -6,6 +6,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import { getDriveTime } from './schoolConfig.js'
 import { saveTokens, loadTokens, deleteTokens, hasTokens } from './tokenStorage.js'
+import { loadSchools, saveSchools, loadDriveTimes, saveDriveTimes, getDriveTimeFromStorage } from './schoolsStorage.js'
 
 dotenv.config()
 
@@ -75,9 +76,13 @@ function getOAuthClient() {
 
 calendar = initializeGoogleCalendar()
 
-// Helper function to get drive time buffer between schools
+// Helper function to get drive time buffer — prefers GUI-stored data, falls back to schoolConfig.js
 function getDriveTimeBuffer(fromSchoolId, toSchoolId) {
-  return getDriveTime(fromSchoolId, toSchoolId)
+  const stored = loadDriveTimes()
+  const hasStoredData = Object.keys(stored).length > 0
+  return hasStoredData
+    ? getDriveTimeFromStorage(fromSchoolId, toSchoolId)
+    : getDriveTime(fromSchoolId, toSchoolId)
 }
 
 // API Routes
@@ -362,6 +367,43 @@ ${notes ? `Notes: ${notes}` : ''}
 // Get all bookings (admin endpoint - add authentication in production)
 app.get('/api/bookings', (req, res) => {
   res.json({ bookings })
+})
+
+// Public config (safe values the frontend needs at runtime)
+app.get('/api/config', (req, res) => {
+  res.json({
+    googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY || ''
+  })
+})
+
+// Schools CRUD
+app.get('/api/schools', (req, res) => {
+  res.json(loadSchools())
+})
+
+app.put('/api/schools', (req, res) => {
+  const schools = req.body
+  if (!Array.isArray(schools)) {
+    return res.status(400).json({ error: 'Expected an array of schools' })
+  }
+  const ok = saveSchools(schools)
+  if (ok) res.json({ success: true })
+  else res.status(500).json({ error: 'Failed to save schools' })
+})
+
+// Drive times CRUD
+app.get('/api/drivetimes', (req, res) => {
+  res.json(loadDriveTimes())
+})
+
+app.put('/api/drivetimes', (req, res) => {
+  const driveTimes = req.body
+  if (typeof driveTimes !== 'object' || Array.isArray(driveTimes)) {
+    return res.status(400).json({ error: 'Expected an object' })
+  }
+  const ok = saveDriveTimes(driveTimes)
+  if (ok) res.json({ success: true })
+  else res.status(500).json({ error: 'Failed to save drive times' })
 })
 
 // OAuth Routes

@@ -1,13 +1,26 @@
 import React, { useState, useEffect } from 'react'
 import DatePicker from 'react-datepicker'
 import 'react-datepicker/dist/react-datepicker.css'
-import { format, addDays, setHours, setMinutes, isBefore, startOfDay, getDay } from 'date-fns'
+import { format, addDays, isBefore, startOfDay, getDay } from 'date-fns'
 import config from './config'
 
 const CUSTOM_LOCATION_VALUE = '__CUSTOM__'
 
 function App() {
   const [step, setStep] = useState(1)
+  const [schools, setSchools] = useState([])
+
+  // Fetch schools from API on mount
+  useEffect(() => {
+    fetch('/api/schools')
+      .then(r => r.json())
+      .then(data => {
+        if (Array.isArray(data) && data.length > 0) setSchools(data)
+        else setSchools(config.schools) // fall back to config.js
+      })
+      .catch(() => setSchools(config.schools))
+  }, [])
+
   const [bookingData, setBookingData] = useState({
     date: null,
     time: null,
@@ -197,7 +210,7 @@ function App() {
         sessionDuration: config.locationOptions.customLocationSessionDuration
       })
     } else {
-      const school = config.schools.find(s => s.id === schoolId)
+      const school = schools.find(s => s.id === schoolId)
       setIsCustomLocation(false)
       setSelectedSchool(school)
       setBookingData({
@@ -390,7 +403,7 @@ function App() {
                   onChange={(e) => handleLocationSelect(e.target.value)}
                 >
                   <option value="">Choose a school...</option>
-                  {config.schools.map((school) => (
+                  {schools.map((school) => (
                     <option key={school.id} value={school.id}>
                       {school.name} ({school.sessionDuration} min sessions)
                     </option>
