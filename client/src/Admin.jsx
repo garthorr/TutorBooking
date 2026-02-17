@@ -7,6 +7,8 @@ function Admin() {
   const [status, setStatus] = useState({
     connected: false,
     hasStoredTokens: false,
+    hasRefreshToken: false,
+    tokenExpiry: null,
     configured: false,
     loading: true
   })
@@ -14,6 +16,8 @@ function Admin() {
   const [messageType, setMessageType] = useState('')
   const [mapsApiKey, setMapsApiKey] = useState('')
   const [mapsLoaded, setMapsLoaded] = useState(false)
+  const [testResult, setTestResult] = useState(null)
+  const [testing, setTesting] = useState(false)
 
   useEffect(() => {
     checkStatus()
@@ -69,6 +73,20 @@ function Admin() {
       return
     }
     window.location.href = '/auth/google'
+  }
+
+  const handleTest = async () => {
+    setTesting(true)
+    setTestResult(null)
+    try {
+      const res = await fetch('/auth/test')
+      const data = await res.json()
+      setTestResult(data)
+    } catch {
+      setTestResult({ success: false, error: 'Network error — could not reach server' })
+    } finally {
+      setTesting(false)
+    }
   }
 
   const handleDisconnect = async () => {
@@ -137,7 +155,31 @@ function Admin() {
                     {status.hasStoredTokens ? '✓ Yes' : '✗ No'}
                   </span>
                 </div>
+                <div className="status-item">
+                  <span className="status-label">Refresh Token:</span>
+                  <span className={`status-badge ${status.hasRefreshToken ? 'success' : 'error'}`}>
+                    {status.hasRefreshToken ? '✓ Yes' : '✗ No'}
+                  </span>
+                </div>
+                {status.tokenExpiry && (
+                  <div className="status-item">
+                    <span className="status-label">Token Expires:</span>
+                    <span className={`status-badge ${new Date(status.tokenExpiry) < new Date() ? 'error' : ''}`}>
+                      {new Date(status.tokenExpiry) < new Date()
+                        ? `Expired ${new Date(status.tokenExpiry).toLocaleString()}`
+                        : new Date(status.tokenExpiry).toLocaleString()}
+                    </span>
+                  </div>
+                )}
               </div>
+
+              {status.hasStoredTokens && !status.hasRefreshToken && (
+                <div className="info-box" style={{ marginTop: '1rem', borderColor: '#f59e0b', background: '#fffbeb' }}>
+                  <strong>No refresh token found.</strong> Calendar access will stop working once the
+                  current access token expires (within ~1 hour). Click <em>Reconnect Google Calendar</em> below
+                  to get a permanent refresh token.
+                </div>
+              )}
             </div>
 
             <div className="actions-section">
@@ -167,11 +209,34 @@ function Admin() {
               )}
 
               {status.connected && (
-                <div>
-                  <p className="success-text">✓ Google Calendar is connected and working!</p>
-                  <button className="btn btn-danger" onClick={handleDisconnect}>
-                    Disconnect Google Calendar
-                  </button>
+                <div className="connected-actions">
+                  <div className="connected-actions-row">
+                    <button className="btn btn-secondary" onClick={handleTest} disabled={testing}>
+                      {testing ? 'Testing…' : 'Test Calendar API'}
+                    </button>
+                    <button className="btn btn-primary" onClick={handleConnect}>
+                      Reconnect Google Calendar
+                    </button>
+                    <button className="btn btn-danger" onClick={handleDisconnect}>
+                      Disconnect
+                    </button>
+                  </div>
+
+                  {testResult && (
+                    <div className={`test-result ${testResult.success ? 'success' : 'error'}`}>
+                      {testResult.success ? (
+                        <>
+                          <strong>✓ API working.</strong> {testResult.message}
+                          {testResult.primaryCalendar && <span> Calendar: <em>{testResult.primaryCalendar}</em></span>}
+                        </>
+                      ) : (
+                        <>
+                          <strong>✗ API call failed.</strong> {testResult.error}
+                          {testResult.code && <span> (code: {testResult.code})</span>}
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>

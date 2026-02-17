@@ -5,7 +5,7 @@ import { google } from 'googleapis'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { getDriveTime } from './schoolConfig.js'
-import { saveTokens, loadTokens, deleteTokens, hasTokens } from './tokenStorage.js'
+import { saveTokens, loadTokens, deleteTokens, hasTokens, getTokenInfo } from './tokenStorage.js'
 import { loadSchools, saveSchools, loadDriveTimes, saveDriveTimes, getDriveTimeFromStorage } from './schoolsStorage.js'
 
 dotenv.config()
@@ -379,6 +379,7 @@ ${notes ? `Notes: ${notes}` : ''}
         event.location = location
       }
 
+      let calendarWarning = null
       try {
         const calendarEvent = await calendar.events.insert({
           calendarId: process.env.GOOGLE_CALENDAR_ID || 'primary',
@@ -396,7 +397,11 @@ ${notes ? `Notes: ${notes}` : ''}
         }
       } catch (calError) {
         console.error('Error creating calendar event:', calError.message)
-        // Continue without calendar event if it fails
+        calendarWarning = `Calendar event could not be created: ${calError.message}`
+      }
+
+      if (calendarWarning) {
+        booking.calendarWarning = calendarWarning
       }
     }
 
@@ -408,7 +413,8 @@ ${notes ? `Notes: ${notes}` : ''}
       success: true,
       booking: {
         id: booking.id,
-        meetLink: booking.meetLink
+        meetLink: booking.meetLink,
+        calendarWarning: booking.calendarWarning || null
       }
     })
   } catch (error) {
@@ -520,9 +526,12 @@ app.get('/auth/google/callback', async (req, res) => {
 
 // Check OAuth status
 app.get('/auth/status', (req, res) => {
+  const tokenInfo = getTokenInfo()
   res.json({
     connected: calendar !== null,
-    hasStoredTokens: hasTokens(),
+    hasStoredTokens: tokenInfo.hasTokens,
+    hasRefreshToken: tokenInfo.hasRefreshToken,
+    tokenExpiry: tokenInfo.tokenExpiry,
     configured: !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET)
   })
 })
@@ -536,6 +545,37 @@ app.post('/auth/disconnect', (req, res) => {
     success: deleted,
     message: deleted ? 'Google Calendar disconnected' : 'Error disconnecting'
   })
+})
+
+// Test the calendar connection with a real API call
+app.get('/auth/test', async (req, res) => {
+  if (!calendar) {
+    return res.json({
+      success: false,
+      error: 'Calendar not initialized — connect Google Calendar in the admin panel first.'
+    })
+  }
+  try {
+    const result = await calendar.calendarList.list({ maxResults: 1 })
+    const items = result.data.items || []
+    res.json({
+      success: true,
+      message: 'Google Calendar API is working correctly.',
+      calendarsFound: items.length,
+      primaryCalendar: items.find(c => c.primary)?.summary || items[0]?.summary || null
+    })
+  } catch (err) {
+    res.json({
+      success: false,
+      error: err.message,
+      code: err.code || err.status || null
+    })
+  }
+})
+
+// Debug: token storage info (no secrets)
+app.get('/auth/debug', (req, res) => {
+  res.json(getTokenInfo())
 })
 
 // Health check
@@ -561,6 +601,19 @@ app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`)
   console.log(`📅 Google Calendar: ${calendar ? '✓ Connected' : '✗ Not configured'}`)
   console.log(`🚗 Drive Time: Actual time + 5 min walking (rounded to nearest 5 min)`)
+
+  // Startup diagnostics for token storage
+  const tokenInfo = getTokenInfo()
+  console.log(`🔑 Token file: ${tokenInfo.tokenFilePath}`)
+  console.log(`   File exists: ${tokenInfo.fileExists}`)
+  console.log(`   Has tokens: ${tokenInfo.hasTokens}`)
+  if (tokenInfo.hasTokens) {
+    console.log(`   Has refresh_token: ${tokenInfo.hasRefreshToken}`)
+    console.log(`   Token expiry: ${tokenInfo.tokenExpiry || 'none'}`)
+  }
+  if (tokenInfo.readError) {
+    console.log(`   ⚠️  Read error: ${tokenInfo.readError}`)
+  }
 
   if (!calendar) {
     console.log('\n⚙️  Setup Google Calendar:')

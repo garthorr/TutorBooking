@@ -1,5 +1,5 @@
 import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'crypto';
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync, statSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -94,7 +94,7 @@ export function loadTokens() {
 export function deleteTokens() {
   try {
     if (existsSync(TOKEN_FILE)) {
-      writeFileSync(TOKEN_FILE, '');
+      unlinkSync(TOKEN_FILE);
       console.log('Tokens deleted successfully');
     }
     return true;
@@ -106,5 +106,44 @@ export function deleteTokens() {
 
 // Check if tokens exist
 export function hasTokens() {
-  return existsSync(TOKEN_FILE) && readFileSync(TOKEN_FILE, 'utf8').trim() !== '';
+  if (!existsSync(TOKEN_FILE)) return false;
+  const content = readFileSync(TOKEN_FILE, 'utf8').trim();
+  return content !== '';
+}
+
+// Return diagnostic info about token storage (no secrets exposed)
+export function getTokenInfo() {
+  const info = {
+    tokenFilePath: TOKEN_FILE,
+    dataDir: DATA_DIR,
+    fileExists: existsSync(TOKEN_FILE),
+    hasTokens: false,
+    hasRefreshToken: false,
+    tokenExpiry: null,
+    writeable: false,
+  };
+
+  // Check if data dir is writeable
+  try {
+    statSync(DATA_DIR);
+    info.writeable = true;
+  } catch {}
+
+  if (info.fileExists) {
+    try {
+      const content = readFileSync(TOKEN_FILE, 'utf8').trim();
+      info.hasTokens = content !== '';
+      if (info.hasTokens) {
+        const tokens = JSON.parse(decrypt(JSON.parse(content)));
+        info.hasRefreshToken = !!tokens.refresh_token;
+        info.tokenExpiry = tokens.expiry_date
+          ? new Date(tokens.expiry_date).toISOString()
+          : null;
+      }
+    } catch (e) {
+      info.readError = e.message;
+    }
+  }
+
+  return info;
 }

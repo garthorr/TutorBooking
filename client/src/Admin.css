@@ -501,3 +501,31 @@
   .school-card-actions { flex-direction: row; }
   .drive-times-table { font-size: 0.75rem; }
 }
+
+/* ── Test Connection / Connected Actions ── */
+.connected-actions { display: flex; flex-direction: column; gap: 1rem; }
+
+.connected-actions-row {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.test-result {
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
+
+.test-result.success {
+  background: #f0fdf4;
+  border: 1px solid #86efac;
+  color: #166534;
+}
+
+.test-result.error {
+  background: #fef2f2;
+  border: 1px solid #fca5a5;
+  color: #991b1b;
+}
