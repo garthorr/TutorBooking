@@ -1,12 +1,15 @@
 import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'crypto';
-import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const TOKEN_FILE = join(__dirname, '.tokens.json');
+// Use DATA_DIR env var for Docker volume support, otherwise store alongside server
+const DATA_DIR = process.env.DATA_DIR || __dirname;
+if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true });
+const TOKEN_FILE = join(DATA_DIR, '.tokens.json');
 const ALGORITHM = 'aes-256-gcm';
 
 // Get encryption key from environment or generate one
