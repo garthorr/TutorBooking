@@ -63,38 +63,54 @@ All variables go in `server/.env`. Copy `server/.env.example` as a starting poin
 
 The admin panel at `/admin` requires a password. You must generate a bcrypt hash of your chosen password and add it to `server/.env` before first use.
 
-### Step 1 — Generate the password hash
+> **Important — Docker `$` escaping**: bcrypt hashes start with `$2b$12$` and contain several `$` characters. Docker Compose's `env_file` parser treats `$` as a variable reference and will silently blank out the value if left unescaped. You have two options: escape the hash (see below) or generate it inside the container where no escaping is needed.
 
-Run this once (Node.js must be installed, or run inside the container):
+### Option A — Generate inside the container (recommended, no escaping needed)
+
+Start the containers first with placeholder values, then run:
+
+```bash
+docker compose exec server node -e "require('bcryptjs').hash('your-password-here', 12).then(console.log)"
+```
+
+Copy the output into `server/.env`, then restart:
+
+```bash
+docker compose up -d
+```
+
+### Option B — Generate on the host, escape `$` signs in `.env`
 
 ```bash
 node -e "require('bcryptjs').hash('your-password-here', 12).then(console.log)"
 ```
 
-Copy the output (it will look like `$2b$12$...`).
-
-### Step 2 — Generate a JWT secret
-
-```bash
-node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
-```
-
-### Step 3 — Add to `server/.env`
+The output will look like `$2b$12$xxxxx...`. In `server/.env`, **every `$` must be written as `$$`**:
 
 ```env
-ADMIN_PASSWORD_HASH=$2b$12$...   # paste hash from step 1
-JWT_SECRET=abc123...              # paste output from step 2
+# Note the $$ — required for Docker Compose env_file to preserve literal $ signs
+ADMIN_PASSWORD_HASH=$$2b$$12$$xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
-### Step 4 — Generate an encryption key (for OAuth token storage)
+### Generate the other secrets
+
+These values do not contain `$` signs, so no escaping is needed:
 
 ```bash
+# JWT secret (paste into JWT_SECRET)
+node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
+
+# Encryption key (paste into ENCRYPTION_KEY)
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
-```env
-ENCRYPTION_KEY=def456...          # paste output here
+### Verify the variable is loaded correctly
+
+```bash
+docker compose exec server printenv ADMIN_PASSWORD_HASH
 ```
+
+This should print the full hash starting with `$2b$`. If it prints nothing or a short string, the `$` escaping is the issue.
 
 ### How admin auth works
 
