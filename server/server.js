@@ -639,6 +639,71 @@ app.put('/api/drivetimes', adminAuth, (req, res) => {
   else res.status(500).json({ error: 'Failed to save drive times' })
 })
 
+// Auto-calculate drive times using Google Maps Distance Matrix API — admin only
+// Uses a midday weekday departure for a representative traffic estimate.
+// Enforces symmetry (A→B = B→A) by averaging both directions.
+app.post('/api/drivetimes/calculate', adminAuth, async (req, res) => {
+  const schools = req.body
+  if (!Array.isArray(schools) || schools.length < 2) {
+    return res.status(400).json({ error: 'Need at least 2 schools' })
+  }
+  if (!process.env.GOOGLE_MAPS_API_KEY) {
+    return res.status(503).json({ error: 'GOOGLE_MAPS_API_KEY not configured in .env' })
+  }
+
+  // Next weekday (Mon–Fri) at noon in the configured timezone
+  let date = new Date()
+  do { date = new Date(date.getTime() + 24 * 60 * 60 * 1000) }
+  while ([0, 6].includes(date.getDay()))
+  const departureTime = Math.floor(tzDate(date, 12, 0).getTime() / 1000)
+
+  const addresses = schools.map(s => encodeURIComponent(s.address)).join('|')
+  const url = `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${addresses}&destinations=${addresses}&mode=driving&departure_time=${departureTime}&key=${process.env.GOOGLE_MAPS_API_KEY}`
+
+  try {
+    const response = await fetch(url)
+    const data = await response.json()
+
+    if (data.status !== 'OK') {
+      return res.status(500).json({ error: `Maps API error: ${data.status}`, detail: data.error_message })
+    }
+
+    // Extract minutes for each pair (prefer duration_in_traffic when available)
+    const driveTimes = {}
+    schools.forEach((from, i) => {
+      driveTimes[from.id] = {}
+      schools.forEach((to, j) => {
+        if (i === j) return
+        const el = data.rows[i]?.elements[j]
+        if (el?.status === 'OK') {
+          driveTimes[from.id][to.id] = Math.round((el.duration_in_traffic?.value ?? el.duration.value) / 60)
+        }
+      })
+    })
+
+    // Enforce symmetry: for each pair use the average of both directions
+    for (let i = 0; i < schools.length; i++) {
+      for (let j = i + 1; j < schools.length; j++) {
+        const a = schools[i], b = schools[j]
+        const ab = driveTimes[a.id]?.[b.id]
+        const ba = driveTimes[b.id]?.[a.id]
+        const symmetric = (ab !== undefined && ba !== undefined)
+          ? Math.round((ab + ba) / 2)
+          : (ab ?? ba)
+        if (symmetric !== undefined) {
+          driveTimes[a.id][b.id] = symmetric
+          driveTimes[b.id][a.id] = symmetric
+        }
+      }
+    }
+
+    res.json({ driveTimes })
+  } catch (err) {
+    console.error('Drive time calculation error:', err.message)
+    res.status(500).json({ error: 'Failed to calculate drive times', detail: err.message })
+  }
+})
+
 // ── Admin authentication ──────────────────────────────────────────────────────
 
 app.post('/auth/admin/login', loginLimiter, async (req, res) => {

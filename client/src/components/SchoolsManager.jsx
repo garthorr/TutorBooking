@@ -24,6 +24,7 @@ export default function SchoolsManager({ mapsApiKey }) {
   const [driveTimes, setDriveTimes] = useState({})
   const [editing, setEditing] = useState(null)  // null | 'new' | school object
   const [saving, setSaving] = useState(false)
+  const [calculating, setCalculating] = useState(false)
   const [message, setMessage] = useState({ text: '', type: '' })
 
   useEffect(() => {
@@ -129,6 +130,28 @@ export default function SchoolsManager({ mapsApiKey }) {
     saveDriveTimes(driveTimes)
   }
 
+  const handleCalculateDriveTimes = async () => {
+    setCalculating(true)
+    try {
+      const res = await adminFetch('/api/drivetimes/calculate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(schools.map(s => ({ id: s.id, address: s.address })))
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setDriveTimes(data.driveTimes)
+        showMessage('Drive times calculated — review and save when ready.', 'success')
+      } else {
+        showMessage(data.error || 'Calculation failed', 'error')
+      }
+    } catch {
+      showMessage('Network error during calculation', 'error')
+    } finally {
+      setCalculating(false)
+    }
+  }
+
   if (editing !== null) {
     return (
       <div>
@@ -189,10 +212,20 @@ export default function SchoolsManager({ mapsApiKey }) {
       {/* Drive Times Matrix */}
       {schools.length >= 2 && (
         <div className="drive-times-section">
-          <h3>Drive Times Between Schools</h3>
+          <div className="section-header">
+            <h3>Drive Times Between Schools</h3>
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={handleCalculateDriveTimes}
+              disabled={calculating}
+              title="Calculate drive times from school addresses using Google Maps"
+            >
+              {calculating ? 'Calculating…' : 'Calculate from Addresses'}
+            </button>
+          </div>
           <p className="field-hint">
-            Enter the actual driving time in minutes between each pair of schools.
-            The system automatically adds 5 minutes for parking/walking and rounds to the nearest 5.
+            Actual driving time in minutes between each pair of schools — the system adds 5 min for parking/walking and rounds to the nearest 5.
+            Use <strong>Calculate from Addresses</strong> to auto-fill using Google Maps (requires Maps API key), then save.
           </p>
           <div className="drive-times-table-wrap">
             <table className="drive-times-table">
