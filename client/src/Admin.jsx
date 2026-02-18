@@ -22,10 +22,18 @@ function Admin() {
   const [calendarConfig, setCalendarConfig] = useState({ checkCalendars: ['primary'], bookingCalendar: 'primary' })
   const [calendarConfigLoading, setCalendarConfigLoading] = useState(false)
   const [savingCalConfig, setSavingCalConfig] = useState(false)
+  // Settings tab
+  const [logoPreview, setLogoPreview] = useState(null)
+  const [logoSaving, setLogoSaving] = useState(false)
+  const [gmDuration, setGmDuration] = useState(60)
+  const [gmSaving, setGmSaving] = useState(false)
 
   useEffect(() => {
     checkStatus()
     loadPublicConfig()
+    // Load current logo and settings for the Settings tab
+    fetch('/api/logo').then(r => r.ok ? r.json() : null).then(d => { if (d?.dataUrl) setLogoPreview(d.dataUrl) }).catch(() => {})
+    fetch('/api/settings').then(r => r.ok ? r.json() : null).then(d => { if (d?.googleMeetDuration) setGmDuration(d.googleMeetDuration) }).catch(() => {})
 
     const params = new URLSearchParams(window.location.search)
     if (params.get('success') === 'true') {
@@ -119,6 +127,53 @@ function Admin() {
     setTimeout(() => { setMessage(''); setMessageType('') }, 5000)
   }
 
+  const handleLogoChange = (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = ev => setLogoPreview(ev.target.result)
+    reader.readAsDataURL(file)
+  }
+
+  const handleLogoSave = async () => {
+    if (!logoPreview) return
+    setLogoSaving(true)
+    try {
+      const res = await fetch('/api/logo', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dataUrl: logoPreview })
+      })
+      const data = await res.json()
+      if (data.success) showMessage('Logo saved!', 'success')
+      else showMessage('Failed to save logo', 'error')
+    } catch { showMessage('Error saving logo', 'error') }
+    setLogoSaving(false)
+  }
+
+  const handleLogoRemove = async () => {
+    try {
+      await fetch('/api/logo', { method: 'DELETE' })
+      setLogoPreview(null)
+      showMessage('Logo removed', 'success')
+    } catch { showMessage('Error removing logo', 'error') }
+  }
+
+  const handleGmDurationSave = async () => {
+    setGmSaving(true)
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ googleMeetDuration: Number(gmDuration) })
+      })
+      const data = await res.json()
+      if (data.success) showMessage('Google Meet duration saved!', 'success')
+      else showMessage('Failed to save', 'error')
+    } catch { showMessage('Error saving', 'error') }
+    setGmSaving(false)
+  }
+
   const handleConnect = () => {
     if (!status.configured) {
       showMessage('Please configure GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in server/.env first', 'error')
@@ -180,6 +235,12 @@ function Admin() {
             onClick={() => setTab('schools')}
           >
             Schools
+          </button>
+          <button
+            className={`admin-tab ${tab === 'settings' ? 'active' : ''}`}
+            onClick={() => setTab('settings')}
+          >
+            Settings
           </button>
         </div>
 
@@ -367,6 +428,63 @@ function Admin() {
         {tab === 'schools' && (
           <div className="tab-content">
             <SchoolsManager mapsApiKey={mapsApiKey} />
+          </div>
+        )}
+
+        {/* Settings Tab */}
+        {tab === 'settings' && (
+          <div className="tab-content">
+
+            {/* Logo */}
+            <div className="settings-section">
+              <h2>Booking Page Logo</h2>
+              <p className="field-hint">Displayed at the top of the booking page. PNG or SVG recommended, max ~2 MB.</p>
+
+              {logoPreview && (
+                <div className="logo-preview">
+                  <img src={logoPreview} alt="Logo preview" />
+                </div>
+              )}
+
+              <div className="logo-actions">
+                <label className="btn btn-secondary logo-file-label">
+                  {logoPreview ? 'Change Logo' : 'Choose Logo'}
+                  <input type="file" accept="image/*" onChange={handleLogoChange} style={{ display: 'none' }} />
+                </label>
+                {logoPreview && (
+                  <>
+                    <button className="btn btn-primary" onClick={handleLogoSave} disabled={logoSaving}>
+                      {logoSaving ? 'Saving…' : 'Save Logo'}
+                    </button>
+                    <button className="btn btn-danger" onClick={handleLogoRemove}>
+                      Remove
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Google Meet duration */}
+            <div className="settings-section">
+              <h2>Google Meet Session Length</h2>
+              <p className="field-hint">Duration (in minutes) used for online sessions when a client books via Google Meet.</p>
+              <div className="gm-duration-row">
+                <input
+                  type="number"
+                  min="5"
+                  max="480"
+                  step="5"
+                  value={gmDuration}
+                  onChange={e => setGmDuration(e.target.value)}
+                  style={{ width: '90px' }}
+                />
+                <span style={{ color: '#6b7280' }}>minutes</span>
+                <button className="btn btn-primary" onClick={handleGmDurationSave} disabled={gmSaving}>
+                  {gmSaving ? 'Saving…' : 'Save'}
+                </button>
+              </div>
+            </div>
+
           </div>
         )}
       </div>

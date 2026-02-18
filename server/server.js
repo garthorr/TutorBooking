@@ -4,6 +4,7 @@ import dotenv from 'dotenv'
 import { google } from 'googleapis'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import { readFileSync, writeFileSync, existsSync, unlinkSync } from 'fs'
 import { getDriveTime } from './schoolConfig.js'
 import { saveTokens, loadTokens, deleteTokens, hasTokens, getTokenInfo } from './tokenStorage.js'
 import { loadSchools, saveSchools, loadDriveTimes, saveDriveTimes, getDriveTimeFromStorage } from './schoolsStorage.js'
@@ -168,7 +169,7 @@ function getAvailableSlotsForDay(date, availabilityBlocks, sessionDuration, even
         }
       }
 
-      if (!isBlocked) slots.push({ time: slotStart.toISOString(), available: true })
+      if (!isBlocked) slots.push({ time: slotStart.toISOString(), available: true, blockName: block.name || null })
       slotStart = new Date(slotStart.getTime() + duration * 60 * 1000)
     }
   }
@@ -351,6 +352,9 @@ app.post('/api/bookings', async (req, res) => {
       createdAt: new Date().toISOString()
     }
 
+    // Look up schools for event title
+    const schools = loadSchools()
+
     // If Google Calendar is configured, create calendar event
     if (calendar) {
       const startDateTime = new Date(time)
@@ -358,7 +362,9 @@ app.post('/api/bookings', async (req, res) => {
       const endDateTime = new Date(startDateTime.getTime() + durationMs)
 
       const event = {
-        summary: `Tutoring Session - ${name}`,
+        summary: meetingType === 'google-meet'
+          ? `${name} — Online Tutoring`
+          : `${name} — Tutoring at ${schools.find(s => s.id === schoolId)?.name || location || 'School'}`,
         description: `
 Client: ${name}
 Email: ${email}
@@ -457,11 +463,83 @@ app.get('/api/bookings', (req, res) => {
   res.json({ bookings })
 })
 
+// ── Logo storage helpers ──────────────────────────────────────────────────────
+function logoFile() { return path.join(process.env.DATA_DIR || __dirname, 'logo.json') }
+
+function loadLogo() {
+  try {
+    if (!existsSync(logoFile())) return null
+    return JSON.parse(readFileSync(logoFile(), 'utf8'))
+  } catch { return null }
+}
+
+// ── Settings storage helpers ──────────────────────────────────────────────────
+function settingsFile() { return path.join(process.env.DATA_DIR || __dirname, 'settings.json') }
+
+const DEFAULT_SETTINGS = { googleMeetDuration: 60 }
+
+function loadSettings() {
+  try {
+    if (!existsSync(settingsFile())) return { ...DEFAULT_SETTINGS }
+    return { ...DEFAULT_SETTINGS, ...JSON.parse(readFileSync(settingsFile(), 'utf8')) }
+  } catch { return { ...DEFAULT_SETTINGS } }
+}
+
+function saveSettings(settings) {
+  try { writeFileSync(settingsFile(), JSON.stringify(settings, null, 2)); return true }
+  catch (err) { console.error('Error saving settings:', err.message); return false }
+}
+
 // Public config (safe values the frontend needs at runtime)
 app.get('/api/config', (req, res) => {
+  const settings = loadSettings()
   res.json({
-    googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY || ''
+    googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY || '',
+    googleMeetDuration: settings.googleMeetDuration
   })
+})
+
+// Logo
+app.get('/api/logo', (req, res) => {
+  const logo = loadLogo()
+  if (!logo) return res.status(404).json({ error: 'No logo uploaded' })
+  res.json(logo)
+})
+
+app.put('/api/logo', express.json({ limit: '4mb' }), (req, res) => {
+  const { dataUrl } = req.body
+  if (!dataUrl || !dataUrl.startsWith('data:image/')) {
+    return res.status(400).json({ error: 'dataUrl must be a valid image data URL' })
+  }
+  try {
+    writeFileSync(logoFile(), JSON.stringify({ dataUrl }, null, 2))
+    res.json({ success: true })
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to save logo' })
+  }
+})
+
+app.delete('/api/logo', (req, res) => {
+  try {
+    if (existsSync(logoFile())) unlinkSync(logoFile())
+    res.json({ success: true })
+  } catch { res.status(500).json({ error: 'Failed to remove logo' }) }
+})
+
+// General settings (Google Meet duration, etc.)
+app.get('/api/settings', (req, res) => {
+  res.json(loadSettings())
+})
+
+app.put('/api/settings', (req, res) => {
+  const current = loadSettings()
+  const updated = { ...current }
+  if (typeof req.body.googleMeetDuration === 'number' && req.body.googleMeetDuration > 0) {
+    updated.googleMeetDuration = req.body.googleMeetDuration
+  }
+  const ok = saveSettings(updated)
+  if (ok) res.json({ success: true, settings: updated })
+  else res.status(500).json({ error: 'Failed to save settings' })
 })
 
 // List all Google Calendars accessible to the connected account

@@ -41,6 +41,14 @@ function TimeBlock({ block, onChange, onRemove }) {
         value={block.end}
         onChange={e => onChange({ ...block, end: e.target.value })}
       />
+      <input
+        type="text"
+        className="block-name-input"
+        value={block.name || ''}
+        onChange={e => onChange({ ...block, name: e.target.value })}
+        placeholder="Period (optional)"
+        title="Optional period name shown to students, e.g. A2a"
+      />
       <button type="button" className="remove-block-btn" onClick={onRemove} title="Remove">×</button>
     </div>
   )
@@ -51,6 +59,8 @@ export default function SchoolForm({ initial, onSave, onCancel, mapsApiKey }) {
   const [addressVerified, setAddressVerified] = useState(!!initial?.address)
   const [verifying, setVerifying] = useState(false)
   const [verifyError, setVerifyError] = useState('')
+  const [copyMenuDay, setCopyMenuDay] = useState(null) // which day's copy menu is open
+  const [copyTargets, setCopyTargets] = useState([])   // days to copy TO
   const addressRef = useRef(null)
   const autocompleteRef = useRef(null)
 
@@ -140,6 +150,22 @@ export default function SchoolForm({ initial, onSave, onCancel, mapsApiKey }) {
     })
   }
 
+  const openCopyMenu = (dayNum) => {
+    setCopyMenuDay(dayNum)
+    setCopyTargets([])
+  }
+
+  const applyCopy = (fromDay) => {
+    const sourceBlocks = school.availability[fromDay] || []
+    setSchool(s => {
+      const avail = { ...s.availability }
+      copyTargets.forEach(d => { avail[d] = sourceBlocks.map(b => ({ ...b })) })
+      return { ...s, availability: avail }
+    })
+    setCopyMenuDay(null)
+    setCopyTargets([])
+  }
+
   const handleSave = () => {
     if (!school.name.trim()) { alert('School name is required'); return }
     if (!school.address.trim()) { alert('Address is required'); return }
@@ -224,11 +250,51 @@ export default function SchoolForm({ initial, onSave, onCancel, mapsApiKey }) {
                     <span>{label}</span>
                   </label>
                   {active && (
-                    <button type="button" className="add-block-btn" onClick={() => addBlock(num)}>
-                      + Add Block
-                    </button>
+                    <div className="day-header-actions">
+                      <button type="button" className="add-block-btn" onClick={() => addBlock(num)}>
+                        + Add Block
+                      </button>
+                      <button
+                        type="button"
+                        className="copy-day-btn"
+                        onClick={() => copyMenuDay === num ? setCopyMenuDay(null) : openCopyMenu(num)}
+                        title="Copy schedule to another day"
+                      >
+                        Copy to…
+                      </button>
+                    </div>
                   )}
                 </div>
+
+                {active && copyMenuDay === num && (
+                  <div className="copy-menu">
+                    <span className="copy-menu-label">Copy to:</span>
+                    {DAYS.filter(d => d.num !== num).map(d => (
+                      <label key={d.num} className="copy-menu-day">
+                        <input
+                          type="checkbox"
+                          checked={copyTargets.includes(d.num)}
+                          onChange={() => setCopyTargets(prev =>
+                            prev.includes(d.num) ? prev.filter(x => x !== d.num) : [...prev, d.num]
+                          )}
+                        />
+                        {d.label}
+                      </label>
+                    ))}
+                    <button
+                      type="button"
+                      className="btn btn-primary copy-apply-btn"
+                      disabled={copyTargets.length === 0}
+                      onClick={() => applyCopy(num)}
+                    >
+                      Apply
+                    </button>
+                    <button type="button" className="btn btn-secondary copy-apply-btn" onClick={() => setCopyMenuDay(null)}>
+                      Cancel
+                    </button>
+                  </div>
+                )}
+
                 {active && (
                   <div className="time-blocks">
                     {blocks.map((block, idx) => (

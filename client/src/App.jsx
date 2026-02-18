@@ -10,15 +10,25 @@ function App() {
   const [step, setStep] = useState(1)
   const [schools, setSchools] = useState([])
 
-  // Fetch schools from API on mount
+  // Fetch schools, logo, and public config on mount
   useEffect(() => {
     fetch('/api/schools')
       .then(r => r.json())
       .then(data => {
         if (Array.isArray(data) && data.length > 0) setSchools(data)
-        else setSchools(config.schools) // fall back to config.js
+        else setSchools(config.schools)
       })
       .catch(() => setSchools(config.schools))
+
+    fetch('/api/logo')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data?.dataUrl) setLogoUrl(data.dataUrl) })
+      .catch(() => {})
+
+    fetch('/api/config')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data?.googleMeetDuration) setGoogleMeetDuration(data.googleMeetDuration) })
+      .catch(() => {})
   }, [])
 
   const [bookingData, setBookingData] = useState({
@@ -40,6 +50,8 @@ function App() {
   const [isBooked, setIsBooked] = useState(false)
   const [isCustomLocation, setIsCustomLocation] = useState(false)
   const [selectedSchool, setSelectedSchool] = useState(null)
+  const [logoUrl, setLogoUrl] = useState(null)
+  const [googleMeetDuration, setGoogleMeetDuration] = useState(config.googleMeet.sessionDuration)
 
   // Fetch available days whenever school/meetingType changes or user navigates months
   const fetchAvailableDays = async (month, year, school, meetingType, isCustom) => {
@@ -48,7 +60,7 @@ function App() {
 
     if (meetingType === 'google-meet') {
       schoolId = ''
-      sessionDuration = config.googleMeet.sessionDuration
+      sessionDuration = googleMeetDuration
     } else if (isCustom) {
       schoolId = 'custom'
       sessionDuration = config.locationOptions.customLocationSessionDuration
@@ -106,7 +118,7 @@ function App() {
     // Determine which availability schedule to use
     if (bookingData.meetingType === 'google-meet') {
       availability = config.googleMeet.availability[dayOfWeek] || []
-      sessionDuration = config.googleMeet.sessionDuration
+      sessionDuration = googleMeetDuration
       schoolId = '' // No schoolId for Google Meet
     } else if (isCustomLocation) {
       availability = config.locationOptions.customLocationAvailability[dayOfWeek] || []
@@ -202,7 +214,7 @@ function App() {
       customLocation: '',
       date: null,
       time: null,
-      sessionDuration: type === 'google-meet' ? config.googleMeet.sessionDuration : null
+      sessionDuration: type === 'google-meet' ? googleMeetDuration : null
     })
     setSelectedSchool(null)
     setIsCustomLocation(false)
@@ -360,6 +372,7 @@ function App() {
   return (
     <div className="container">
       <div className="header">
+        {logoUrl && <img src={logoUrl} alt={config.businessName} className="business-logo" />}
         <h1>{config.businessName}</h1>
         <p>{config.businessDescription}</p>
       </div>
@@ -386,7 +399,7 @@ function App() {
                     <h3>{config.meetingTypes.googleMeet.label}</h3>
                     <p>{config.meetingTypes.googleMeet.description}</p>
                     <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginTop: '0.5rem' }}>
-                      Session length: {config.googleMeet.sessionDuration} minutes
+                      Session length: {googleMeetDuration} minutes
                     </p>
                   </div>
                 </div>
@@ -513,7 +526,8 @@ function App() {
                         onClick={() => slot.available && handleTimeSelect(slot.time)}
                         disabled={!slot.available}
                       >
-                        {format(slot.time, 'h:mm a')}
+                        <span className="slot-time">{format(slot.time, 'h:mm a')}</span>
+                        {slot.blockName && <span className="slot-block-name">{slot.blockName}</span>}
                       </button>
                     ))}
                   </div>

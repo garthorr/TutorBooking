@@ -1,0 +1,24 @@
+
+/* ── Logo in booking header ── */
+.business-logo {
+  display: block;
+  max-height: 72px;
+  max-width: 240px;
+  object-fit: contain;
+  margin: 0 auto 1rem;
+}
+
+/* ── Time slot with period name ── */
+.time-slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.slot-time { font-weight: 600; }
+.slot-block-name {
+  font-size: 0.75rem;
+  color: #6b7280;
+  font-weight: 400;
+}
+.time-slot.selected .slot-block-name { color: rgba(255,255,255,0.8); }
