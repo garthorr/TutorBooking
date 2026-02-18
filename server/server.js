@@ -77,6 +77,20 @@ function getOAuthClient() {
 
 calendar = initializeGoogleCalendar()
 
+// Configured timezone — used to generate slot timestamps so they match the user's local time
+const TIMEZONE = process.env.TIMEZONE || 'America/Chicago'
+
+// Create a Date representing a specific clock time (hours, minutes) on the same calendar
+// date as baseDate, but expressed in the configured TIMEZONE.
+// Without this, Docker's UTC system timezone causes setHours() to produce UTC timestamps
+// (e.g. 09:00 UTC) that don't match browser-local timestamps (e.g. 09:00 Chicago = 15:00 UTC).
+function tzDate(baseDate, hours, minutes) {
+  const dateStr = baseDate.toLocaleDateString('en-CA', { timeZone: TIMEZONE }) // "YYYY-MM-DD"
+  const naive = new Date(`${dateStr}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`)
+  const naiveInTZ = new Date(naive.toLocaleString('en-US', { timeZone: TIMEZONE }))
+  return new Date(naive.getTime() + (naive.getTime() - naiveInTZ.getTime()))
+}
+
 // Helper function to get drive time buffer — prefers GUI-stored data, falls back to schoolConfig.js
 function getDriveTimeBuffer(fromSchoolId, toSchoolId) {
   const stored = loadDriveTimes()
@@ -126,11 +140,8 @@ function getAvailableSlotsForDay(date, availabilityBlocks, sessionDuration, even
     const [startH, startM] = block.start.split(':').map(Number)
     const [endH, endM] = block.end.split(':').map(Number)
 
-    let slotStart = new Date(date)
-    slotStart.setHours(startH, startM, 0, 0)
-
-    const blockEnd = new Date(date)
-    blockEnd.setHours(endH, endM, 0, 0)
+    let slotStart = tzDate(date, startH, startM)
+    const blockEnd = tzDate(date, endH, endM)
 
     while (slotStart < blockEnd) {
       const slotEnd = new Date(slotStart.getTime() + duration * 60 * 1000)

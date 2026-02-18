@@ -95,13 +95,7 @@ function App() {
     }
   }, [bookingData.date, selectedSchool, isCustomLocation, bookingData.meetingType])
 
-  // Parse time string (HH:MM) to hours and minutes
-  const parseTime = (timeStr) => {
-    const [hours, minutes] = timeStr.split(':').map(Number)
-    return { hours, minutes }
-  }
-
-  // Generate time slots with drive time consideration
+  // Generate time slots — delegates entirely to the backend
   const generateTimeSlots = async (date) => {
     const dayOfWeek = getDay(date) // 0 = Sunday, 1 = Monday, etc.
 
@@ -130,39 +124,12 @@ function App() {
       return
     }
 
-    // First generate potential slots based on availability blocks
-    const potentialSlots = []
-    availability.forEach(block => {
-      const startTime = parseTime(block.start)
-      const endTime = parseTime(block.end)
-
-      // Create a date object for the start time
-      let currentSlot = new Date(date)
-      currentSlot.setHours(startTime.hours, startTime.minutes, 0, 0)
-
-      const endDate = new Date(date)
-      endDate.setHours(endTime.hours, endTime.minutes, 0, 0)
-
-      // Generate slots within this block
-      while (currentSlot < endDate) {
-        // Check if there's enough time for a full session
-        const sessionEnd = new Date(currentSlot.getTime() + sessionDuration * 60000)
-        if (sessionEnd <= endDate) {
-          potentialSlots.push(new Date(currentSlot))
-        }
-
-        // Move to next slot
-        currentSlot = new Date(currentSlot.getTime() + sessionDuration * 60000)
-      }
-    })
-
-    // Call backend API to check availability with drive time consideration
+    // Ask the server for available slots — it handles calendar conflicts, drive time
+    // buffers, and generates timestamps in the configured timezone (America/Chicago).
     try {
       const response = await fetch('/api/availability', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           date: date.toISOString(),
           schoolId,
@@ -173,25 +140,13 @@ function App() {
 
       if (response.ok) {
         const data = await response.json()
-        const availableSlotTimes = new Set(data.slots.map(slot => new Date(slot.time).getTime()))
-
-        // Filter potential slots to only those that are available (considering drive time)
-        const finalSlots = potentialSlots
-          .filter(slot => availableSlotTimes.has(slot.getTime()))
-          .map(slot => ({
-            time: slot,
-            available: true
-          }))
-
-        setAvailableSlots(finalSlots)
+        setAvailableSlots(data.slots.map(slot => ({ time: new Date(slot.time), available: true })))
       } else {
-        // Fallback to showing all potential slots if API fails
-        setAvailableSlots(potentialSlots.map(slot => ({ time: slot, available: true })))
+        setAvailableSlots([])
       }
     } catch (error) {
       console.error('Error fetching availability:', error)
-      // Fallback to showing all potential slots if API fails
-      setAvailableSlots(potentialSlots.map(slot => ({ time: slot, available: true })))
+      setAvailableSlots([])
     }
   }
 
