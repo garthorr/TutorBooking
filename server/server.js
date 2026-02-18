@@ -5,6 +5,9 @@ import { google } from 'googleapis'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { readFileSync, writeFileSync, existsSync, unlinkSync } from 'fs'
+import bcrypt from 'bcryptjs'
+import jwt from 'jsonwebtoken'
+import { rateLimit } from 'express-rate-limit'
 import { getDriveTime } from './schoolConfig.js'
 import { saveTokens, loadTokens, deleteTokens, hasTokens, getTokenInfo } from './tokenStorage.js'
 import { loadSchools, saveSchools, loadDriveTimes, saveDriveTimes, getDriveTimeFromStorage } from './schoolsStorage.js'
@@ -17,6 +20,31 @@ const __dirname = path.dirname(__filename)
 
 const app = express()
 const PORT = process.env.PORT || 5000
+
+const JWT_SECRET = process.env.JWT_SECRET || (() => {
+  console.warn('⚠️  JWT_SECRET not set — using insecure default. Set JWT_SECRET in .env for production!')
+  return 'dev-secret-change-in-production'
+})()
+
+// ── Admin auth middleware ─────────────────────────────────────────────────────
+function adminAuth(req, res, next) {
+  const auth = req.headers.authorization
+  if (!auth?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' })
+  try {
+    jwt.verify(auth.slice(7), JWT_SECRET)
+    next()
+  } catch {
+    res.status(401).json({ error: 'Invalid or expired token — please log in again' })
+  }
+}
+
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10,
+  message: { error: 'Too many login attempts, please try again in 15 minutes' },
+  standardHeaders: true,
+  legacyHeaders: false
+})
 
 // Middleware
 app.use(cors())
@@ -458,8 +486,8 @@ ${notes ? `Notes: ${notes}` : ''}
   }
 })
 
-// Get all bookings (admin endpoint - add authentication in production)
-app.get('/api/bookings', (req, res) => {
+// Get all bookings (admin only)
+app.get('/api/bookings', adminAuth, (req, res) => {
   res.json({ bookings })
 })
 
@@ -506,7 +534,7 @@ app.get('/api/logo', (req, res) => {
   res.json(logo)
 })
 
-app.put('/api/logo', express.json({ limit: '4mb' }), (req, res) => {
+app.put('/api/logo', adminAuth, express.json({ limit: '4mb' }), (req, res) => {
   const { dataUrl } = req.body
   if (!dataUrl || !dataUrl.startsWith('data:image/')) {
     return res.status(400).json({ error: 'dataUrl must be a valid image data URL' })
@@ -519,19 +547,19 @@ app.put('/api/logo', express.json({ limit: '4mb' }), (req, res) => {
   }
 })
 
-app.delete('/api/logo', (req, res) => {
+app.delete('/api/logo', adminAuth, (req, res) => {
   try {
     if (existsSync(logoFile())) unlinkSync(logoFile())
     res.json({ success: true })
   } catch { res.status(500).json({ error: 'Failed to remove logo' }) }
 })
 
-// General settings (Google Meet duration, etc.)
-app.get('/api/settings', (req, res) => {
+// General settings (Google Meet duration, etc.) — admin only
+app.get('/api/settings', adminAuth, (req, res) => {
   res.json(loadSettings())
 })
 
-app.put('/api/settings', (req, res) => {
+app.put('/api/settings', adminAuth, (req, res) => {
   const current = loadSettings()
   const updated = { ...current }
   if (typeof req.body.googleMeetDuration === 'number' && req.body.googleMeetDuration > 0) {
@@ -542,8 +570,8 @@ app.put('/api/settings', (req, res) => {
   else res.status(500).json({ error: 'Failed to save settings' })
 })
 
-// List all Google Calendars accessible to the connected account
-app.get('/api/calendars', async (req, res) => {
+// List all Google Calendars accessible to the connected account — admin only
+app.get('/api/calendars', adminAuth, async (req, res) => {
   if (!calendar) {
     return res.status(503).json({ error: 'Google Calendar not connected' })
   }
@@ -563,12 +591,12 @@ app.get('/api/calendars', async (req, res) => {
   }
 })
 
-// Calendar selection config (which calendars to check / where to create bookings)
-app.get('/api/config/calendars', (req, res) => {
+// Calendar selection config — admin only
+app.get('/api/config/calendars', adminAuth, (req, res) => {
   res.json(loadCalendarConfig())
 })
 
-app.put('/api/config/calendars', (req, res) => {
+app.put('/api/config/calendars', adminAuth, (req, res) => {
   const { checkCalendars, bookingCalendar } = req.body
   if (!Array.isArray(checkCalendars) || checkCalendars.length === 0) {
     return res.status(400).json({ error: 'checkCalendars must be a non-empty array' })
@@ -581,12 +609,12 @@ app.put('/api/config/calendars', (req, res) => {
   else res.status(500).json({ error: 'Failed to save calendar config' })
 })
 
-// Schools CRUD
+// Schools — GET is public (booking page needs the list), PUT is admin only
 app.get('/api/schools', (req, res) => {
   res.json(loadSchools())
 })
 
-app.put('/api/schools', (req, res) => {
+app.put('/api/schools', adminAuth, (req, res) => {
   const schools = req.body
   if (!Array.isArray(schools)) {
     return res.status(400).json({ error: 'Expected an array of schools' })
@@ -596,12 +624,12 @@ app.put('/api/schools', (req, res) => {
   else res.status(500).json({ error: 'Failed to save schools' })
 })
 
-// Drive times CRUD
-app.get('/api/drivetimes', (req, res) => {
+// Drive times — admin only
+app.get('/api/drivetimes', adminAuth, (req, res) => {
   res.json(loadDriveTimes())
 })
 
-app.put('/api/drivetimes', (req, res) => {
+app.put('/api/drivetimes', adminAuth, (req, res) => {
   const driveTimes = req.body
   if (typeof driveTimes !== 'object' || Array.isArray(driveTimes)) {
     return res.status(400).json({ error: 'Expected an object' })
@@ -609,6 +637,28 @@ app.put('/api/drivetimes', (req, res) => {
   const ok = saveDriveTimes(driveTimes)
   if (ok) res.json({ success: true })
   else res.status(500).json({ error: 'Failed to save drive times' })
+})
+
+// ── Admin authentication ──────────────────────────────────────────────────────
+
+app.post('/auth/admin/login', loginLimiter, async (req, res) => {
+  const { password } = req.body
+  const hash = process.env.ADMIN_PASSWORD_HASH
+  if (!hash) {
+    return res.status(503).json({ error: 'Admin auth not configured. Set ADMIN_PASSWORD_HASH in server/.env' })
+  }
+  try {
+    const match = await bcrypt.compare(password || '', hash)
+    if (!match) return res.status(401).json({ error: 'Invalid password' })
+    const token = jwt.sign({ admin: true }, JWT_SECRET, { expiresIn: '24h' })
+    res.json({ token })
+  } catch {
+    res.status(500).json({ error: 'Login error' })
+  }
+})
+
+app.get('/auth/admin/verify', adminAuth, (req, res) => {
+  res.json({ ok: true })
 })
 
 // OAuth Routes
@@ -682,8 +732,8 @@ app.get('/auth/status', (req, res) => {
   })
 })
 
-// Disconnect Google Calendar
-app.post('/auth/disconnect', (req, res) => {
+// Disconnect Google Calendar — admin only
+app.post('/auth/disconnect', adminAuth, (req, res) => {
   const deleted = deleteTokens()
   calendar = null
 
@@ -693,8 +743,8 @@ app.post('/auth/disconnect', (req, res) => {
   })
 })
 
-// Test the calendar connection with a real API call
-app.get('/auth/test', async (req, res) => {
+// Test the calendar connection with a real API call — admin only
+app.get('/auth/test', adminAuth, async (req, res) => {
   if (!calendar) {
     return res.json({
       success: false,
@@ -719,8 +769,8 @@ app.get('/auth/test', async (req, res) => {
   }
 })
 
-// Debug: token storage info (no secrets)
-app.get('/auth/debug', (req, res) => {
+// Debug: token storage info (no secrets) — admin only
+app.get('/auth/debug', adminAuth, (req, res) => {
   res.json(getTokenInfo())
 })
 

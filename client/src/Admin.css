@@ -31,6 +31,12 @@
   font-size: 2rem;
 }
 
+.admin-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
 .back-link {
   color: #667eea;
   text-decoration: none;

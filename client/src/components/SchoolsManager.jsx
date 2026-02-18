@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import SchoolForm from './SchoolForm'
+import { adminFetch } from '../auth'
 
 const DAYS = [
   { num: 0, label: 'Sun' }, { num: 1, label: 'Mon' }, { num: 2, label: 'Tue' },
@@ -32,8 +33,8 @@ export default function SchoolsManager({ mapsApiKey }) {
   const loadData = async () => {
     try {
       const [schoolsRes, dtRes] = await Promise.all([
-        fetch('/api/schools'),
-        fetch('/api/drivetimes'),
+        fetch('/api/schools'),        // public endpoint
+        adminFetch('/api/drivetimes') // admin only
       ])
       const schoolsData = await schoolsRes.json()
       const dtData = await dtRes.json()
@@ -52,7 +53,7 @@ export default function SchoolsManager({ mapsApiKey }) {
   const saveSchools = async (updated) => {
     setSaving(true)
     try {
-      const res = await fetch('/api/schools', {
+      const res = await adminFetch('/api/schools', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updated),
@@ -73,7 +74,7 @@ export default function SchoolsManager({ mapsApiKey }) {
   const saveDriveTimes = async (updated) => {
     setSaving(true)
     try {
-      const res = await fetch('/api/drivetimes', {
+      const res = await adminFetch('/api/drivetimes', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updated),

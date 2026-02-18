@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import SchoolsManager from './components/SchoolsManager'
+import { adminFetch, clearToken } from './auth'
 import './Admin.css'
 
 function Admin() {
@@ -32,8 +33,8 @@ function Admin() {
     checkStatus()
     loadPublicConfig()
     // Load current logo and settings for the Settings tab
-    fetch('/api/logo').then(r => r.ok ? r.json() : null).then(d => { if (d?.dataUrl) setLogoPreview(d.dataUrl) }).catch(() => {})
-    fetch('/api/settings').then(r => r.ok ? r.json() : null).then(d => { if (d?.googleMeetDuration) setGmDuration(d.googleMeetDuration) }).catch(() => {})
+    adminFetch('/api/logo').then(r => r.ok ? r.json() : null).then(d => { if (d?.dataUrl) setLogoPreview(d.dataUrl) }).catch(() => {})
+    adminFetch('/api/settings').then(r => r.ok ? r.json() : null).then(d => { if (d?.googleMeetDuration) setGmDuration(d.googleMeetDuration) }).catch(() => {})
 
     const params = new URLSearchParams(window.location.search)
     if (params.get('success') === 'true') {
@@ -80,7 +81,7 @@ function Admin() {
   const loadCalendarList = async () => {
     setCalendarConfigLoading(true)
     try {
-      const res = await fetch('/api/calendars')
+      const res = await adminFetch('/api/calendars')
       if (res.ok) setAvailableCalendars(await res.json())
     } catch {}
     setCalendarConfigLoading(false)
@@ -88,7 +89,7 @@ function Admin() {
 
   const loadCalendarConfig = async () => {
     try {
-      const res = await fetch('/api/config/calendars')
+      const res = await adminFetch('/api/config/calendars')
       if (res.ok) setCalendarConfig(await res.json())
     } catch {}
   }
@@ -96,7 +97,7 @@ function Admin() {
   const saveCalendarConfig = async () => {
     setSavingCalConfig(true)
     try {
-      const res = await fetch('/api/config/calendars', {
+      const res = await adminFetch('/api/config/calendars', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(calendarConfig)
@@ -139,7 +140,7 @@ function Admin() {
     if (!logoPreview) return
     setLogoSaving(true)
     try {
-      const res = await fetch('/api/logo', {
+      const res = await adminFetch('/api/logo', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ dataUrl: logoPreview })
@@ -153,7 +154,7 @@ function Admin() {
 
   const handleLogoRemove = async () => {
     try {
-      await fetch('/api/logo', { method: 'DELETE' })
+      await adminFetch('/api/logo', { method: 'DELETE' })
       setLogoPreview(null)
       showMessage('Logo removed', 'success')
     } catch { showMessage('Error removing logo', 'error') }
@@ -162,7 +163,7 @@ function Admin() {
   const handleGmDurationSave = async () => {
     setGmSaving(true)
     try {
-      const res = await fetch('/api/settings', {
+      const res = await adminFetch('/api/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ googleMeetDuration: Number(gmDuration) })
@@ -186,7 +187,7 @@ function Admin() {
     setTesting(true)
     setTestResult(null)
     try {
-      const res = await fetch('/auth/test')
+      const res = await adminFetch('/auth/test')
       const data = await res.json()
       setTestResult(data)
     } catch {
@@ -196,10 +197,15 @@ function Admin() {
     }
   }
 
+  const handleLogout = () => {
+    clearToken()
+    window.location.reload()
+  }
+
   const handleDisconnect = async () => {
     if (!confirm('Disconnect Google Calendar?')) return
     try {
-      const res = await fetch('/auth/disconnect', { method: 'POST' })
+      const res = await adminFetch('/auth/disconnect', { method: 'POST' })
       const data = await res.json()
       if (data.success) { showMessage('Google Calendar disconnected', 'success'); checkStatus() }
       else showMessage('Error disconnecting', 'error')
@@ -217,7 +223,10 @@ function Admin() {
       <div className="admin-card">
         <div className="admin-header">
           <h1>Admin Panel</h1>
-          <a href="/" className="back-link">← Back to Booking Page</a>
+          <div className="admin-header-actions">
+            <a href="/" className="back-link">← Back to Booking Page</a>
+            <button className="btn btn-secondary btn-sm" onClick={handleLogout}>Log out</button>
+          </div>
         </div>
 
         {message && <div className={`message ${messageType}`}>{message}</div>}
