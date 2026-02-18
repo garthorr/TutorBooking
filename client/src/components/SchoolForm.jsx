@@ -19,7 +19,8 @@ function emptySchool() {
     name: '',
     address: '',
     sessionDuration: 60,
-    availability: {}
+    availability: {},
+    logoUrl: null
   }
 }
 
@@ -229,6 +230,42 @@ export default function SchoolForm({ initial, onSave, onCancel, mapsApiKey }) {
             return <option key={d} value={d}>{label}</option>
           })}
         </select>
+      </div>
+
+      <div className="form-group">
+        <label>School Logo (optional)</label>
+        <p className="field-hint">Shown as a tile image on the booking page. PNG or SVG recommended, transparent background ideal.</p>
+        {school.logoUrl && (
+          <div className="school-logo-preview">
+            <img src={school.logoUrl} alt="Logo preview" />
+          </div>
+        )}
+        <div className="logo-actions">
+          <label className="btn btn-secondary logo-file-label">
+            {school.logoUrl ? 'Change Logo' : 'Upload Logo'}
+            <input
+              type="file"
+              accept="image/*"
+              style={{ display: 'none' }}
+              onChange={e => {
+                const file = e.target.files[0]
+                if (!file) return
+                const reader = new FileReader()
+                reader.onload = ev => setSchool(s => ({ ...s, logoUrl: ev.target.result }))
+                reader.readAsDataURL(file)
+              }}
+            />
+          </label>
+          {school.logoUrl && (
+            <button
+              type="button"
+              className="btn btn-danger btn-sm"
+              onClick={() => setSchool(s => ({ ...s, logoUrl: null }))}
+            >
+              Remove
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="form-group">

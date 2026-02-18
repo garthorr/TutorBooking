@@ -152,7 +152,7 @@ function App() {
 
       if (response.ok) {
         const data = await response.json()
-        setAvailableSlots(data.slots.map(slot => ({ time: new Date(slot.time), available: true })))
+        setAvailableSlots(data.slots.map(slot => ({ time: new Date(slot.time), available: true, blockName: slot.blockName || null })))
       } else {
         setAvailableSlots([])
       }
@@ -422,20 +422,36 @@ function App() {
             {bookingData.meetingType === 'physical' && (
               <div className="form-group location-select">
                 <label>Select School</label>
-                <select
-                  value={bookingData.schoolId}
-                  onChange={(e) => handleLocationSelect(e.target.value)}
-                >
-                  <option value="">Choose a school...</option>
-                  {schools.map((school) => (
-                    <option key={school.id} value={school.id}>
-                      {school.name} ({school.sessionDuration} min sessions)
-                    </option>
+                <div className="school-tiles">
+                  {schools.map(school => (
+                    <div
+                      key={school.id}
+                      className={`school-tile ${bookingData.schoolId === school.id ? 'selected' : ''}`}
+                      onClick={() => handleLocationSelect(school.id)}
+                    >
+                      <div className="school-tile-logo">
+                        {school.logoUrl
+                          ? <img src={school.logoUrl} alt={school.name} />
+                          : <div className="school-tile-logo-placeholder">{school.name.charAt(0)}</div>
+                        }
+                      </div>
+                      <div className="school-tile-name">{school.name}</div>
+                      <div className="school-tile-duration">{school.sessionDuration} min</div>
+                    </div>
                   ))}
                   {config.locationOptions.allowCustomLocation && (
-                    <option value={CUSTOM_LOCATION_VALUE}>✏️ Enter Custom Location</option>
+                    <div
+                      className={`school-tile school-tile-custom ${isCustomLocation ? 'selected' : ''}`}
+                      onClick={() => handleLocationSelect(CUSTOM_LOCATION_VALUE)}
+                    >
+                      <div className="school-tile-logo">
+                        <div className="school-tile-logo-placeholder">✏️</div>
+                      </div>
+                      <div className="school-tile-name">Other Location</div>
+                      <div className="school-tile-duration">{config.locationOptions.customLocationSessionDuration} min</div>
+                    </div>
                   )}
-                </select>
+                </div>
 
                 {isCustomLocation && (
                   <div style={{ marginTop: '1rem' }}>
@@ -446,14 +462,8 @@ function App() {
                       placeholder={config.locationOptions.customLocationPlaceholder}
                       style={{ width: '100%' }}
                     />
-                    <p style={{
-                      fontSize: '0.875rem',
-                      color: 'var(--text-secondary)',
-                      marginTop: '0.5rem'
-                    }}>
+                    <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginTop: '0.5rem' }}>
                       {config.locationOptions.customLocationHelp}
-                      <br />
-                      Session length: {config.locationOptions.customLocationSessionDuration} minutes
                     </p>
                   </div>
                 )}
