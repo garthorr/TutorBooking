@@ -1,756 +1,325 @@
-# Tutor Booking System
+# TutorBooking
 
-A self-hosted booking application similar to Calendly, built for scheduling tutoring sessions with Google Calendar integration.
+A self-hosted tutoring appointment booking app with Google Calendar integration. Students book sessions online; bookings appear directly on your calendar with drive-time buffers automatically handled between school locations.
 
 ## Features
 
-- 📅 **Date & Time Selection**: Interactive calendar with available time slots
-- 📹 **Google Meet Integration**: Automatically generates Google Meet links for virtual sessions
-- 📍 **Physical Location Options**: Select from predefined locations or enter custom locations
-- 🚗 **Smart Drive Time Calculation**: Automatically accounts for travel time between different school locations
-- ✏️ **Custom Location Entry**: Allow clients to specify their own meeting location
-- ⚙️ **Easy Configuration**: Centralized config file for all customization options
-- 🔄 **Google Calendar Sync**: Real-time availability checking and automatic calendar event creation
-- 🔐 **Easy OAuth Setup**: Connect Google Calendar with a simple web login (no manual token generation)
-- 📧 **Email Notifications**: Automatic confirmation emails sent to clients
-- 🎨 **Modern UI**: Clean, responsive design that works on all devices
-- 🏠 **Self-Hosted**: Run on your own Ubuntu server with full control
+- **School tile picker** — visual grid of school logos on the booking page
+- **Multi-school scheduling** — each school has its own session length, availability blocks, and period names
+- **Google Calendar sync** — real-time availability checking and automatic event creation
+- **Drive time buffering** — auto-calculated from school addresses via Google Maps; same-location bookings back-to-back, different locations get drive time + 5 min
+- **Google Meet support** — generates Meet links for online sessions
+- **Admin panel** — password-protected GUI for all configuration; no config file editing required
+- **Logo support** — business logo on booking page, individual logos per school
+- **Multi-calendar** — check availability across multiple Google Calendars; book into any calendar
+- **Secure by default** — bcrypt admin password, JWT sessions, AES-256-GCM encrypted OAuth tokens
 
-## Tech Stack
+---
 
-### Frontend
-- **React 18**: Modern UI library
-- **Vite**: Fast build tool and dev server
-- **React DatePicker**: Intuitive date selection
-- **date-fns**: Date manipulation and formatting
+## Quick Start (Docker)
 
-### Backend
-- **Node.js**: Runtime environment
-- **Express**: Web server framework
-- **Google APIs**: Calendar and OAuth integration
-- **CORS**: Cross-origin resource sharing
-
-## Prerequisites
-
-### For Docker Deployment (Recommended)
-- Docker and Docker Compose installed
-- Google Account with Calendar access
-- Ubuntu server (for deployment)
-
-### For Manual Installation
-- Node.js 18+ and npm
-- Google Account with Calendar access
-- Ubuntu server (for deployment)
-
-## Installation
-
-**🐳 Using Docker? Skip to [Docker Deployment](#docker-deployment-recommended) for the easiest setup.**
-
-### Manual Installation Steps
-
-### 1. Clone the Repository
-
-\`\`\`bash
+```bash
 git clone <your-repo-url>
 cd TutorBooking
-\`\`\`
-
-### 2. Install Dependencies
-
-\`\`\`bash
-npm run install-all
-\`\`\`
-
-This will install dependencies for the root, client, and server.
-
-### 3. Configure Google Calendar API
-
-#### Step 1: Create a Google Cloud Project
-
-1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a new project or select an existing one
-3. Enable the **Google Calendar API**:
-   - Navigate to "APIs & Services" > "Library"
-   - Search for "Google Calendar API"
-   - Click "Enable"
-
-#### Step 2: Create OAuth 2.0 Credentials
-
-1. Go to "APIs & Services" > "Credentials"
-2. Click "Create Credentials" > "OAuth client ID"
-3. Configure the OAuth consent screen if prompted:
-   - Add your email as a test user
-   - Add scopes: Google Calendar API
-4. Choose "Web application" as the application type
-5. Add authorized redirect URIs:
-   - `http://localhost:5000/auth/google/callback` (for development)
-   - `http://your-domain.com/auth/google/callback` (for production)
-6. Save and note your **Client ID** and **Client Secret**
-
-#### Step 3: Configure Environment Variables
-
-\`\`\`bash
+cd server
 cp .env.example .env
-\`\`\`
-
-Edit `.env` and add your OAuth credentials:
-
-\`\`\`env
-GOOGLE_CLIENT_ID=your_client_id_here
-GOOGLE_CLIENT_SECRET=your_client_secret_here
-GOOGLE_REDIRECT_URI=http://localhost:5000/auth/google/callback
-GOOGLE_CALENDAR_ID=primary
-TIMEZONE=America/Chicago
-ENCRYPTION_KEY=your-random-encryption-key-here
-\`\`\`
-
-**Important:** Generate a secure random string for `ENCRYPTION_KEY` in production. This is used to encrypt OAuth tokens stored on your server.
-
-#### Step 4: Connect Google Calendar via Web Interface
-
-1. Start the server: `npm run dev` (or use Docker)
-2. Visit the admin panel: `http://localhost:5000/admin`
-3. Click "Connect Google Calendar"
-4. Sign in with your Google account
-5. Grant calendar access
-6. You're done! The app will automatically save and refresh tokens
-
-**That's it!** No manual token generation required. The OAuth tokens are encrypted and stored securely on your server.
-
-### 4. Configure Your Booking Settings
-
-All customization options are centralized in `client/src/config.js`. Edit this file to:
-
-**Business Information:**
-\`\`\`javascript
-businessName: 'Your Business Name',
-businessDescription: 'Your booking page description',
-\`\`\`
-
-**Schools (Each with Different Session Lengths & Schedules):**
-\`\`\`javascript
-schools: [
-  {
-    id: 'school-1',
-    name: 'Elementary School',
-    address: '123 Main St',
-    sessionDuration: 30, // 30-minute sessions
-
-    // Available time blocks by day of week (0=Sun, 1=Mon, etc.)
-    availability: {
-      1: [{ start: '08:00', end: '15:00' }], // Monday 8am-3pm
-      2: [{ start: '08:00', end: '15:00' }], // Tuesday 8am-3pm
-      // Add more days...
-    }
-  },
-  {
-    id: 'school-2',
-    name: 'High School',
-    address: '456 Oak Ave',
-    sessionDuration: 60, // 60-minute sessions
-
-    availability: {
-      1: [{ start: '15:30', end: '18:00' }], // Monday 3:30pm-6pm
-      // Different schedule than elementary!
-    }
-  }
-]
-\`\`\`
-
-**Google Meet Settings:**
-\`\`\`javascript
-googleMeet: {
-  sessionDuration: 60,
-  availability: {
-    1: [{ start: '09:00', end: '17:00' }], // Monday
-    2: [{ start: '09:00', end: '17:00' }], // Tuesday
-    // ... more days
-  }
-}
-\`\`\`
-
-**Custom Location Options:**
-\`\`\`javascript
-locationOptions: {
-  allowCustomLocation: true,
-  customLocationSessionDuration: 60,
-  customLocationAvailability: {
-    1: [{ start: '09:00', end: '17:00' }],
-    // ... more days
-  }
-}
-\`\`\`
-
-See `client/src/config.js` for the complete configuration with all 4 example schools.
-
-## Docker Deployment (Recommended)
-
-Docker makes deployment simple and consistent across environments.
-
-### Quick Start with Docker
-
-1. **Configure environment variables:**
-   ```bash
-   cd server
-   cp .env.example .env
-   # Edit .env with your Google Calendar credentials
-   ```
-
-2. **Build and start containers:**
-   ```bash
-   cd ..  # Back to project root
-   docker-compose up -d
-   ```
-
-3. **Access the application:**
-   - Frontend: http://localhost (or http://your-server-ip)
-   - Backend API: http://localhost:5000 (or http://your-server-ip:5000)
-
-### Docker Commands
-
-```bash
-# Start containers
-docker-compose up -d
-
-# View logs
-docker-compose logs -f
-
-# View specific service logs
-docker-compose logs -f server
-docker-compose logs -f client
-
-# Stop containers
-docker-compose down
-
-# Rebuild containers after code changes
-docker-compose up -d --build
-
-# Stop and remove containers, networks, and volumes
-docker-compose down -v
+# Edit .env — see Environment Variables section below
+cd ..
+docker compose up -d --build
 ```
 
-### Production Docker Deployment
+Visit `http://localhost` — booking page.
+Visit `http://localhost/admin` — admin panel (requires password).
 
-For production on your Ubuntu server:
+---
 
-1. **Install Docker and Docker Compose:**
-   ```bash
-   # Update package index
-   sudo apt update
+## Environment Variables
 
-   # Install Docker
-   curl -fsSL https://get.docker.com -o get-docker.sh
-   sudo sh get-docker.sh
+All variables go in `server/.env`. Copy `server/.env.example` as a starting point.
 
-   # Install Docker Compose
-   sudo apt install docker-compose
+### Required
 
-   # Add your user to docker group (optional, to run without sudo)
-   sudo usermod -aG docker $USER
-   newgrp docker
-   ```
+| Variable | Description |
+|---|---|
+| `ADMIN_PASSWORD_HASH` | bcrypt hash of your admin password (see below) |
+| `JWT_SECRET` | Random secret for signing admin session tokens |
+| `ENCRYPTION_KEY` | Random key for encrypting stored Google OAuth tokens |
+| `GOOGLE_CLIENT_ID` | OAuth client ID from Google Cloud Console |
+| `GOOGLE_CLIENT_SECRET` | OAuth client secret |
+| `GOOGLE_REDIRECT_URI` | Must match your domain, e.g. `https://yourdomain.com/auth/google/callback` |
 
-2. **Clone and configure:**
-   ```bash
-   git clone <your-repo-url>
-   cd TutorBooking
+### Optional
 
-   # Configure environment
-   cd server
-   cp .env.example .env
-   nano .env  # Edit with your credentials
+| Variable | Description | Default |
+|---|---|---|
+| `TIMEZONE` | IANA timezone for slot generation | `America/Chicago` |
+| `GOOGLE_MAPS_API_KEY` | Enables address autocomplete and drive time auto-calculation | — |
+| `GOOGLE_REFRESH_TOKEN` | Fallback if not using the web OAuth flow | — |
+| `PORT` | Server port inside the container | `5000` |
 
-   # Configure booking settings
-   cd ../client/src
-   nano config.js  # Customize your settings
-   ```
+---
 
-3. **Deploy with Docker:**
-   ```bash
-   cd ..  # Back to project root
-   docker-compose up -d --build
-   ```
+## Setting Up Admin Authentication
 
-5. **Connect Google Calendar:**
-   - Open your browser and visit: `http://your-server-ip/admin`
-   - Click "Connect Google Calendar"
-   - Sign in and authorize
-   - Done! Tokens are encrypted and stored automatically
+The admin panel at `/admin` requires a password. You must generate a bcrypt hash of your chosen password and add it to `server/.env` before first use.
 
-6. **Configure firewall:**
-   ```bash
-   # Allow HTTP traffic
-   sudo ufw allow 80/tcp
-   sudo ufw allow 5000/tcp  # If you want direct API access
-   sudo ufw enable
-   ```
+### Step 1 — Generate the password hash
 
-7. **Set up auto-restart:**
-   Docker Compose containers are configured with `restart: unless-stopped`, so they'll automatically restart on server reboot.
-
-### HTTPS with Docker and Nginx Proxy
-
-For production with SSL, use a reverse proxy like Nginx Proxy Manager or Traefik:
-
-**Option 1: Using Nginx Proxy Manager (Easiest)**
-
-1. Install Nginx Proxy Manager in Docker
-2. Point it to http://localhost:80 for your booking app
-3. Configure SSL certificate through the UI
-
-**Option 2: Using Let's Encrypt with Certbot**
-
-1. Install Certbot on host:
-   ```bash
-   sudo apt install certbot
-   ```
-
-2. Stop containers temporarily:
-   ```bash
-   docker-compose down
-   ```
-
-3. Get certificate:
-   ```bash
-   sudo certbot certonly --standalone -d your-domain.com
-   ```
-
-4. Update `docker-compose.yml` to mount certificates:
-   ```yaml
-   client:
-     volumes:
-       - /etc/letsencrypt:/etc/letsencrypt:ro
-   ```
-
-5. Update `client/nginx.conf` to use SSL
-
-### Docker Health Checks
-
-The containers include health checks:
-- Server health check: `http://localhost:5000/api/health`
-- Client health check: Nginx availability
-
-View health status:
-```bash
-docker-compose ps
-```
-
-### Updating the Application
+Run this once (Node.js must be installed, or run inside the container):
 
 ```bash
-# Pull latest changes
-git pull
-
-# Rebuild and restart containers
-docker-compose up -d --build
-
-# View logs to ensure everything started correctly
-docker-compose logs -f
+node -e "require('bcryptjs').hash('your-password-here', 12).then(console.log)"
 ```
 
-## Manual Development (Without Docker)
+Copy the output (it will look like `$2b$12$...`).
 
-If you prefer to develop without Docker:
+### Step 2 — Generate a JWT secret
 
-\`\`\`bash
-npm run install-all
-npm run dev
-\`\`\`
+```bash
+node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
+```
 
-This starts:
-- Frontend: http://localhost:3000
-- Backend: http://localhost:5000
-
-## Manual Production Deployment
-
-**Note:** Docker deployment is recommended. Use manual deployment only if Docker is not available.
-
-### Build the Frontend
-
-\`\`\`bash
-npm run build
-\`\`\`
-
-### Run the Production Server
-
-\`\`\`bash
-cd server
-NODE_ENV=production npm start
-\`\`\`
-
-### Using PM2 for Process Management
-
-\`\`\`bash
-# Install PM2 globally
-sudo npm install -g pm2
-
-# Start the server
-cd server
-pm2 start server.js --name tutor-booking
-
-# Set up PM2 to start on system boot
-pm2 startup
-pm2 save
-\`\`\`
-
-### Nginx Reverse Proxy (Recommended)
-
-Create an Nginx configuration:
-
-\`\`\`nginx
-server {
-    listen 80;
-    server_name your-domain.com;
-
-    location / {
-        proxy_pass http://localhost:5000;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_cache_bypass $http_upgrade;
-    }
-}
-\`\`\`
-
-### SSL/HTTPS with Let's Encrypt
-
-\`\`\`bash
-sudo apt update
-sudo apt install certbot python3-certbot-nginx
-sudo certbot --nginx -d your-domain.com
-\`\`\`
-
-## Admin Panel
-
-The application includes an admin panel at `/admin` for easy Google Calendar management.
-
-### Features
-
-- **Connection Status**: See if Google Calendar is connected
-- **One-Click OAuth**: Connect with a simple button click (no manual token generation)
-- **Secure Token Storage**: Tokens are encrypted and stored locally
-- **Easy Disconnect**: Disconnect and reconnect as needed
-
-### Accessing the Admin Panel
-
-1. **Development**: Visit `http://localhost:5000/admin`
-2. **Production**: Visit `http://your-domain.com/admin`
-
-### OAuth Setup Flow
-
-1. Click "Connect Google Calendar" in the admin panel
-2. Sign in with your Google account
-3. Grant calendar and event permissions
-4. Get redirected back with success confirmation
-5. Tokens are automatically saved and encrypted
-
-### Security
-
-- Tokens are encrypted using AES-256-GCM encryption
-- Encryption key is stored in environment variables
-- Tokens are never exposed in logs or responses
-- OAuth flow uses HTTPS in production (recommended)
-
-### Manual Token Setup (Alternative)
-
-If you prefer manual setup, you can still use environment variables:
+### Step 3 — Add to `server/.env`
 
 ```env
-GOOGLE_REFRESH_TOKEN=your_refresh_token_here
+ADMIN_PASSWORD_HASH=$2b$12$...   # paste hash from step 1
+JWT_SECRET=abc123...              # paste output from step 2
 ```
 
-The system will automatically use tokens from the web interface if available, or fall back to environment variables.
+### Step 4 — Generate an encryption key (for OAuth token storage)
 
-## API Endpoints
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
 
-### `POST /api/availability`
-Get available time slots for a specific date with drive time consideration.
+```env
+ENCRYPTION_KEY=def456...          # paste output here
+```
 
-**Request Body:**
-\`\`\`json
-{
-  "date": "2024-01-15T00:00:00.000Z",
-  "schoolId": "elementary-school",
-  "sessionDuration": 30
+### How admin auth works
+
+- Visiting `/admin` shows a login form
+- On successful login a signed JWT (24h expiry) is stored in the browser
+- All admin API endpoints (`PUT /api/schools`, `PUT /api/settings`, etc.) require a valid JWT in the `Authorization: Bearer` header
+- The "Log out" button in the admin header clears the token
+- After 24 hours the token expires and re-login is required
+- Login attempts are rate-limited to 10 per 15 minutes
+
+---
+
+## Google Calendar Setup
+
+### 1. Create OAuth credentials
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a project and enable the **Google Calendar API**
+3. Go to "APIs & Services" → "Credentials" → "Create Credentials" → "OAuth client ID"
+4. Application type: **Web application**
+5. Add authorized redirect URI: `https://yourdomain.com/auth/google/callback`
+6. Copy the Client ID and Client Secret into `server/.env`
+
+### 2. Connect via the admin panel
+
+1. Start the app and log in to `/admin`
+2. Go to the **Google Calendar** tab
+3. Click **Connect Google Calendar**
+4. Authorize with your Google account
+5. Tokens are encrypted and saved automatically — no manual token handling needed
+
+### 3. Select which calendars to use
+
+After connecting, the **Calendar Settings** section appears. Choose:
+- **Check Availability** — which calendars to scan for conflicts (check all calendars you use)
+- **Add Bookings To** — which calendar to create new booking events in
+
+---
+
+## Google Maps API Setup (optional but recommended)
+
+Enables two features:
+- Address autocomplete in the school editor
+- **Auto-calculate drive times** between schools via the Distance Matrix API
+
+1. Enable these APIs in Google Cloud Console: **Maps JavaScript API**, **Places API**, **Geocoding API**, **Distance Matrix API**
+2. Add the key to `server/.env`:
+   ```env
+   GOOGLE_MAPS_API_KEY=your_key_here
+   ```
+
+To calculate drive times: Admin → Schools → **Calculate from Addresses**. This calls the Distance Matrix API with a midday weekday departure time, averages the outbound and return to enforce symmetry, and fills the drive time matrix. Review the values and click **Save Drive Times**.
+
+---
+
+## Admin Panel Guide
+
+### Logging in
+
+Visit `/admin`. Enter your password (the one you hashed in `ADMIN_PASSWORD_HASH`).
+
+### Google Calendar tab
+
+- View OAuth and token status
+- Connect, reconnect, or disconnect Google Calendar
+- Test the live API connection
+- Configure which calendars to check and book into
+
+### Schools tab
+
+Add and manage schools. Each school has:
+
+- **Name** and **Address** — address autocompletes with Google Maps if API key is set
+- **Session Length** — controls slot generation (e.g. 40 min sessions in a 40 min window = exactly one slot)
+- **School Logo** — displayed as the tile image on the booking page; PNG/SVG with transparent background works best
+- **Availability Schedule** — enable days, add time blocks, give blocks an optional period name (e.g. "A2a") shown to students
+- **Copy to…** — copy a day's blocks to other days
+
+**Drive Times Between Schools** — matrix of actual driving minutes between each pair. Use **Calculate from Addresses** to auto-fill, or enter manually. The system adds 5 minutes for parking/walking and rounds to the nearest 5 before applying buffers.
+
+### Settings tab
+
+- **Booking Page Logo** — displayed above the page title on the student-facing booking page
+- **Google Meet Session Length** — duration for online sessions
+
+---
+
+## Booking Page
+
+Students visit the root URL (`/`). The flow:
+
+1. **Choose meeting type** — Google Meet or Physical Location
+2. **Select school** — tile grid with logo and session duration; or enter a custom location
+3. **Pick a date** — only dates with available slots are enabled in the calendar
+4. **Pick a time** — slots show the time and optional period name; slots blocked by calendar events or drive time requirements are excluded automatically
+5. **Enter contact info** — name, email, phone (optional), notes (optional)
+6. **Confirm** — booking creates a calendar event with a descriptive title (`Student Name — Tutoring at School Name`), sends an invite to the student's email, and generates a Google Meet link if applicable
+
+---
+
+## Deployment
+
+### Cloudflare Tunnel (recommended for homelab)
+
+Cloudflare Tunnel exposes your local app publicly without opening firewall ports:
+
+```bash
+# Install cloudflared on your machine
+# Then create a tunnel:
+cloudflared tunnel create tutor-booking
+cloudflared tunnel route dns tutor-booking yourdomain.com
+cloudflared tunnel run tutor-booking
+```
+
+Cloudflare handles TLS automatically. No Let's Encrypt setup needed.
+
+Update `GOOGLE_REDIRECT_URI` in `.env` to your public domain and add it to your OAuth client's authorized redirect URIs in Google Cloud Console.
+
+### DigitalOcean Droplet (or any VPS)
+
+1. Install Docker and Docker Compose on the droplet
+2. Clone the repo, configure `server/.env`
+3. Run `docker compose up -d --build`
+4. Point your domain's DNS A record to the droplet IP
+5. Set up HTTPS with [Caddy](https://caddyserver.com/) (simplest) or Certbot + nginx
+
+**Caddy example** (automatic HTTPS, no certificate management):
+```
+yourdomain.com {
+    reverse_proxy localhost:80
 }
-\`\`\`
+```
 
-**Response:**
-\`\`\`json
-{
-  "slots": [
-    { "time": "2024-01-15T09:00:00.000Z", "available": true },
-    { "time": "2024-01-15T10:00:00.000Z", "available": true }
-  ]
-}
-\`\`\`
+### Updating
 
-**Note:** This endpoint automatically accounts for drive time between different school locations. Time slots that don't allow enough travel time from previous bookings are automatically filtered out.
+```bash
+git pull
+docker compose up -d --build
+```
 
-### `GET /api/availability/:date` (Legacy)
-Get available time slots for a specific date (without drive time consideration).
+Data (tokens, schools, settings, logos) is stored in a named Docker volume and persists across rebuilds.
 
-**Response:**
-\`\`\`json
-{
-  "slots": [
-    { "time": "2024-01-15T09:00:00.000Z", "available": true },
-    { "time": "2024-01-15T10:00:00.000Z", "available": false }
-  ]
-}
-\`\`\`
+---
 
-### `POST /api/bookings`
-Create a new booking.
+## Docker Reference
 
-**Request Body:**
-\`\`\`json
-{
-  "date": "2024-01-15T00:00:00.000Z",
-  "time": "2024-01-15T09:00:00.000Z",
-  "meetingType": "google-meet",
-  "location": "",
-  "schoolId": "elementary-school",
-  "sessionDuration": 30,
-  "name": "John Doe",
-  "email": "john@example.com",
-  "phone": "+1234567890",
-  "notes": "Need help with calculus"
-}
-\`\`\`
+```bash
+# Start
+docker compose up -d
 
-**Note:** The `schoolId` is stored with the calendar event to enable drive time calculations for future bookings.
+# View logs
+docker compose logs -f
 
-### `GET /api/health`
-Check server health and Google Calendar connection status.
+# Rebuild after code changes
+docker compose up -d --build
 
-## Customization
+# Stop
+docker compose down
 
-Most settings can be customized in `client/src/config.js`. Here are the key options:
+# Stop and delete all data volumes (destructive)
+docker compose down -v
+```
 
-### Business Settings
+Health check endpoints:
+- `GET /api/health` — server status and calendar connection
 
-\`\`\`javascript
-businessName: 'Tutoring Services',
-businessDescription: 'Schedule your tutoring session in just a few steps',
-\`\`\`
+---
 
-### Booking Rules
+## API Reference
 
-\`\`\`javascript
-booking: {
-  advanceBookingDays: 90,  // How far ahead clients can book
-  allowWeekends: false     // Global weekend setting (can be overridden per school)
-}
-\`\`\`
+### Public (no auth required)
 
-### School Configuration
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/api/availability` | Available slots for a date/school |
+| `POST` | `/api/availability/days` | Which days in a month have slots |
+| `POST` | `/api/bookings` | Create a booking |
+| `GET` | `/api/config` | Public runtime config (Maps key, Meet duration) |
+| `GET` | `/api/logo` | Business logo |
+| `GET` | `/api/schools` | School list (booking page needs this) |
+| `GET` | `/api/health` | Health check |
+| `GET` | `/auth/google` | Initiate Google OAuth flow |
+| `GET` | `/auth/google/callback` | OAuth callback |
+| `GET` | `/auth/status` | Calendar connection status |
 
-**Each school can have its own session duration and availability schedule:**
+### Admin (JWT required)
 
-\`\`\`javascript
-schools: [
-  {
-    id: 'elementary-school',
-    name: 'Lincoln Elementary School',
-    address: '123 Main St, Springfield',
-    sessionDuration: 30, // 30 minute sessions
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/auth/admin/login` | Exchange password for JWT |
+| `GET` | `/auth/admin/verify` | Validate existing JWT |
+| `GET` | `/auth/test` | Test live calendar API |
+| `POST` | `/auth/disconnect` | Disconnect Google Calendar |
+| `GET/PUT` | `/api/settings` | Google Meet duration etc. |
+| `GET/PUT` | `/api/logo` | Business logo |
+| `DELETE` | `/api/logo` | Remove business logo |
+| `GET/PUT` | `/api/schools` | School list (GET is public, PUT is admin) |
+| `GET/PUT` | `/api/drivetimes` | Drive time matrix |
+| `POST` | `/api/drivetimes/calculate` | Auto-calculate via Google Maps |
+| `GET` | `/api/calendars` | List connected Google Calendars |
+| `GET/PUT` | `/api/config/calendars` | Calendar selection config |
+| `GET` | `/api/bookings` | All bookings |
 
-    // Available time blocks per day of week
-    // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
-    availability: {
-      1: [ // Monday
-        { start: '08:00', end: '12:00' },
-        { start: '13:00', end: '15:30' }
-      ],
-      2: [ // Tuesday
-        { start: '08:00', end: '12:00' },
-        { start: '13:00', end: '15:30' }
-      ],
-      // ... more days
-    }
-  },
-  {
-    id: 'high-school',
-    name: 'Jefferson High School',
-    address: '789 Elm Street, Springfield',
-    sessionDuration: 60, // 60 minute sessions
-
-    availability: {
-      1: [{ start: '15:30', end: '18:00' }], // Monday
-      2: [{ start: '15:30', end: '18:00' }], // Tuesday
-      // ... more days
-    }
-  }
-]
-\`\`\`
-
-**Key Features:**
-- ✅ **Different session lengths** per school (30, 45, 60 minutes, etc.)
-- ✅ **Custom schedules** per school with multiple time blocks per day
-- ✅ **Flexible availability** - some schools can have weekend hours
-- ✅ **Multiple time blocks** - e.g., morning and afternoon sessions
-
-### Google Meet Configuration
-
-\`\`\`javascript
-googleMeet: {
-  enabled: true,
-  sessionDuration: 60, // Default session duration for Google Meet
-
-  // Available time blocks for Google Meet sessions
-  availability: {
-    1: [{ start: '09:00', end: '17:00' }], // Monday
-    2: [{ start: '09:00', end: '17:00' }], // Tuesday
-    // ... more days
-  }
-}
-\`\`\`
-
-### Custom Location Options
-
-\`\`\`javascript
-locationOptions: {
-  allowCustomLocation: true,
-  customLocationSessionDuration: 60, // Session duration for custom locations
-  customLocationPlaceholder: 'Enter your preferred meeting location...',
-  customLocationHelp: 'Please provide a specific address or location name',
-
-  // Availability schedule for custom locations
-  customLocationAvailability: {
-    1: [{ start: '09:00', end: '17:00' }],
-    2: [{ start: '09:00', end: '17:00' }],
-    // ... more days
-  }
-}
-\`\`\`
-
-### Drive Time Between Locations
-
-The system automatically accounts for travel time between different school locations to prevent back-to-back bookings that don't allow enough time to travel.
-
-**Configuration:** Edit `server/schoolConfig.js` to define actual drive times between schools:
-
-\`\`\`javascript
-driveTimes: {
-  'elementary-school': {
-    'middle-school': 15,    // 15 minutes actual drive time
-    'high-school': 20,      // 20 minutes actual drive time
-    'community-center': 10  // 10 minutes actual drive time
-  },
-  'middle-school': {
-    'elementary-school': 15,
-    'high-school': 12,
-    'community-center': 18
-  },
-  // ... more schools
-}
-\`\`\`
-
-**How It Works:**
-
-1. **Actual Drive Time + Walking Buffer**: For each route, define the actual driving time in minutes. The system automatically adds 5 minutes for walking/parking.
-
-2. **Rounding**: Total time is rounded to the nearest 5 minutes for cleaner scheduling.
-
-3. **Automatic Blocking**: When a client tries to book at a different school than their previous session, the system checks if there's enough time to travel and blocks slots that are too close.
-
-**Example:**
-- Drive time from Elementary to Middle School: 15 minutes
-- Walking/parking buffer: +5 minutes
-- **Total buffer: 20 minutes** (rounded to nearest 5)
-- If you have a session at Elementary ending at 3:00 PM, the earliest available slot at Middle School is 3:20 PM
-
-**Special Cases:**
-- **Same school**: No drive time needed (buffer = 0)
-- **Google Meet sessions**: No drive time needed (virtual meetings)
-- **Undefined routes**: System defaults to 30 minutes and logs a warning
-
-**Benefits:**
-- ✅ Prevents impossible scheduling scenarios
-- ✅ Accounts for realistic travel time
-- ✅ Includes time for parking and walking
-- ✅ No manual buffer management needed
-
-### How Scheduling Works
-
-1. **Client selects a school** → System loads that school's session duration and availability
-2. **Client picks a date** → Only dates with available time blocks are enabled
-3. **System generates time slots** → Based on the school's availability blocks and session duration
-4. **Booking created** → Calendar event created with the correct session length
-
-**Example:**
-- Elementary School: 30-min sessions, 8:00-12:00, 1:00-3:30
-  - Available slots: 8:00, 8:30, 9:00, 9:30... 1:00, 1:30, 2:00, 2:30, 3:00
-- High School: 60-min sessions, 3:30-6:00
-  - Available slots: 3:30, 4:30
-
-### Meeting Types
-
-\`\`\`javascript
-meetingTypes: {
-  googleMeet: {
-    enabled: true,
-    label: 'Google Meet',
-    description: 'Join remotely via video call...',
-    icon: '📹'
-  },
-  physical: {
-    enabled: true,
-    label: 'School Location',
-    description: 'Meet in person at one of the schools.',
-    icon: '🏫'
-  }
-}
-\`\`\`
+---
 
 ## Troubleshooting
 
-### Google Calendar Not Connected
+**Admin panel shows login form but login fails**
+- Verify `ADMIN_PASSWORD_HASH` in `server/.env` is a valid bcrypt hash starting with `$2b$`
+- Make sure you're hashing the right password — re-run the generation command if unsure
+- Check that `JWT_SECRET` is set
 
-1. Check that all environment variables are set correctly in `.env`
-2. Verify that the Google Calendar API is enabled in Google Cloud Console
-3. Ensure your OAuth credentials have the correct redirect URIs
-4. Check the server logs for specific error messages
+**Google Calendar not connecting**
+- Confirm `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are correct
+- Verify the redirect URI in Google Cloud Console exactly matches `GOOGLE_REDIRECT_URI` in `.env`
+- Check server logs: `docker compose logs -f server`
 
-### Time Zone Issues
+**Slots not showing / wrong times**
+- Set `TIMEZONE` in `.env` to your local IANA timezone (e.g. `America/Chicago`, `America/New_York`)
+- Confirm the school's availability blocks are saved in the admin panel
 
-Make sure the `TIMEZONE` environment variable matches your local timezone:
+**Drive time calculation fails**
+- Ensure `GOOGLE_MAPS_API_KEY` is set and the **Distance Matrix API** is enabled in Google Cloud Console
+- The key needs billing enabled; the Distance Matrix API is not on the free tier
 
-\`\`\`bash
-# List available timezones
-timedatectl list-timezones
-
-# Set in .env
-TIMEZONE=America/New_York
-\`\`\`
-
-### Port Already in Use
-
-Change the port in `.env`:
-
-\`\`\`env
-PORT=5001
-\`\`\`
-
-## Future Enhancements
-
-- [ ] Database integration (PostgreSQL/MongoDB)
-- [ ] User authentication for multiple tutors with separate calendars
-- [ ] Email templates customization
-- [ ] SMS reminders via Twilio
-- [ ] Payment integration
-- [ ] Recurring sessions
-- [ ] Booking history and management dashboard
-- [ ] Multiple timezone support for clients
-- [ ] Waiting list functionality
-- [ ] Client rescheduling and cancellation
-
-## License
-
-MIT
-
-## Support
-
-For issues and questions, please open an issue on GitHub.
+**Tokens lost after container restart**
+- Data is stored in a named Docker volume (`token-data`). Check `docker volume ls` to confirm it exists.
+- Do not use `docker compose down -v` in production — that deletes volumes
