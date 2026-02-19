@@ -40,3 +40,17 @@ coverage/
 # Temporary files
 *.tmp
 .cache/
+
+# Runtime data files (may contain private student/business info)
+schools.json
+drivetimes.json
+calendar-config.json
+meeting-types.json
+settings.json
+logo.json
+server/schools.json
+server/drivetimes.json
+server/calendar-config.json
+server/meeting-types.json
+server/settings.json
+server/logo.json
