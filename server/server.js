@@ -518,7 +518,13 @@ function loadLogo() {
 // ── Settings storage helpers ──────────────────────────────────────────────────
 function settingsFile() { return path.join(process.env.DATA_DIR || __dirname, 'settings.json') }
 
-const DEFAULT_SETTINGS = { googleMeetDuration: 60 }
+const DEFAULT_SETTINGS = {
+  googleMeetDuration: 60,
+  customLocationDuration: 60,
+  themeColor: '#4f46e5',
+  businessName: '',
+  businessDescription: ''
+}
 
 function loadSettings() {
   try {
@@ -537,7 +543,11 @@ app.get('/api/config', (req, res) => {
   const settings = loadSettings()
   res.json({
     googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY || '',
-    googleMeetDuration: settings.googleMeetDuration
+    googleMeetDuration: settings.googleMeetDuration,
+    customLocationDuration: settings.customLocationDuration,
+    themeColor: settings.themeColor,
+    businessName: settings.businessName,
+    businessDescription: settings.businessDescription
   })
 })
 
@@ -604,9 +614,16 @@ app.get('/api/settings', adminAuth, (req, res) => {
 app.put('/api/settings', adminAuth, (req, res) => {
   const current = loadSettings()
   const updated = { ...current }
-  if (typeof req.body.googleMeetDuration === 'number' && req.body.googleMeetDuration > 0) {
+  if (typeof req.body.googleMeetDuration === 'number' && req.body.googleMeetDuration > 0)
     updated.googleMeetDuration = req.body.googleMeetDuration
-  }
+  if (typeof req.body.customLocationDuration === 'number' && req.body.customLocationDuration > 0)
+    updated.customLocationDuration = req.body.customLocationDuration
+  if (typeof req.body.themeColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(req.body.themeColor))
+    updated.themeColor = req.body.themeColor
+  if (typeof req.body.businessName === 'string')
+    updated.businessName = req.body.businessName.trim()
+  if (typeof req.body.businessDescription === 'string')
+    updated.businessDescription = req.body.businessDescription.trim()
   const ok = saveSettings(updated)
   if (ok) res.json({ success: true, settings: updated })
   else res.status(500).json({ error: 'Failed to save settings' })

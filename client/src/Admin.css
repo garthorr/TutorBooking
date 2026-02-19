@@ -876,3 +876,113 @@
   .mt-row-main { flex-wrap: wrap; }
   .mt-duration-select { width: 80px; }
 }
+
+/* ── Settings form fields ── */
+.settings-field {
+  margin-top: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.settings-field label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #374151;
+}
+.settings-field input[type="text"] {
+  padding: 0.55rem 0.75rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  width: 100%;
+}
+.settings-field input[type="text"]:focus {
+  outline: none;
+  border-color: var(--primary-color, #4f46e5);
+}
+.settings-field-inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.75rem;
+}
+.settings-field-inline label { white-space: nowrap; }
+.settings-field-inline select {
+  padding: 0.45rem 0.6rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  background: white;
+}
+
+/* ── Color theme picker ── */
+.theme-swatches {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin-top: 0.85rem;
+}
+
+.theme-swatch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.5rem 0.7rem;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  background: white;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  min-width: 62px;
+}
+.theme-swatch:hover { border-color: #9ca3af; }
+.theme-swatch-active {
+  border-color: var(--swatch-color, #4f46e5);
+  box-shadow: 0 0 0 2px var(--swatch-color, #4f46e5);
+}
+
+.theme-swatch-dot {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--swatch-color, #4f46e5);
+  flex-shrink: 0;
+}
+
+.theme-swatch-label {
+  font-size: 0.75rem;
+  color: #374151;
+  font-weight: 500;
+}
+
+.theme-custom-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 0.9rem;
+}
+.theme-custom-row label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #374151;
+  white-space: nowrap;
+}
+.theme-hex-input {
+  width: 110px;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-family: monospace;
+  font-size: 0.9rem;
+}
+.theme-hex-input:focus {
+  outline: none;
+  border-color: var(--primary-color, #4f46e5);
+}
+.theme-hex-preview {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid #e5e7eb;
+  flex-shrink: 0;
+}

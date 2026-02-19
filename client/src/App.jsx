@@ -4,6 +4,7 @@ import 'react-datepicker/dist/react-datepicker.css'
 import './App.css'
 import { format, addDays, isBefore, startOfDay, getDay } from 'date-fns'
 import config from './config'
+import { applyTheme } from './theme'
 
 const CUSTOM_LOCATION_VALUE = '__CUSTOM__'
 
@@ -51,8 +52,13 @@ function App() {
   const [step, setStep] = useState(1)
   const [schools, setSchools] = useState([])
   const [meetingTypes, setMeetingTypes] = useState(DEFAULT_MEETING_TYPES)
+  const [siteConfig, setSiteConfig] = useState({
+    businessName: config.businessName,
+    businessDescription: config.businessDescription,
+    customLocationDuration: config.locationOptions.customLocationSessionDuration
+  })
 
-  // Fetch schools, logo, and meeting types on mount
+  // Fetch schools, logo, meeting types, and public config on mount
   useEffect(() => {
     fetch('/api/schools')
       .then(r => r.json())
@@ -70,6 +76,19 @@ function App() {
     fetch('/api/meeting-types')
       .then(r => r.ok ? r.json() : null)
       .then(data => { if (Array.isArray(data) && data.length > 0) setMeetingTypes(data) })
+      .catch(() => {})
+
+    fetch('/api/config')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data) return
+        if (data.themeColor) applyTheme(data.themeColor)
+        setSiteConfig({
+          businessName: data.businessName || config.businessName,
+          businessDescription: data.businessDescription || config.businessDescription,
+          customLocationDuration: data.customLocationDuration || config.locationOptions.customLocationSessionDuration
+        })
+      })
       .catch(() => {})
   }, [])
 
@@ -110,7 +129,7 @@ function App() {
       availabilityBlocks = mt.availability
     } else if (isCustom) {
       schoolId = 'custom'
-      sessionDuration = config.locationOptions.customLocationSessionDuration
+      sessionDuration = siteConfig.customLocationDuration
       availabilityBlocks = config.locationOptions.customLocationAvailability
     } else if (school) {
       schoolId = school.id
@@ -173,7 +192,7 @@ function App() {
       schoolId = ''
     } else if (isCustomLocation) {
       availability = config.locationOptions.customLocationAvailability[dayOfWeek] || []
-      sessionDuration = config.locationOptions.customLocationSessionDuration
+      sessionDuration = siteConfig.customLocationDuration
       schoolId = 'custom'
     } else if (selectedSchool) {
       availability = selectedSchool.availability[dayOfWeek] || []
@@ -219,7 +238,7 @@ function App() {
     if (mt && !mt.requiresSchool) {
       blocks = (mt.availability || {})[dayOfWeek] || []
     } else if (isCustomLocation) {
-      blocks = config.locationOptions.customLocationAvailability[dayOfWeek] || []
+      blocks = (config.locationOptions.customLocationAvailability || {})[dayOfWeek] || []
     } else if (selectedSchool) {
       blocks = selectedSchool.availability[dayOfWeek] || []
     }
@@ -262,7 +281,7 @@ function App() {
         customLocation: '',
         date: null,
         time: null,
-        sessionDuration: config.locationOptions.customLocationSessionDuration
+        sessionDuration: siteConfig.customLocationDuration
       })
     } else {
       const school = schools.find(s => s.id === schoolId)
@@ -396,9 +415,9 @@ function App() {
   return (
     <div className="container">
       <div className="header">
-        {logoUrl && <img src={logoUrl} alt={config.businessName} className="business-logo" />}
-        <h1>{config.businessName}</h1>
-        <p>{config.businessDescription}</p>
+        {logoUrl && <img src={logoUrl} alt={siteConfig.businessName} className="business-logo" />}
+        <h1>{siteConfig.businessName}</h1>
+        <p>{siteConfig.businessDescription}</p>
       </div>
 
       <div className="booking-card">
@@ -469,7 +488,7 @@ function App() {
                         <div className="school-tile-logo-placeholder">✏️</div>
                       </div>
                       <div className="school-tile-name">Other Location</div>
-                      <div className="school-tile-duration">{config.locationOptions.customLocationSessionDuration} min</div>
+                      <div className="school-tile-duration">{siteConfig.customLocationDuration} min</div>
                     </div>
                   )}
                 </div>

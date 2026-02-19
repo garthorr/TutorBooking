@@ -29,14 +29,14 @@
 }
 
 .school-tile:hover {
-  border-color: #a5b4fc;
-  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.12);
+  border-color: var(--primary-color);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.10);
 }
 
 .school-tile.selected {
-  border-color: #6366f1;
-  background: #eef2ff;
-  box-shadow: 0 2px 10px rgba(99, 102, 241, 0.20);
+  border-color: var(--primary-color);
+  background: var(--primary-light);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
 }
 
 /* Fixed square logo area — margin:auto centres it without affecting siblings */
@@ -58,8 +58,8 @@
 
 /* SVG initial-letter placeholder — circle + letter embedded, no external CSS needed */
 .school-tile-logo-placeholder { display: block; }
-.school-tile.selected .school-tile-logo-placeholder circle { fill: #c7d2fe; }
-.school-tile.selected .school-tile-logo-placeholder text  { fill: #4338ca; }
+.school-tile.selected .school-tile-logo-placeholder circle { fill: var(--primary-subtle); }
+.school-tile.selected .school-tile-logo-placeholder text  { fill: var(--primary-hover); }
 
 .school-tile-name {
   font-size: 0.82rem;
@@ -69,7 +69,7 @@
   flex: 1; /* grows so the duration line always sits at the bottom */
 }
 
-.school-tile.selected .school-tile-name { color: #4338ca; }
+.school-tile.selected .school-tile-name { color: var(--primary-hover); }
 
 .school-tile-duration {
   font-size: 0.75rem;

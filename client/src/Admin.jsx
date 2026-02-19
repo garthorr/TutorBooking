@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import SchoolsManager from './components/SchoolsManager'
 import MeetingTypesManager from './components/MeetingTypesManager'
 import { adminFetch, clearToken } from './auth'
+import { THEME_PRESETS, applyTheme } from './theme'
 import './Admin.css'
 
 function Admin() {
@@ -27,12 +28,33 @@ function Admin() {
   // Settings tab
   const [logoPreview, setLogoPreview] = useState(null)
   const [logoSaving, setLogoSaving] = useState(false)
+  const [settingsForm, setSettingsForm] = useState({
+    businessName: '',
+    businessDescription: '',
+    customLocationDuration: 60,
+    themeColor: '#4f46e5'
+  })
+  const [settingsSaving, setSettingsSaving] = useState(false)
+  const [customColorInput, setCustomColorInput] = useState('')
 
   useEffect(() => {
     checkStatus()
     loadPublicConfig()
     // Load current logo and settings for the Settings tab
     adminFetch('/api/logo').then(r => r.ok ? r.json() : null).then(d => { if (d?.dataUrl) setLogoPreview(d.dataUrl) }).catch(() => {})
+    adminFetch('/api/settings').then(r => r.ok ? r.json() : null).then(d => {
+      if (!d) return
+      const color = d.themeColor || '#4f46e5'
+      applyTheme(color)
+      setSettingsForm({
+        businessName: d.businessName || '',
+        businessDescription: d.businessDescription || '',
+        customLocationDuration: d.customLocationDuration || 60,
+        themeColor: color
+      })
+      const isPreset = THEME_PRESETS.some(p => p.primary.toLowerCase() === color.toLowerCase())
+      if (!isPreset) setCustomColorInput(color)
+    }).catch(() => {})
 
     const params = new URLSearchParams(window.location.search)
     if (params.get('success') === 'true') {
@@ -124,6 +146,39 @@ function Admin() {
     setMessage(text)
     setMessageType(type)
     setTimeout(() => { setMessage(''); setMessageType('') }, 5000)
+  }
+
+  const handleSettingsSave = async () => {
+    setSettingsSaving(true)
+    try {
+      const res = await adminFetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(settingsForm)
+      })
+      const data = await res.json()
+      if (data.success) {
+        applyTheme(settingsForm.themeColor)
+        showMessage('Settings saved!', 'success')
+      } else {
+        showMessage(data.error || 'Failed to save settings', 'error')
+      }
+    } catch { showMessage('Error saving settings', 'error') }
+    setSettingsSaving(false)
+  }
+
+  const handleThemePresetSelect = (primary) => {
+    setSettingsForm(f => ({ ...f, themeColor: primary }))
+    setCustomColorInput('')
+    applyTheme(primary)
+  }
+
+  const handleCustomColorChange = (val) => {
+    setCustomColorInput(val)
+    if (/^#[0-9a-fA-F]{6}$/.test(val)) {
+      setSettingsForm(f => ({ ...f, themeColor: val }))
+      applyTheme(val)
+    }
   }
 
   const handleLogoChange = (e) => {
@@ -468,6 +523,92 @@ function Admin() {
                 )}
               </div>
             </div>
+
+            {/* Booking page header text */}
+            <div className="settings-section">
+              <h2>Booking Page Header</h2>
+              <p className="field-hint">Text shown at the top of the booking page. Leave blank to use the built-in defaults.</p>
+              <div className="settings-field">
+                <label>Business / Tutor Name</label>
+                <input
+                  type="text"
+                  value={settingsForm.businessName}
+                  onChange={e => setSettingsForm(f => ({ ...f, businessName: e.target.value }))}
+                  placeholder="e.g. EducatOrr"
+                />
+              </div>
+              <div className="settings-field">
+                <label>Tagline / Description</label>
+                <input
+                  type="text"
+                  value={settingsForm.businessDescription}
+                  onChange={e => setSettingsForm(f => ({ ...f, businessDescription: e.target.value }))}
+                  placeholder="e.g. Schedule your tutoring session in just a few steps"
+                />
+              </div>
+            </div>
+
+            {/* Other location session length */}
+            <div className="settings-section">
+              <h2>Other Location Session Length</h2>
+              <p className="field-hint">Session duration used when a student selects &ldquo;Other Location&rdquo;.</p>
+              <div className="settings-field settings-field-inline">
+                <label>Duration</label>
+                <select
+                  value={settingsForm.customLocationDuration}
+                  onChange={e => setSettingsForm(f => ({ ...f, customLocationDuration: Number(e.target.value) }))}
+                >
+                  {[15, 30, 45, 60, 75, 90, 120].map(m => (
+                    <option key={m} value={m}>{m} minutes</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Color theme */}
+            <div className="settings-section">
+              <h2>Color Theme</h2>
+              <p className="field-hint">Choose a preset or enter a custom hex color for buttons, selected states, and accents.</p>
+              <div className="theme-swatches">
+                {THEME_PRESETS.map(p => (
+                  <button
+                    key={p.id}
+                    className={`theme-swatch ${settingsForm.themeColor.toLowerCase() === p.primary.toLowerCase() ? 'theme-swatch-active' : ''}`}
+                    style={{ '--swatch-color': p.primary }}
+                    onClick={() => handleThemePresetSelect(p.primary)}
+                    title={p.label}
+                  >
+                    <span className="theme-swatch-dot" />
+                    <span className="theme-swatch-label">{p.label}</span>
+                  </button>
+                ))}
+                <button
+                  className={`theme-swatch ${!THEME_PRESETS.some(p => p.primary.toLowerCase() === settingsForm.themeColor.toLowerCase()) ? 'theme-swatch-active' : ''}`}
+                  style={{ '--swatch-color': customColorInput || settingsForm.themeColor }}
+                  onClick={() => {}}
+                  title="Custom"
+                >
+                  <span className="theme-swatch-dot" />
+                  <span className="theme-swatch-label">Custom</span>
+                </button>
+              </div>
+              <div className="theme-custom-row">
+                <label>Custom hex</label>
+                <input
+                  type="text"
+                  className="theme-hex-input"
+                  value={customColorInput}
+                  onChange={e => handleCustomColorChange(e.target.value)}
+                  placeholder="#4f46e5"
+                  maxLength={7}
+                />
+                <span className="theme-hex-preview" style={{ background: /^#[0-9a-fA-F]{6}$/.test(customColorInput) ? customColorInput : 'transparent' }} />
+              </div>
+            </div>
+
+            <button className="btn btn-primary" onClick={handleSettingsSave} disabled={settingsSaving}>
+              {settingsSaving ? 'Saving…' : 'Save Settings'}
+            </button>
 
           </div>
         )}
