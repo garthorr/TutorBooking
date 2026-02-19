@@ -47,8 +47,57 @@ const loginLimiter = rateLimit({
   legacyHeaders: false
 })
 
+const availabilityLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 90,
+  message: { error: 'Too many availability checks. Please wait a minute and try again.' },
+  standardHeaders: true,
+  legacyHeaders: false
+})
+
+const bookingLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 12,
+  message: { error: 'Too many booking attempts. Please try again in 15 minutes.' },
+  standardHeaders: true,
+  legacyHeaders: false
+})
+
+function parseTrustProxy(value) {
+  if (value === undefined || value === '') return false
+  const normalized = String(value).trim().toLowerCase()
+  if (normalized === 'true') return true
+  if (normalized === 'false') return false
+  const num = Number(normalized)
+  if (Number.isInteger(num) && num >= 0) return num
+  return value
+}
+
+const DEFAULT_CORS_ORIGINS = [
+  'http://localhost',
+  'http://localhost:80',
+  'http://localhost:5173',
+  'http://127.0.0.1',
+  'http://127.0.0.1:80',
+  'http://127.0.0.1:5173'
+]
+
+const ALLOWED_ORIGINS = (process.env.CORS_ORIGINS || '')
+  .split(',')
+  .map(o => o.trim())
+  .filter(Boolean)
+
+const corsOrigins = ALLOWED_ORIGINS.length > 0 ? ALLOWED_ORIGINS : DEFAULT_CORS_ORIGINS
+app.set('trust proxy', parseTrustProxy(process.env.TRUST_PROXY))
+
 // Middleware
-app.use(cors())
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin) return callback(null, true)
+    if (corsOrigins.includes(origin)) return callback(null, true)
+    return callback(new Error('CORS origin not allowed'))
+  }
+}))
 app.use(express.json())
 
 // Store bookings in memory (replace with database in production)
@@ -158,6 +207,38 @@ async function fetchEventsForPeriod(timeMin, timeMax) {
   return results.flat()
 }
 
+
+function hasSchedulingConflict(slotStart, slotEnd, events, schoolId) {
+  for (const event of events) {
+    const eventStart = new Date(event.start.dateTime || event.start.date)
+    const eventEnd = new Date(event.end.dateTime || event.end.date)
+    const eventSchoolId = event.extendedProperties?.private?.schoolId
+
+    if (slotStart < eventEnd && slotEnd > eventStart) return true
+
+    const driveTimeBefore = getDriveTimeBuffer(eventSchoolId, schoolId)
+    if (driveTimeBefore > 0) {
+      const bufferEnd = new Date(eventEnd.getTime() + driveTimeBefore * 60 * 1000)
+      if (slotStart < bufferEnd) return true
+    }
+
+    const driveTimeAfter = getDriveTimeBuffer(schoolId, eventSchoolId)
+    if (driveTimeAfter > 0) {
+      const bufferStart = new Date(eventStart.getTime() - driveTimeAfter * 60 * 1000)
+      if (slotEnd > bufferStart) return true
+    }
+  }
+  return false
+}
+
+async function hasSchedulingConflictForBooking(slotStart, slotEnd, schoolId) {
+  if (!calendar) return false
+  const timeMin = new Date(slotStart.getTime() - 12 * 60 * 60 * 1000)
+  const timeMax = new Date(slotEnd.getTime() + 12 * 60 * 60 * 1000)
+  const events = await fetchEventsForPeriod(timeMin, timeMax)
+  return hasSchedulingConflict(slotStart, slotEnd, events, schoolId)
+}
+
 // API Routes
 
 // Shared helper: generate available slots for a single day against a set of calendar events
@@ -183,26 +264,7 @@ function getAvailableSlotsForDay(date, availabilityBlocks, sessionDuration, even
       const slotEnd = new Date(slotStart.getTime() + duration * 60 * 1000)
       if (slotEnd > blockEnd) break // Not enough room for a full session
 
-      let isBlocked = false
-      for (const event of events) {
-        const eventStart = new Date(event.start.dateTime || event.start.date)
-        const eventEnd   = new Date(event.end.dateTime   || event.end.date)
-        const eventSchoolId = event.extendedProperties?.private?.schoolId
-
-        if (slotStart < eventEnd && slotEnd > eventStart) { isBlocked = true; break }
-
-        const driveTimeBefore = getDriveTimeBuffer(eventSchoolId, schoolId)
-        if (driveTimeBefore > 0) {
-          const bufferEnd = new Date(eventEnd.getTime() + driveTimeBefore * 60 * 1000)
-          if (slotStart < bufferEnd) { isBlocked = true; break }
-        }
-
-        const driveTimeAfter = getDriveTimeBuffer(schoolId, eventSchoolId)
-        if (driveTimeAfter > 0) {
-          const bufferStart = new Date(eventStart.getTime() - driveTimeAfter * 60 * 1000)
-          if (slotEnd > bufferStart) { isBlocked = true; break }
-        }
-      }
+      const isBlocked = hasSchedulingConflict(slotStart, slotEnd, events, schoolId)
 
       if (!isBlocked) slots.push({ time: slotStart.toISOString(), available: true, blockName: block.name || null })
       slotStart = new Date(slotStart.getTime() + duration * 60 * 1000)
@@ -211,10 +273,123 @@ function getAvailableSlotsForDay(date, availabilityBlocks, sessionDuration, even
   return slots
 }
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const TIME_REGEX = /^\d{2}:\d{2}$/
+
+function isValidDateInput(value) {
+  if (typeof value !== 'string' || !value.trim()) return false
+  const date = new Date(value)
+  return !Number.isNaN(date.getTime())
+}
+
+function isValidPositiveInteger(value, min, max) {
+  return Number.isInteger(value) && value >= min && value <= max
+}
+
+function validateAvailabilityBlocks(blocks) {
+  if (!Array.isArray(blocks)) {
+    return { ok: false, error: 'availabilityBlocks must be an array of time blocks' }
+  }
+  for (const block of blocks) {
+    if (!block || typeof block !== 'object') {
+      return { ok: false, error: 'Each availability block must be an object' }
+    }
+    if (!TIME_REGEX.test(block.start || '') || !TIME_REGEX.test(block.end || '')) {
+      return { ok: false, error: 'Each availability block must have start/end in HH:MM format' }
+    }
+    if (block.start >= block.end) {
+      return { ok: false, error: 'Availability block start time must be before end time' }
+    }
+    if (block.name !== undefined && typeof block.name !== 'string') {
+      return { ok: false, error: 'Availability block name must be a string when provided' }
+    }
+  }
+  return { ok: true }
+}
+
+function validateAvailabilityByDay(availability) {
+  if (!availability || typeof availability !== 'object' || Array.isArray(availability)) {
+    return { ok: false, error: 'availabilityBlocks must be an object keyed by day (0-6)' }
+  }
+  for (const [day, blocks] of Object.entries(availability)) {
+    const dayNum = Number(day)
+    if (!Number.isInteger(dayNum) || dayNum < 0 || dayNum > 6) {
+      return { ok: false, error: 'availabilityBlocks keys must be day numbers from 0 to 6' }
+    }
+    const blockValidation = validateAvailabilityBlocks(blocks)
+    if (!blockValidation.ok) return blockValidation
+  }
+  return { ok: true }
+}
+
+function validateBookingPayload(payload) {
+  const {
+    time,
+    meetingType,
+    location,
+    schoolId,
+    name,
+    email,
+    phone,
+    notes,
+    sessionDuration
+  } = payload
+
+  if (!isValidDateInput(time)) {
+    return { ok: false, error: 'A valid booking time is required' }
+  }
+  if (typeof meetingType !== 'string' || !meetingType.trim() || meetingType.length > 50) {
+    return { ok: false, error: 'meetingType is required and must be 1-50 characters' }
+  }
+  if (typeof name !== 'string' || !name.trim() || name.trim().length > 120) {
+    return { ok: false, error: 'name is required and must be 1-120 characters' }
+  }
+  if (typeof email !== 'string' || !EMAIL_REGEX.test(email.trim()) || email.trim().length > 254) {
+    return { ok: false, error: 'A valid email is required' }
+  }
+  if (phone !== undefined && phone !== null && (typeof phone !== 'string' || phone.length > 40)) {
+    return { ok: false, error: 'phone must be a string up to 40 characters' }
+  }
+  if (notes !== undefined && notes !== null && (typeof notes !== 'string' || notes.length > 2000)) {
+    return { ok: false, error: 'notes must be a string up to 2000 characters' }
+  }
+  if (location !== undefined && location !== null && (typeof location !== 'string' || location.length > 200)) {
+    return { ok: false, error: 'location must be a string up to 200 characters' }
+  }
+  if (schoolId !== undefined && schoolId !== null && (typeof schoolId !== 'string' || schoolId.length > 80)) {
+    return { ok: false, error: 'schoolId must be a string up to 80 characters' }
+  }
+  if (sessionDuration !== undefined && !isValidPositiveInteger(sessionDuration, 5, 240)) {
+    return { ok: false, error: 'sessionDuration must be an integer between 5 and 240 minutes' }
+  }
+
+  const settings = loadSettings()
+  const allMeetingTypes = loadMeetingTypes(settings.googleMeetDuration)
+  const meetingTypeObj = allMeetingTypes.find(t => t.id === meetingType)
+  if (!meetingTypeObj || !meetingTypeObj.enabled) {
+    return { ok: false, error: 'Invalid or disabled meeting type' }
+  }
+  if (meetingTypeObj.requiresSchool && (!schoolId || !String(schoolId).trim())) {
+    return { ok: false, error: 'schoolId is required for this meeting type' }
+  }
+
+  return { ok: true }
+}
+
 // Get available time slots for a specific date (with drive time consideration)
-app.post('/api/availability', async (req, res) => {
+app.post('/api/availability', availabilityLimiter, async (req, res) => {
   try {
     const { date, schoolId, sessionDuration, availabilityBlocks } = req.body
+    if (!isValidDateInput(date)) {
+      return res.status(400).json({ error: 'date is required and must be a valid date string' })
+    }
+    if (sessionDuration !== undefined && !isValidPositiveInteger(sessionDuration, 5, 240)) {
+      return res.status(400).json({ error: 'sessionDuration must be an integer between 5 and 240 minutes' })
+    }
+    if (schoolId !== undefined && schoolId !== null && (typeof schoolId !== 'string' || schoolId.length > 80)) {
+      return res.status(400).json({ error: 'schoolId must be a string up to 80 characters' })
+    }
+
     const selectedDate = new Date(date)
     const dayOfWeek = selectedDate.getDay()
 
@@ -224,6 +399,9 @@ app.post('/api/availability', async (req, res) => {
       const schools = loadSchools()
       const school = schools.find(s => s.id === schoolId)
       blocks = school?.availability?.[dayOfWeek] || []
+    } else {
+      const blockValidation = validateAvailabilityBlocks(blocks)
+      if (!blockValidation.ok) return res.status(400).json({ error: blockValidation.error })
     }
 
     if (calendar) {
@@ -245,14 +423,28 @@ app.post('/api/availability', async (req, res) => {
 })
 
 // Get which days in a month have at least one available slot
-app.post('/api/availability/days', async (req, res) => {
+app.post('/api/availability/days', availabilityLimiter, async (req, res) => {
   try {
     const { year, month, schoolId, sessionDuration, availabilityBlocks } = req.body // month: 0-indexed (JS convention)
+    if (!isValidPositiveInteger(year, 2020, 2100)) {
+      return res.status(400).json({ error: 'year must be an integer between 2020 and 2100' })
+    }
+    if (!isValidPositiveInteger(month, 0, 11)) {
+      return res.status(400).json({ error: 'month must be an integer between 0 and 11' })
+    }
+    if (sessionDuration !== undefined && !isValidPositiveInteger(sessionDuration, 5, 240)) {
+      return res.status(400).json({ error: 'sessionDuration must be an integer between 5 and 240 minutes' })
+    }
+    if (schoolId !== undefined && schoolId !== null && (typeof schoolId !== 'string' || schoolId.length > 80)) {
+      return res.status(400).json({ error: 'schoolId must be a string up to 80 characters' })
+    }
 
     // Resolve availability: client-provided blocks take priority (supports config fallbacks),
     // otherwise look up the school from storage
     let availability = {}
     if (availabilityBlocks && typeof availabilityBlocks === 'object' && !Array.isArray(availabilityBlocks)) {
+      const availabilityValidation = validateAvailabilityByDay(availabilityBlocks)
+      if (!availabilityValidation.ok) return res.status(400).json({ error: availabilityValidation.error })
       availability = availabilityBlocks
     } else {
       const schools = loadSchools()
@@ -374,8 +566,13 @@ app.get('/api/availability/:date', async (req, res) => {
 })
 
 // Create a booking
-app.post('/api/bookings', async (req, res) => {
+app.post('/api/bookings', bookingLimiter, async (req, res) => {
   try {
+    const payloadValidation = validateBookingPayload(req.body)
+    if (!payloadValidation.ok) {
+      return res.status(400).json({ error: payloadValidation.error })
+    }
+
     const { date, time, meetingType, location, schoolId, name, email, phone, notes, sessionDuration } = req.body
 
     const booking = {
@@ -405,6 +602,12 @@ app.post('/api/bookings', async (req, res) => {
       const settings = loadSettings()
       const allMeetingTypes = loadMeetingTypes(settings.googleMeetDuration)
       const meetingTypeObj = allMeetingTypes.find(t => t.id === meetingType)
+
+      const hasConflict = await hasSchedulingConflictForBooking(startDateTime, endDateTime, schoolId)
+      if (hasConflict) {
+        return res.status(409).json({ error: 'This slot is no longer available. Please choose another time.' })
+      }
+
       const eventSummary = meetingType === 'google-meet'
         ? `${name} — Online Tutoring`
         : meetingTypeObj?.requiresSchool
