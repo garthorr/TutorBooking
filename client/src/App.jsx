@@ -7,11 +7,52 @@ import config from './config'
 
 const CUSTOM_LOCATION_VALUE = '__CUSTOM__'
 
+// Fallback meeting types used while /api/meeting-types loads (mirrors config.js values)
+const DEFAULT_MEETING_TYPES = [
+  {
+    id: 'phone-call',
+    label: config.meetingTypes.phoneCall.label,
+    description: config.meetingTypes.phoneCall.description,
+    icon: config.meetingTypes.phoneCall.icon,
+    enabled: config.meetingTypes.phoneCall.enabled,
+    order: 0,
+    sessionDuration: config.phoneCall.sessionDuration,
+    availability: config.phoneCall.availability,
+    isBuiltin: true,
+    requiresSchool: false
+  },
+  {
+    id: 'google-meet',
+    label: config.meetingTypes.googleMeet.label,
+    description: config.meetingTypes.googleMeet.description,
+    icon: config.meetingTypes.googleMeet.icon,
+    enabled: config.meetingTypes.googleMeet.enabled,
+    order: 1,
+    sessionDuration: config.googleMeet.sessionDuration,
+    availability: config.googleMeet.availability,
+    isBuiltin: true,
+    requiresSchool: false
+  },
+  {
+    id: 'physical',
+    label: config.meetingTypes.physical.label,
+    description: config.meetingTypes.physical.description,
+    icon: config.meetingTypes.physical.icon,
+    enabled: config.meetingTypes.physical.enabled,
+    order: 2,
+    sessionDuration: null,
+    availability: null,
+    isBuiltin: true,
+    requiresSchool: true
+  }
+]
+
 function App() {
   const [step, setStep] = useState(1)
   const [schools, setSchools] = useState([])
+  const [meetingTypes, setMeetingTypes] = useState(DEFAULT_MEETING_TYPES)
 
-  // Fetch schools, logo, and public config on mount
+  // Fetch schools, logo, and meeting types on mount
   useEffect(() => {
     fetch('/api/schools')
       .then(r => r.json())
@@ -26,48 +67,47 @@ function App() {
       .then(data => { if (data?.dataUrl) setLogoUrl(data.dataUrl) })
       .catch(() => {})
 
-    fetch('/api/config')
+    fetch('/api/meeting-types')
       .then(r => r.ok ? r.json() : null)
-      .then(data => { if (data?.googleMeetDuration) setGoogleMeetDuration(data.googleMeetDuration) })
+      .then(data => { if (Array.isArray(data) && data.length > 0) setMeetingTypes(data) })
       .catch(() => {})
   }, [])
 
   const [bookingData, setBookingData] = useState({
     date: null,
     time: null,
-    meetingType: null, // 'google-meet' or 'physical'
-    schoolId: '', // ID of selected school
+    meetingType: null,
+    schoolId: '',
     customLocation: '',
-    sessionDuration: null, // Will be set based on school/location
+    sessionDuration: null,
     name: '',
     email: '',
     phone: '',
     notes: ''
   })
   const [availableSlots, setAvailableSlots] = useState([])
-  const [availableDates, setAvailableDates] = useState(new Set()) // 'YYYY-MM-DD' strings
+  const [availableDates, setAvailableDates] = useState(new Set())
   const [loadingDays, setLoadingDays] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isBooked, setIsBooked] = useState(false)
   const [isCustomLocation, setIsCustomLocation] = useState(false)
   const [selectedSchool, setSelectedSchool] = useState(null)
   const [logoUrl, setLogoUrl] = useState(null)
-  const [googleMeetDuration, setGoogleMeetDuration] = useState(config.googleMeet.sessionDuration)
 
-  // Fetch available days whenever school/meetingType changes or user navigates months
+  // Look up a meeting type by id
+  const getMeetingType = (id) => meetingTypes.find(t => t.id === id)
+
+  // Fetch available days for a month
   const fetchAvailableDays = async (month, year, school, meetingType, isCustom) => {
     let schoolId = ''
     let sessionDuration = 60
     let availabilityBlocks = null
 
-    if (meetingType === 'phone-call') {
+    const mt = getMeetingType(meetingType)
+    if (mt && !mt.requiresSchool) {
       schoolId = ''
-      sessionDuration = config.phoneCall.sessionDuration
-      availabilityBlocks = config.phoneCall.availability
-    } else if (meetingType === 'google-meet') {
-      schoolId = ''
-      sessionDuration = googleMeetDuration
-      availabilityBlocks = config.googleMeet.availability
+      sessionDuration = mt.sessionDuration
+      availabilityBlocks = mt.availability
     } else if (isCustom) {
       schoolId = 'custom'
       sessionDuration = config.locationOptions.customLocationSessionDuration
@@ -99,70 +139,59 @@ function App() {
     }
   }
 
-  // Refresh available days when location selection changes
+  // Refresh available days when location/type selection changes
   useEffect(() => {
-    if (bookingData.meetingType === 'phone-call' || bookingData.meetingType === 'google-meet' || selectedSchool || isCustomLocation) {
+    const mt = getMeetingType(bookingData.meetingType)
+    if ((mt && !mt.requiresSchool) || selectedSchool || isCustomLocation) {
       const now = new Date()
       fetchAvailableDays(now.getMonth(), now.getFullYear(), selectedSchool, bookingData.meetingType, isCustomLocation)
     } else {
       setAvailableDates(new Set())
     }
-  }, [selectedSchool, isCustomLocation, bookingData.meetingType])
+  }, [selectedSchool, isCustomLocation, bookingData.meetingType, meetingTypes])
 
   // Regenerate time slots when date or location changes
   useEffect(() => {
-    if (bookingData.date && (bookingData.meetingType === 'phone-call' || bookingData.meetingType === 'google-meet' || selectedSchool || isCustomLocation)) {
+    const mt = getMeetingType(bookingData.meetingType)
+    if (bookingData.date && ((mt && !mt.requiresSchool) || selectedSchool || isCustomLocation)) {
       generateTimeSlots(bookingData.date)
     }
   }, [bookingData.date, selectedSchool, isCustomLocation, bookingData.meetingType])
 
-  // Generate time slots — delegates entirely to the backend
+  // Generate time slots — delegates to the backend
   const generateTimeSlots = async (date) => {
-    const dayOfWeek = getDay(date) // 0 = Sunday, 1 = Monday, etc.
+    const dayOfWeek = getDay(date)
 
     let availability = []
-    let sessionDuration = 60 // default
+    let sessionDuration = 60
     let schoolId = ''
 
-    // Determine which availability schedule to use
-    if (bookingData.meetingType === 'phone-call') {
-      availability = config.phoneCall.availability[dayOfWeek] || []
-      sessionDuration = config.phoneCall.sessionDuration
-      schoolId = ''
-    } else if (bookingData.meetingType === 'google-meet') {
-      availability = config.googleMeet.availability[dayOfWeek] || []
-      sessionDuration = googleMeetDuration
+    const mt = getMeetingType(bookingData.meetingType)
+    if (mt && !mt.requiresSchool) {
+      availability = (mt.availability || {})[dayOfWeek] || []
+      sessionDuration = mt.sessionDuration
       schoolId = ''
     } else if (isCustomLocation) {
       availability = config.locationOptions.customLocationAvailability[dayOfWeek] || []
       sessionDuration = config.locationOptions.customLocationSessionDuration
-      schoolId = 'custom' // Use 'custom' as schoolId
+      schoolId = 'custom'
     } else if (selectedSchool) {
       availability = selectedSchool.availability[dayOfWeek] || []
       sessionDuration = selectedSchool.sessionDuration
       schoolId = selectedSchool.id
     }
 
-    // If no availability for this day, return empty
     if (availability.length === 0) {
       setAvailableSlots([])
       return
     }
 
-    // Ask the server for available slots — it handles calendar conflicts, drive time
-    // buffers, and generates timestamps in the configured timezone (America/Chicago).
     try {
       const response = await fetch('/api/availability', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          date: date.toISOString(),
-          schoolId,
-          sessionDuration,
-          availabilityBlocks: availability
-        })
+        body: JSON.stringify({ date: date.toISOString(), schoolId, sessionDuration, availabilityBlocks: availability })
       })
-
       if (response.ok) {
         const data = await response.json()
         setAvailableSlots(data.slots.map(slot => ({ time: new Date(slot.time), available: true, blockName: slot.blockName || null })))
@@ -175,23 +204,20 @@ function App() {
     }
   }
 
-  // Check if a date should be disabled in the calendar
+  // Check if a calendar date should be disabled
   const isDateDisabled = (date) => {
     if (isBefore(startOfDay(date), startOfDay(new Date()))) return true
 
-    // If we have server-verified available dates, use those
     if (availableDates.size > 0) {
-      const key = format(date, 'yyyy-MM-dd')
-      return !availableDates.has(key)
+      return !availableDates.has(format(date, 'yyyy-MM-dd'))
     }
 
-    // Fallback: use local availability blocks while server data loads
+    // Fallback while server data loads
     const dayOfWeek = getDay(date)
+    const mt = getMeetingType(bookingData.meetingType)
     let blocks = []
-    if (bookingData.meetingType === 'phone-call') {
-      blocks = config.phoneCall.availability[dayOfWeek] || []
-    } else if (bookingData.meetingType === 'google-meet') {
-      blocks = config.googleMeet.availability[dayOfWeek] || []
+    if (mt && !mt.requiresSchool) {
+      blocks = (mt.availability || {})[dayOfWeek] || []
     } else if (isCustomLocation) {
       blocks = config.locationOptions.customLocationAvailability[dayOfWeek] || []
     } else if (selectedSchool) {
@@ -200,28 +226,17 @@ function App() {
     return blocks.length === 0
   }
 
-  // Called by DatePicker when user navigates to a different month
   const handleMonthChange = (date) => {
     fetchAvailableDays(date.getMonth(), date.getFullYear(), selectedSchool, bookingData.meetingType, isCustomLocation)
   }
 
-  const handleNext = () => {
-    setStep(step + 1)
-  }
-
-  const handleBack = () => {
-    setStep(step - 1)
-  }
-
-  const handleDateSelect = (date) => {
-    setBookingData({ ...bookingData, date, time: null })
-  }
-
-  const handleTimeSelect = (time) => {
-    setBookingData({ ...bookingData, time })
-  }
+  const handleNext = () => setStep(step + 1)
+  const handleBack = () => setStep(step - 1)
+  const handleDateSelect = (date) => setBookingData({ ...bookingData, date, time: null })
+  const handleTimeSelect = (time) => setBookingData({ ...bookingData, time })
 
   const handleMeetingTypeSelect = (type) => {
+    const mt = getMeetingType(type)
     setBookingData({
       ...bookingData,
       meetingType: type,
@@ -229,14 +244,12 @@ function App() {
       customLocation: '',
       date: null,
       time: null,
-      sessionDuration: type === 'phone-call' ? config.phoneCall.sessionDuration
-                     : type === 'google-meet' ? googleMeetDuration
-                     : null
+      sessionDuration: mt?.sessionDuration || null
     })
     setSelectedSchool(null)
     setIsCustomLocation(false)
-    // Google Meet needs no school selection — go straight to date/time
-    if (type === 'google-meet' || type === 'phone-call') setStep(s => s + 1)
+    // Types that don't require school selection advance straight to date/time
+    if (!mt?.requiresSchool) setStep(s => s + 1)
   }
 
   const handleLocationSelect = (schoolId) => {
@@ -251,7 +264,6 @@ function App() {
         time: null,
         sessionDuration: config.locationOptions.customLocationSessionDuration
       })
-      // Stay on step 1 so the user can type their custom location
     } else {
       const school = schools.find(s => s.id === schoolId)
       setIsCustomLocation(false)
@@ -264,15 +276,11 @@ function App() {
         time: null,
         sessionDuration: school?.sessionDuration || 60
       })
-      // School chosen — go straight to date/time
       setStep(s => s + 1)
     }
   }
 
-  const handleCustomLocationChange = (e) => {
-    setBookingData({ ...bookingData, customLocation: e.target.value })
-  }
-
+  const handleCustomLocationChange = (e) => setBookingData({ ...bookingData, customLocation: e.target.value })
   const handleInputChange = (e) => {
     const { name, value } = e.target
     setBookingData({ ...bookingData, [name]: value })
@@ -280,26 +288,21 @@ function App() {
 
   const handleSubmit = async () => {
     setIsSubmitting(true)
-
     try {
-      // Prepare booking data with final location
+      const mt = getMeetingType(bookingData.meetingType)
       const finalBookingData = {
         ...bookingData,
         location: isCustomLocation
           ? bookingData.customLocation
           : selectedSchool
             ? `${selectedSchool.name} - ${selectedSchool.address}`
-            : 'Google Meet'
+            : mt?.label || bookingData.meetingType
       }
-
       const response = await fetch('/api/bookings', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(finalBookingData)
       })
-
       if (response.ok) {
         setIsBooked(true)
       } else {
@@ -314,30 +317,25 @@ function App() {
   }
 
   const canProceedFromStep1 = bookingData.date && bookingData.time
-  const canProceedFromStep2 = bookingData.meetingType &&
-    (bookingData.meetingType === 'phone-call' ||
-     bookingData.meetingType === 'google-meet' ||
-     (bookingData.schoolId && (bookingData.schoolId !== CUSTOM_LOCATION_VALUE || bookingData.customLocation.trim())))
+  const selectedMeetingType = getMeetingType(bookingData.meetingType)
+  const canProceedFromStep2 = bookingData.meetingType && (
+    !selectedMeetingType?.requiresSchool ||
+    (bookingData.schoolId && (bookingData.schoolId !== CUSTOM_LOCATION_VALUE || bookingData.customLocation.trim()))
+  )
   const canSubmit = bookingData.name && bookingData.email
 
-  // Get the final location for display
   const getFinalLocation = () => {
-    if (bookingData.meetingType === 'phone-call') {
-      return 'Phone Call'
+    const mt = getMeetingType(bookingData.meetingType)
+    if (mt && !mt.requiresSchool) {
+      return mt.id === 'google-meet'
+        ? `${mt.label} (link will be sent)`
+        : mt.label
     }
-    if (bookingData.meetingType === 'google-meet') {
-      return 'Google Meet (link will be sent)'
-    }
-    if (isCustomLocation) {
-      return bookingData.customLocation
-    }
-    if (selectedSchool) {
-      return `${selectedSchool.name} - ${selectedSchool.address}`
-    }
+    if (isCustomLocation) return bookingData.customLocation
+    if (selectedSchool) return `${selectedSchool.name} - ${selectedSchool.address}`
     return ''
   }
 
-  // Get session duration display
   const getSessionDurationDisplay = () => {
     if (!bookingData.sessionDuration) return ''
     return `${bookingData.sessionDuration} minutes`
@@ -366,12 +364,10 @@ function App() {
               <div className="summary-item">
                 <span className="summary-label">Meeting Type:</span>
                 <span className="summary-value">
-                  {bookingData.meetingType === 'phone-call' ? 'Phone Call'
-                   : bookingData.meetingType === 'google-meet' ? 'Google Meet'
-                   : 'Physical Location'}
+                  {getMeetingType(bookingData.meetingType)?.label || bookingData.meetingType}
                 </span>
               </div>
-              {bookingData.meetingType === 'physical' && (
+              {selectedMeetingType?.requiresSchool && (
                 <div className="summary-item">
                   <span className="summary-label">Location:</span>
                   <span className="summary-value">{getFinalLocation()}</span>
@@ -417,53 +413,27 @@ function App() {
             <h2>Choose Meeting Type</h2>
 
             <div className="meeting-options">
-              {config.meetingTypes.phoneCall.enabled && (
+              {meetingTypes.map(mt => (
                 <div
-                  className={`meeting-option ${bookingData.meetingType === 'phone-call' ? 'selected' : ''}`}
-                  onClick={() => handleMeetingTypeSelect('phone-call')}
+                  key={mt.id}
+                  className={`meeting-option ${bookingData.meetingType === mt.id ? 'selected' : ''}`}
+                  onClick={() => handleMeetingTypeSelect(mt.id)}
                 >
-                  <div className="meeting-option-icon">{config.meetingTypes.phoneCall.icon}</div>
+                  <div className="meeting-option-icon">{mt.icon}</div>
                   <div className="meeting-option-content">
-                    <h3>{config.meetingTypes.phoneCall.label}</h3>
-                    <p>{config.meetingTypes.phoneCall.description}</p>
-                    <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginTop: '0.5rem' }}>
-                      Session length: {config.phoneCall.sessionDuration} minutes
-                    </p>
+                    <h3>{mt.label}</h3>
+                    <p>{mt.description}</p>
+                    {mt.sessionDuration && (
+                      <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginTop: '0.5rem' }}>
+                        Session length: {mt.sessionDuration} minutes
+                      </p>
+                    )}
                   </div>
                 </div>
-              )}
-
-              {config.meetingTypes.googleMeet.enabled && (
-                <div
-                  className={`meeting-option ${bookingData.meetingType === 'google-meet' ? 'selected' : ''}`}
-                  onClick={() => handleMeetingTypeSelect('google-meet')}
-                >
-                  <div className="meeting-option-icon">{config.meetingTypes.googleMeet.icon}</div>
-                  <div className="meeting-option-content">
-                    <h3>{config.meetingTypes.googleMeet.label}</h3>
-                    <p>{config.meetingTypes.googleMeet.description}</p>
-                    <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginTop: '0.5rem' }}>
-                      Session length: {googleMeetDuration} minutes
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {config.meetingTypes.physical.enabled && (
-                <div
-                  className={`meeting-option ${bookingData.meetingType === 'physical' ? 'selected' : ''}`}
-                  onClick={() => handleMeetingTypeSelect('physical')}
-                >
-                  <div className="meeting-option-icon">{config.meetingTypes.physical.icon}</div>
-                  <div className="meeting-option-content">
-                    <h3>{config.meetingTypes.physical.label}</h3>
-                    <p>{config.meetingTypes.physical.description}</p>
-                  </div>
-                </div>
-              )}
+              ))}
             </div>
 
-            {bookingData.meetingType === 'physical' && (
+            {selectedMeetingType?.requiresSchool && (
               <div className="form-group location-select">
                 <label>Select School</label>
                 <div className="school-tiles">
@@ -523,11 +493,7 @@ function App() {
 
             {isCustomLocation && (
               <div className="button-group">
-                <button
-                  className="btn btn-primary"
-                  onClick={handleNext}
-                  disabled={!canProceedFromStep2}
-                >
+                <button className="btn btn-primary" onClick={handleNext} disabled={!canProceedFromStep2}>
                   Next
                 </button>
               </div>
@@ -540,12 +506,7 @@ function App() {
             <h2>Select Date & Time</h2>
 
             {selectedSchool && (
-              <div style={{
-                background: 'var(--bg-light)',
-                padding: '1rem',
-                borderRadius: '8px',
-                marginBottom: '1.5rem'
-              }}>
+              <div style={{ background: 'var(--bg-light)', padding: '1rem', borderRadius: '8px', marginBottom: '1.5rem' }}>
                 <p style={{ margin: 0, fontSize: '0.9rem' }}>
                   <strong>{selectedSchool.name}</strong>
                   <br />
@@ -603,14 +564,8 @@ function App() {
             </div>
 
             <div className="button-group">
-              <button className="btn btn-secondary" onClick={handleBack}>
-                Back
-              </button>
-              <button
-                className="btn btn-primary"
-                onClick={handleNext}
-                disabled={!canProceedFromStep1}
-              >
+              <button className="btn btn-secondary" onClick={handleBack}>Back</button>
+              <button className="btn btn-primary" onClick={handleNext} disabled={!canProceedFromStep1}>
                 Next
               </button>
             </div>
@@ -634,67 +589,34 @@ function App() {
               </div>
               <div className="summary-item">
                 <span className="summary-label">Location:</span>
-                <span className="summary-value">
-                  {getFinalLocation()}
-                </span>
+                <span className="summary-value">{getFinalLocation()}</span>
               </div>
             </div>
 
             <div className="form-group">
               <label>Full Name *</label>
-              <input
-                type="text"
-                name="name"
-                value={bookingData.name}
-                onChange={handleInputChange}
-                placeholder="John Doe"
-                required
-              />
+              <input type="text" name="name" value={bookingData.name} onChange={handleInputChange} placeholder="John Doe" required />
             </div>
 
             <div className="form-group">
               <label>Email Address *</label>
-              <input
-                type="email"
-                name="email"
-                value={bookingData.email}
-                onChange={handleInputChange}
-                placeholder="john@example.com"
-                required
-              />
+              <input type="email" name="email" value={bookingData.email} onChange={handleInputChange} placeholder="john@example.com" required />
             </div>
 
             <div className="form-group">
               <label>Phone Number (Optional)</label>
-              <input
-                type="tel"
-                name="phone"
-                value={bookingData.phone}
-                onChange={handleInputChange}
-                placeholder="+1 (555) 123-4567"
-              />
+              <input type="tel" name="phone" value={bookingData.phone} onChange={handleInputChange} placeholder="+1 (555) 123-4567" />
             </div>
 
             <div className="form-group">
               <label>Additional Notes (Optional)</label>
-              <textarea
-                name="notes"
-                value={bookingData.notes}
-                onChange={handleInputChange}
-                rows="4"
-                placeholder="Any specific topics you'd like to cover or questions you have..."
-              />
+              <textarea name="notes" value={bookingData.notes} onChange={handleInputChange} rows="4"
+                placeholder="Any specific topics you'd like to cover or questions you have..." />
             </div>
 
             <div className="button-group">
-              <button className="btn btn-secondary" onClick={handleBack}>
-                Back
-              </button>
-              <button
-                className="btn btn-primary"
-                onClick={handleSubmit}
-                disabled={!canSubmit || isSubmitting}
-              >
+              <button className="btn btn-secondary" onClick={handleBack}>Back</button>
+              <button className="btn btn-primary" onClick={handleSubmit} disabled={!canSubmit || isSubmitting}>
                 {isSubmitting ? 'Booking...' : 'Confirm Booking'}
               </button>
             </div>

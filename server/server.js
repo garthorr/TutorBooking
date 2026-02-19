@@ -12,6 +12,7 @@ import { getDriveTime } from './schoolConfig.js'
 import { saveTokens, loadTokens, deleteTokens, hasTokens, getTokenInfo } from './tokenStorage.js'
 import { loadSchools, saveSchools, loadDriveTimes, saveDriveTimes, getDriveTimeFromStorage } from './schoolsStorage.js'
 import { loadCalendarConfig, saveCalendarConfig } from './calendarStorage.js'
+import { loadMeetingTypes, saveMeetingTypes } from './meetingTypesStorage.js'
 
 dotenv.config()
 
@@ -395,10 +396,17 @@ app.post('/api/bookings', async (req, res) => {
       const durationMs = (sessionDuration || 60) * 60 * 1000 // Convert minutes to milliseconds
       const endDateTime = new Date(startDateTime.getTime() + durationMs)
 
+      const settings = loadSettings()
+      const allMeetingTypes = loadMeetingTypes(settings.googleMeetDuration)
+      const meetingTypeObj = allMeetingTypes.find(t => t.id === meetingType)
+      const eventSummary = meetingType === 'google-meet'
+        ? `${name} — Online Tutoring`
+        : meetingTypeObj?.requiresSchool
+          ? `${name} — Tutoring at ${schools.find(s => s.id === schoolId)?.name || location || 'School'}`
+          : `${name} — ${meetingTypeObj?.label || 'Tutoring'} Session`
+
       const event = {
-        summary: meetingType === 'google-meet'
-          ? `${name} — Online Tutoring`
-          : `${name} — Tutoring at ${schools.find(s => s.id === schoolId)?.name || location || 'School'}`,
+        summary: eventSummary,
         description: `
 Client: ${name}
 Email: ${email}
@@ -531,6 +539,34 @@ app.get('/api/config', (req, res) => {
     googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY || '',
     googleMeetDuration: settings.googleMeetDuration
   })
+})
+
+// Meeting types — GET is public (booking page), admin endpoints for management
+app.get('/api/meeting-types', (req, res) => {
+  const settings = loadSettings()
+  const types = loadMeetingTypes(settings.googleMeetDuration)
+  const enabled = types.filter(t => t.enabled).sort((a, b) => a.order - b.order)
+  res.json(enabled)
+})
+
+app.get('/api/meeting-types/all', adminAuth, (req, res) => {
+  const settings = loadSettings()
+  res.json(loadMeetingTypes(settings.googleMeetDuration))
+})
+
+app.put('/api/meeting-types', adminAuth, (req, res) => {
+  const types = req.body
+  if (!Array.isArray(types)) {
+    return res.status(400).json({ error: 'Expected an array of meeting types' })
+  }
+  for (const t of types) {
+    if (!t.id || typeof t.label !== 'string' || !t.label.trim()) {
+      return res.status(400).json({ error: 'Each type must have an id and a non-empty label' })
+    }
+  }
+  const ok = saveMeetingTypes(types)
+  if (ok) res.json({ success: true })
+  else res.status(500).json({ error: 'Failed to save meeting types' })
 })
 
 // Logo

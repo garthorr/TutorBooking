@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import SchoolsManager from './components/SchoolsManager'
+import MeetingTypesManager from './components/MeetingTypesManager'
 import { adminFetch, clearToken } from './auth'
 import './Admin.css'
 
@@ -26,15 +27,12 @@ function Admin() {
   // Settings tab
   const [logoPreview, setLogoPreview] = useState(null)
   const [logoSaving, setLogoSaving] = useState(false)
-  const [gmDuration, setGmDuration] = useState(60)
-  const [gmSaving, setGmSaving] = useState(false)
 
   useEffect(() => {
     checkStatus()
     loadPublicConfig()
     // Load current logo and settings for the Settings tab
     adminFetch('/api/logo').then(r => r.ok ? r.json() : null).then(d => { if (d?.dataUrl) setLogoPreview(d.dataUrl) }).catch(() => {})
-    adminFetch('/api/settings').then(r => r.ok ? r.json() : null).then(d => { if (d?.googleMeetDuration) setGmDuration(d.googleMeetDuration) }).catch(() => {})
 
     const params = new URLSearchParams(window.location.search)
     if (params.get('success') === 'true') {
@@ -160,21 +158,6 @@ function Admin() {
     } catch { showMessage('Error removing logo', 'error') }
   }
 
-  const handleGmDurationSave = async () => {
-    setGmSaving(true)
-    try {
-      const res = await adminFetch('/api/settings', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ googleMeetDuration: Number(gmDuration) })
-      })
-      const data = await res.json()
-      if (data.success) showMessage('Google Meet duration saved!', 'success')
-      else showMessage('Failed to save', 'error')
-    } catch { showMessage('Error saving', 'error') }
-    setGmSaving(false)
-  }
-
   const handleConnect = () => {
     if (!status.configured) {
       showMessage('Please configure GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in server/.env first', 'error')
@@ -244,6 +227,12 @@ function Admin() {
             onClick={() => setTab('schools')}
           >
             Schools
+          </button>
+          <button
+            className={`admin-tab ${tab === 'meeting-types' ? 'active' : ''}`}
+            onClick={() => setTab('meeting-types')}
+          >
+            Meeting Types
           </button>
           <button
             className={`admin-tab ${tab === 'settings' ? 'active' : ''}`}
@@ -433,6 +422,13 @@ function Admin() {
           </div>
         )}
 
+        {/* Meeting Types Tab */}
+        {tab === 'meeting-types' && (
+          <div className="tab-content">
+            <MeetingTypesManager />
+          </div>
+        )}
+
         {/* Schools Tab */}
         {tab === 'schools' && (
           <div className="tab-content">
@@ -470,27 +466,6 @@ function Admin() {
                     </button>
                   </>
                 )}
-              </div>
-            </div>
-
-            {/* Google Meet duration */}
-            <div className="settings-section">
-              <h2>Google Meet Session Length</h2>
-              <p className="field-hint">Duration (in minutes) used for online sessions when a client books via Google Meet.</p>
-              <div className="gm-duration-row">
-                <input
-                  type="number"
-                  min="5"
-                  max="480"
-                  step="5"
-                  value={gmDuration}
-                  onChange={e => setGmDuration(e.target.value)}
-                  style={{ width: '90px' }}
-                />
-                <span style={{ color: '#6b7280' }}>minutes</span>
-                <button className="btn btn-primary" onClick={handleGmDurationSave} disabled={gmSaving}>
-                  {gmSaving ? 'Saving…' : 'Save'}
-                </button>
               </div>
             </div>
 
