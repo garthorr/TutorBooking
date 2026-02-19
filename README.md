@@ -202,12 +202,14 @@ Add and manage schools. Each school has:
 
 Students visit the root URL (`/`). The flow:
 
-1. **Choose meeting type** — Google Meet or Physical Location
-2. **Select school** — tile grid with logo and session duration; or enter a custom location
-3. **Pick a date** — only dates with available slots are enabled in the calendar
-4. **Pick a time** — slots show the time and optional period name; slots blocked by calendar events or drive time requirements are excluded automatically
+1. **Choose meeting type** — Google Meet or In-Person
+   - **Google Meet**: advances immediately to date selection (no school step)
+   - **In-Person**: shows the school tile grid
+2. **Select school** *(in-person only)* — responsive tile grid showing each school's logo (or an initial-letter placeholder), name, and session length. Clicking a tile advances immediately to date selection. Alternatively, choose **Custom Location**, type the address, and click **Next**.
+3. **Pick a date** — only days that have at least one available slot are enabled in the calendar
+4. **Pick a time** — slots show the start time and optional period name (e.g. "A2a"); slots blocked by existing calendar events or drive-time buffers are excluded automatically
 5. **Enter contact info** — name, email, phone (optional), notes (optional)
-6. **Confirm** — booking creates a calendar event with a descriptive title (`Student Name — Tutoring at School Name`), sends an invite to the student's email, and generates a Google Meet link if applicable
+6. **Confirm** — creates a Google Calendar event with a descriptive title (`Student Name — Tutoring at School Name`), sends a calendar invite to the student's email, and attaches a Google Meet link for online sessions
 
 ---
 
