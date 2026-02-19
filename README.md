@@ -124,6 +124,17 @@ With Docker Compose, persistent app data is stored in the `token-data` volume (`
 
 ---
 
+
+## Localhost compatibility notes
+
+These hardening changes are safe for local testing out of the box:
+
+- `TRUST_PROXY` defaults to off, which is correct for direct localhost runs.
+- CORS defaults allow `http://localhost`, `http://localhost:80`, `http://localhost:5173`, and `127.0.0.1` equivalents.
+- In production behind Cloudflare/another proxy, set `TRUST_PROXY` (commonly `1` or `true`) and set explicit `CORS_ORIGINS`.
+
+---
+
 ## Security + privacy checklist for this repo
 
 To avoid exposing private data in GitHub:

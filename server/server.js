@@ -63,8 +63,41 @@ const bookingLimiter = rateLimit({
   legacyHeaders: false
 })
 
+function parseTrustProxy(value) {
+  if (value === undefined || value === '') return false
+  const normalized = String(value).trim().toLowerCase()
+  if (normalized === 'true') return true
+  if (normalized === 'false') return false
+  const num = Number(normalized)
+  if (Number.isInteger(num) && num >= 0) return num
+  return value
+}
+
+const DEFAULT_CORS_ORIGINS = [
+  'http://localhost',
+  'http://localhost:80',
+  'http://localhost:5173',
+  'http://127.0.0.1',
+  'http://127.0.0.1:80',
+  'http://127.0.0.1:5173'
+]
+
+const ALLOWED_ORIGINS = (process.env.CORS_ORIGINS || '')
+  .split(',')
+  .map(o => o.trim())
+  .filter(Boolean)
+
+const corsOrigins = ALLOWED_ORIGINS.length > 0 ? ALLOWED_ORIGINS : DEFAULT_CORS_ORIGINS
+app.set('trust proxy', parseTrustProxy(process.env.TRUST_PROXY))
+
 // Middleware
-app.use(cors())
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin) return callback(null, true)
+    if (corsOrigins.includes(origin)) return callback(null, true)
+    return callback(new Error('CORS origin not allowed'))
+  }
+}))
 app.use(express.json())
 
 // Store bookings in memory (replace with database in production)
@@ -174,6 +207,38 @@ async function fetchEventsForPeriod(timeMin, timeMax) {
   return results.flat()
 }
 
+
+function hasSchedulingConflict(slotStart, slotEnd, events, schoolId) {
+  for (const event of events) {
+    const eventStart = new Date(event.start.dateTime || event.start.date)
+    const eventEnd = new Date(event.end.dateTime || event.end.date)
+    const eventSchoolId = event.extendedProperties?.private?.schoolId
+
+    if (slotStart < eventEnd && slotEnd > eventStart) return true
+
+    const driveTimeBefore = getDriveTimeBuffer(eventSchoolId, schoolId)
+    if (driveTimeBefore > 0) {
+      const bufferEnd = new Date(eventEnd.getTime() + driveTimeBefore * 60 * 1000)
+      if (slotStart < bufferEnd) return true
+    }
+
+    const driveTimeAfter = getDriveTimeBuffer(schoolId, eventSchoolId)
+    if (driveTimeAfter > 0) {
+      const bufferStart = new Date(eventStart.getTime() - driveTimeAfter * 60 * 1000)
+      if (slotEnd > bufferStart) return true
+    }
+  }
+  return false
+}
+
+async function hasSchedulingConflictForBooking(slotStart, slotEnd, schoolId) {
+  if (!calendar) return false
+  const timeMin = new Date(slotStart.getTime() - 12 * 60 * 60 * 1000)
+  const timeMax = new Date(slotEnd.getTime() + 12 * 60 * 60 * 1000)
+  const events = await fetchEventsForPeriod(timeMin, timeMax)
+  return hasSchedulingConflict(slotStart, slotEnd, events, schoolId)
+}
+
 // API Routes
 
 // Shared helper: generate available slots for a single day against a set of calendar events
@@ -199,26 +264,7 @@ function getAvailableSlotsForDay(date, availabilityBlocks, sessionDuration, even
       const slotEnd = new Date(slotStart.getTime() + duration * 60 * 1000)
       if (slotEnd > blockEnd) break // Not enough room for a full session
 
-      let isBlocked = false
-      for (const event of events) {
-        const eventStart = new Date(event.start.dateTime || event.start.date)
-        const eventEnd   = new Date(event.end.dateTime   || event.end.date)
-        const eventSchoolId = event.extendedProperties?.private?.schoolId
-
-        if (slotStart < eventEnd && slotEnd > eventStart) { isBlocked = true; break }
-
-        const driveTimeBefore = getDriveTimeBuffer(eventSchoolId, schoolId)
-        if (driveTimeBefore > 0) {
-          const bufferEnd = new Date(eventEnd.getTime() + driveTimeBefore * 60 * 1000)
-          if (slotStart < bufferEnd) { isBlocked = true; break }
-        }
-
-        const driveTimeAfter = getDriveTimeBuffer(schoolId, eventSchoolId)
-        if (driveTimeAfter > 0) {
-          const bufferStart = new Date(eventStart.getTime() - driveTimeAfter * 60 * 1000)
-          if (slotEnd > bufferStart) { isBlocked = true; break }
-        }
-      }
+      const isBlocked = hasSchedulingConflict(slotStart, slotEnd, events, schoolId)
 
       if (!isBlocked) slots.push({ time: slotStart.toISOString(), available: true, blockName: block.name || null })
       slotStart = new Date(slotStart.getTime() + duration * 60 * 1000)
@@ -556,6 +602,12 @@ app.post('/api/bookings', bookingLimiter, async (req, res) => {
       const settings = loadSettings()
       const allMeetingTypes = loadMeetingTypes(settings.googleMeetDuration)
       const meetingTypeObj = allMeetingTypes.find(t => t.id === meetingType)
+
+      const hasConflict = await hasSchedulingConflictForBooking(startDateTime, endDateTime, schoolId)
+      if (hasConflict) {
+        return res.status(409).json({ error: 'This slot is no longer available. Please choose another time.' })
+      }
+
       const eventSummary = meetingType === 'google-meet'
         ? `${name} — Online Tutoring`
         : meetingTypeObj?.requiresSchool
