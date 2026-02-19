@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import DatePicker from 'react-datepicker'
 import 'react-datepicker/dist/react-datepicker.css'
+import './App.css'
 import { format, addDays, isBefore, startOfDay, getDay } from 'date-fns'
 import config from './config'
 
