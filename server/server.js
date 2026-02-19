@@ -240,12 +240,18 @@ app.post('/api/availability', async (req, res) => {
 // Get which days in a month have at least one available slot
 app.post('/api/availability/days', async (req, res) => {
   try {
-    const { year, month, schoolId, sessionDuration } = req.body // month: 0-indexed (JS convention)
+    const { year, month, schoolId, sessionDuration, availabilityBlocks } = req.body // month: 0-indexed (JS convention)
 
-    // Load school availability from storage
-    const schools = loadSchools()
-    const school = schools.find(s => s.id === schoolId)
-    const availability = school?.availability || {}
+    // Resolve availability: client-provided blocks take priority (supports config fallbacks),
+    // otherwise look up the school from storage
+    let availability = {}
+    if (availabilityBlocks && typeof availabilityBlocks === 'object' && !Array.isArray(availabilityBlocks)) {
+      availability = availabilityBlocks
+    } else {
+      const schools = loadSchools()
+      const school = schools.find(s => s.id === schoolId)
+      availability = school?.availability || {}
+    }
 
     const firstDay = new Date(year, month, 1)
     const lastDay  = new Date(year, month + 1, 0)

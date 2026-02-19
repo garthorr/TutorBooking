@@ -57,16 +57,20 @@ function App() {
   const fetchAvailableDays = async (month, year, school, meetingType, isCustom) => {
     let schoolId = ''
     let sessionDuration = 60
+    let availabilityBlocks = null
 
     if (meetingType === 'google-meet') {
       schoolId = ''
       sessionDuration = googleMeetDuration
+      availabilityBlocks = config.googleMeet.availability
     } else if (isCustom) {
       schoolId = 'custom'
       sessionDuration = config.locationOptions.customLocationSessionDuration
+      availabilityBlocks = config.locationOptions.customLocationAvailability
     } else if (school) {
       schoolId = school.id
       sessionDuration = school.sessionDuration
+      availabilityBlocks = school.availability
     } else {
       setAvailableDates(new Set())
       return
@@ -77,7 +81,7 @@ function App() {
       const res = await fetch('/api/availability/days', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ year, month, schoolId, sessionDuration })
+        body: JSON.stringify({ year, month, schoolId, sessionDuration, availabilityBlocks })
       })
       if (res.ok) {
         const data = await res.json()
@@ -218,6 +222,8 @@ function App() {
     })
     setSelectedSchool(null)
     setIsCustomLocation(false)
+    // Google Meet needs no school selection — go straight to date/time
+    if (type === 'google-meet') setStep(s => s + 1)
   }
 
   const handleLocationSelect = (schoolId) => {
@@ -232,6 +238,7 @@ function App() {
         time: null,
         sessionDuration: config.locationOptions.customLocationSessionDuration
       })
+      // Stay on step 1 so the user can type their custom location
     } else {
       const school = schools.find(s => s.id === schoolId)
       setIsCustomLocation(false)
@@ -244,6 +251,8 @@ function App() {
         time: null,
         sessionDuration: school?.sessionDuration || 60
       })
+      // School chosen — go straight to date/time
+      setStep(s => s + 1)
     }
   }
 
@@ -470,15 +479,17 @@ function App() {
               </div>
             )}
 
-            <div className="button-group">
-              <button
-                className="btn btn-primary"
-                onClick={handleNext}
-                disabled={!canProceedFromStep2}
-              >
-                Next
-              </button>
-            </div>
+            {isCustomLocation && (
+              <div className="button-group">
+                <button
+                  className="btn btn-primary"
+                  onClick={handleNext}
+                  disabled={!canProceedFromStep2}
+                >
+                  Next
+                </button>
+              </div>
+            )}
           </div>
         )}
 
