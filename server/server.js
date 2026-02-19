@@ -71,6 +71,12 @@ function initializeGoogleCalendar() {
       process.env.GOOGLE_REDIRECT_URI || 'http://localhost:5000/auth/google/callback'
     )
 
+    // Persist refreshed tokens automatically so the stored expiry stays current
+    oauth2Client.on('tokens', (tokens) => {
+      const current = loadTokens() || {}
+      saveTokens({ ...current, ...tokens })
+    })
+
     // Try to load tokens from file first (web OAuth flow)
     const savedTokens = loadTokens()
     if (savedTokens) {
