@@ -441,7 +441,14 @@ function App() {
                       <div className="school-tile-logo">
                         {school.logoUrl
                           ? <img src={school.logoUrl} alt={school.name} />
-                          : <div className="school-tile-logo-placeholder">{school.name.charAt(0)}</div>
+                          : (
+                            <svg className="school-tile-logo-placeholder" width="48" height="48" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                              <circle cx="24" cy="24" r="24" fill="#e5e7eb"/>
+                              <text x="24" y="32" textAnchor="middle" fontSize="22" fontWeight="700" fill="#6b7280" fontFamily="system-ui, -apple-system, sans-serif">
+                                {school.name.charAt(0).toUpperCase()}
+                              </text>
+                            </svg>
+                          )
                         }
                       </div>
                       <div className="school-tile-name">{school.name}</div>

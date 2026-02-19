@@ -46,23 +46,11 @@
   object-fit: contain;
 }
 
-.school-tile-logo-placeholder {
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  background: #e5e7eb;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.3rem;
-  font-weight: 700;
-  color: #6b7280;
-}
+/* SVG initial-letter placeholder — circle + letter are embedded, no CSS needed for basic rendering */
+.school-tile-logo-placeholder { display: block; }
 
-.school-tile.selected .school-tile-logo-placeholder {
-  background: #c7d2fe;
-  color: #4338ca;
-}
+.school-tile.selected .school-tile-logo-placeholder circle { fill: #c7d2fe; }
+.school-tile.selected .school-tile-logo-placeholder text  { fill: #4338ca; }
 
 .school-tile-name {
   font-size: 0.85rem;
