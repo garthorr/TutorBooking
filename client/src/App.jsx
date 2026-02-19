@@ -520,30 +520,34 @@ function App() {
               </div>
             )}
 
-            <div className="form-group">
-              <label>Choose a Date</label>
-              {loadingDays && (
-                <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
-                  Checking availability…
-                </p>
-              )}
-              <DatePicker
-                selected={bookingData.date}
-                onChange={handleDateSelect}
-                onMonthChange={handleMonthChange}
-                filterDate={(date) => !isDateDisabled(date)}
-                minDate={new Date()}
-                maxDate={addDays(new Date(), config.booking.advanceBookingDays)}
-                inline
-                calendarClassName="booking-calendar"
-              />
-            </div>
+            <div className="date-time-layout">
+              <div className="form-group date-time-calendar">
+                <label>Choose a Date</label>
+                {loadingDays && (
+                  <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
+                    Checking availability…
+                  </p>
+                )}
+                <DatePicker
+                  selected={bookingData.date}
+                  onChange={handleDateSelect}
+                  onMonthChange={handleMonthChange}
+                  filterDate={(date) => !isDateDisabled(date)}
+                  minDate={new Date()}
+                  maxDate={addDays(new Date(), config.booking.advanceBookingDays)}
+                  inline
+                  calendarClassName="booking-calendar"
+                />
+              </div>
 
-            {bookingData.date && (
-              <div className="form-group">
+              <div className="form-group date-time-slots">
                 <label>Available Time Slots</label>
-                {availableSlots.length === 0 ? (
-                  <p style={{ color: 'var(--text-secondary)', padding: '1rem' }}>
+                {!bookingData.date ? (
+                  <p style={{ color: 'var(--text-secondary)' }}>
+                    Select a date to see available times.
+                  </p>
+                ) : availableSlots.length === 0 ? (
+                  <p style={{ color: 'var(--text-secondary)' }}>
                     No available time slots on this date. Please select another date.
                   </p>
                 ) : (
@@ -562,7 +566,7 @@ function App() {
                   </div>
                 )}
               </div>
-            )}
+            </div>
 
             <div className="button-group">
               <button className="btn btn-secondary" onClick={handleBack}>

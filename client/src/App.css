@@ -77,6 +77,37 @@
   margin-top: 0.25rem;
 }
 
+/* ── Date + time slots side-by-side layout ── */
+.date-time-layout {
+  display: flex;
+  gap: 1.5rem;
+  align-items: flex-start;
+}
+
+/* Calendar column: fixed width, never shrinks */
+.date-time-calendar {
+  flex-shrink: 0;
+  margin-bottom: 0;
+}
+
+/* Time slots column: takes all remaining space */
+.date-time-slots {
+  flex: 1;
+  min-width: 0;
+  margin-bottom: 0;
+}
+
+/* Stack vertically on narrow screens */
+@media (max-width: 600px) {
+  .date-time-layout {
+    flex-direction: column;
+  }
+  .date-time-calendar,
+  .date-time-slots {
+    width: 100%;
+  }
+}
+
 /* ── Logo in booking header ── */
 .business-logo {
   display: block;
