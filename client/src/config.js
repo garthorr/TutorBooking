@@ -114,6 +114,21 @@ export const config = {
     }
   ],
 
+  // Phone Call Configuration (15-minute check-in, no drive time or buffer)
+  phoneCall: {
+    enabled: true,
+    sessionDuration: 15,
+    availability: {
+      0: [], // Sunday
+      1: [{ start: '09:00', end: '17:00' }],
+      2: [{ start: '09:00', end: '17:00' }],
+      3: [{ start: '09:00', end: '17:00' }],
+      4: [{ start: '09:00', end: '17:00' }],
+      5: [{ start: '09:00', end: '17:00' }],
+      6: [] // Saturday
+    }
+  },
+
   // Google Meet Configuration
   googleMeet: {
     enabled: true,
@@ -158,6 +173,12 @@ export const config = {
 
   // Meeting Types Available
   meetingTypes: {
+    phoneCall: {
+      enabled: true,
+      label: 'Phone Call',
+      description: 'Quick 15-minute call to discuss your needs.',
+      icon: '📞'
+    },
     googleMeet: {
       enabled: true,
       label: 'Google Meet',

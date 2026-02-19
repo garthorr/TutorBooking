@@ -60,7 +60,11 @@ function App() {
     let sessionDuration = 60
     let availabilityBlocks = null
 
-    if (meetingType === 'google-meet') {
+    if (meetingType === 'phone-call') {
+      schoolId = ''
+      sessionDuration = config.phoneCall.sessionDuration
+      availabilityBlocks = config.phoneCall.availability
+    } else if (meetingType === 'google-meet') {
       schoolId = ''
       sessionDuration = googleMeetDuration
       availabilityBlocks = config.googleMeet.availability
@@ -97,7 +101,7 @@ function App() {
 
   // Refresh available days when location selection changes
   useEffect(() => {
-    if (bookingData.meetingType === 'google-meet' || selectedSchool || isCustomLocation) {
+    if (bookingData.meetingType === 'phone-call' || bookingData.meetingType === 'google-meet' || selectedSchool || isCustomLocation) {
       const now = new Date()
       fetchAvailableDays(now.getMonth(), now.getFullYear(), selectedSchool, bookingData.meetingType, isCustomLocation)
     } else {
@@ -107,7 +111,7 @@ function App() {
 
   // Regenerate time slots when date or location changes
   useEffect(() => {
-    if (bookingData.date && (bookingData.meetingType === 'google-meet' || selectedSchool || isCustomLocation)) {
+    if (bookingData.date && (bookingData.meetingType === 'phone-call' || bookingData.meetingType === 'google-meet' || selectedSchool || isCustomLocation)) {
       generateTimeSlots(bookingData.date)
     }
   }, [bookingData.date, selectedSchool, isCustomLocation, bookingData.meetingType])
@@ -121,10 +125,14 @@ function App() {
     let schoolId = ''
 
     // Determine which availability schedule to use
-    if (bookingData.meetingType === 'google-meet') {
+    if (bookingData.meetingType === 'phone-call') {
+      availability = config.phoneCall.availability[dayOfWeek] || []
+      sessionDuration = config.phoneCall.sessionDuration
+      schoolId = ''
+    } else if (bookingData.meetingType === 'google-meet') {
       availability = config.googleMeet.availability[dayOfWeek] || []
       sessionDuration = googleMeetDuration
-      schoolId = '' // No schoolId for Google Meet
+      schoolId = ''
     } else if (isCustomLocation) {
       availability = config.locationOptions.customLocationAvailability[dayOfWeek] || []
       sessionDuration = config.locationOptions.customLocationSessionDuration
@@ -180,7 +188,9 @@ function App() {
     // Fallback: use local availability blocks while server data loads
     const dayOfWeek = getDay(date)
     let blocks = []
-    if (bookingData.meetingType === 'google-meet') {
+    if (bookingData.meetingType === 'phone-call') {
+      blocks = config.phoneCall.availability[dayOfWeek] || []
+    } else if (bookingData.meetingType === 'google-meet') {
       blocks = config.googleMeet.availability[dayOfWeek] || []
     } else if (isCustomLocation) {
       blocks = config.locationOptions.customLocationAvailability[dayOfWeek] || []
@@ -219,12 +229,14 @@ function App() {
       customLocation: '',
       date: null,
       time: null,
-      sessionDuration: type === 'google-meet' ? googleMeetDuration : null
+      sessionDuration: type === 'phone-call' ? config.phoneCall.sessionDuration
+                     : type === 'google-meet' ? googleMeetDuration
+                     : null
     })
     setSelectedSchool(null)
     setIsCustomLocation(false)
     // Google Meet needs no school selection — go straight to date/time
-    if (type === 'google-meet') setStep(s => s + 1)
+    if (type === 'google-meet' || type === 'phone-call') setStep(s => s + 1)
   }
 
   const handleLocationSelect = (schoolId) => {
@@ -303,12 +315,16 @@ function App() {
 
   const canProceedFromStep1 = bookingData.date && bookingData.time
   const canProceedFromStep2 = bookingData.meetingType &&
-    (bookingData.meetingType === 'google-meet' ||
+    (bookingData.meetingType === 'phone-call' ||
+     bookingData.meetingType === 'google-meet' ||
      (bookingData.schoolId && (bookingData.schoolId !== CUSTOM_LOCATION_VALUE || bookingData.customLocation.trim())))
   const canSubmit = bookingData.name && bookingData.email
 
   // Get the final location for display
   const getFinalLocation = () => {
+    if (bookingData.meetingType === 'phone-call') {
+      return 'Phone Call'
+    }
     if (bookingData.meetingType === 'google-meet') {
       return 'Google Meet (link will be sent)'
     }
@@ -350,7 +366,9 @@ function App() {
               <div className="summary-item">
                 <span className="summary-label">Meeting Type:</span>
                 <span className="summary-value">
-                  {bookingData.meetingType === 'google-meet' ? 'Google Meet' : 'Physical Location'}
+                  {bookingData.meetingType === 'phone-call' ? 'Phone Call'
+                   : bookingData.meetingType === 'google-meet' ? 'Google Meet'
+                   : 'Physical Location'}
                 </span>
               </div>
               {bookingData.meetingType === 'physical' && (
@@ -399,6 +417,22 @@ function App() {
             <h2>Choose Meeting Type</h2>
 
             <div className="meeting-options">
+              {config.meetingTypes.phoneCall.enabled && (
+                <div
+                  className={`meeting-option ${bookingData.meetingType === 'phone-call' ? 'selected' : ''}`}
+                  onClick={() => handleMeetingTypeSelect('phone-call')}
+                >
+                  <div className="meeting-option-icon">{config.meetingTypes.phoneCall.icon}</div>
+                  <div className="meeting-option-content">
+                    <h3>{config.meetingTypes.phoneCall.label}</h3>
+                    <p>{config.meetingTypes.phoneCall.description}</p>
+                    <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginTop: '0.5rem' }}>
+                      Session length: {config.phoneCall.sessionDuration} minutes
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {config.meetingTypes.googleMeet.enabled && (
                 <div
                   className={`meeting-option ${bookingData.meetingType === 'google-meet' ? 'selected' : ''}`}
