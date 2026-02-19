@@ -2,20 +2,30 @@
 /* ── School picker tiles ── */
 .school-tiles {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   gap: 0.75rem;
   margin-top: 0.5rem;
 }
 
+/* Force 2 columns on narrow viewports */
+@media (max-width: 480px) {
+  .school-tiles { grid-template-columns: repeat(2, 1fr); }
+}
+
 .school-tile {
-  border: 2px solid #e5e7eb;
-  border-radius: 10px;
-  padding: 0.75rem 0.5rem 0.6rem;
+  border: 2px solid #d1d5db;
+  border-radius: 12px;
+  padding: 1rem 0.75rem 0.85rem;
   cursor: pointer;
   text-align: center;
   background: white;
   transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
   user-select: none;
+  /* Flex column so all tiles have uniform layout */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 152px;
 }
 
 .school-tile:hover {
@@ -29,9 +39,11 @@
   box-shadow: 0 2px 10px rgba(99, 102, 241, 0.20);
 }
 
-/* Fixed-height logo area — keeps all tiles the same height regardless of image */
+/* Fixed square logo area — uniform across all tiles */
 .school-tile-logo {
+  width: 72px;
   height: 72px;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -39,24 +51,22 @@
 }
 
 .school-tile-logo img {
-  max-width: 100%;
-  max-height: 72px;
-  width: 100%;
+  width: 72px;
   height: 72px;
   object-fit: contain;
 }
 
-/* SVG initial-letter placeholder — circle + letter are embedded, no CSS needed for basic rendering */
+/* SVG initial-letter placeholder — circle + letter embedded, no external CSS needed */
 .school-tile-logo-placeholder { display: block; }
-
 .school-tile.selected .school-tile-logo-placeholder circle { fill: #c7d2fe; }
 .school-tile.selected .school-tile-logo-placeholder text  { fill: #4338ca; }
 
 .school-tile-name {
-  font-size: 0.85rem;
+  font-size: 0.82rem;
   font-weight: 600;
   color: #1f2937;
   line-height: 1.3;
+  flex: 1; /* grows to fill space so duration always sits at the bottom */
 }
 
 .school-tile.selected .school-tile-name { color: #4338ca; }
@@ -64,7 +74,7 @@
 .school-tile-duration {
   font-size: 0.75rem;
   color: #6b7280;
-  margin-top: 0.15rem;
+  margin-top: 0.25rem;
 }
 
 /* ── Logo in booking header ── */
