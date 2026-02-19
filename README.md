@@ -74,8 +74,6 @@ Optional:
 - `GOOGLE_REFRESH_TOKEN` (fallback/manual setup)
 - `PORT` (default `5000`)
 - `DATA_DIR` (defaults to app directory unless overridden)
-- `TRUST_PROXY` (optional; set when running behind reverse proxy/Cloudflare)
-- `CORS_ORIGINS` (optional comma-separated origin allowlist; defaults include localhost/127.0.0.1)
 
 ---
 
