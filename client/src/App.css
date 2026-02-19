@@ -2,12 +2,12 @@
 /* ── School picker tiles ── */
 .school-tiles {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
   gap: 0.75rem;
   margin-top: 0.5rem;
 }
 
-/* Force 2 columns on narrow viewports */
+/* Compact 2-column layout on narrow viewports */
 @media (max-width: 480px) {
   .school-tiles { grid-template-columns: repeat(2, 1fr); }
 }
@@ -21,10 +21,10 @@
   background: white;
   transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
   user-select: none;
-  /* Flex column so all tiles have uniform layout */
+  /* Column layout — DO NOT set align-items: center here; that shrinks
+     children to content-width, causing text to wrap in a narrow column. */
   display: flex;
   flex-direction: column;
-  align-items: center;
   min-height: 152px;
 }
 
@@ -39,7 +39,7 @@
   box-shadow: 0 2px 10px rgba(99, 102, 241, 0.20);
 }
 
-/* Fixed square logo area — uniform across all tiles */
+/* Fixed square logo area — margin:auto centres it without affecting siblings */
 .school-tile-logo {
   width: 72px;
   height: 72px;
@@ -47,7 +47,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 0.5rem;
+  margin: 0 auto 0.5rem;
 }
 
 .school-tile-logo img {
@@ -66,7 +66,7 @@
   font-weight: 600;
   color: #1f2937;
   line-height: 1.3;
-  flex: 1; /* grows to fill space so duration always sits at the bottom */
+  flex: 1; /* grows so the duration line always sits at the bottom */
 }
 
 .school-tile.selected .school-tile-name { color: #4338ca; }
