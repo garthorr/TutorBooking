@@ -1,5 +1,6 @@
 import express from 'express'
 import cors from 'cors'
+import helmet from 'helmet'
 import dotenv from 'dotenv'
 import { google } from 'googleapis'
 import path from 'path'
@@ -125,10 +126,63 @@ app.use(cors({
     return callback(new Error('CORS origin not allowed'))
   }
 }))
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"], // React needs inline scripts
+      styleSrc: ["'self'", "'unsafe-inline'"], // Inline styles
+      imgSrc: ["'self'", 'data:', 'https:'],
+      connectSrc: ["'self'"]
+    }
+  }
+}))
 app.use(express.json())
 
 // Store bookings in memory (replace with database in production)
 const bookings = []
+
+// In-memory cache for file-based data to reduce disk I/O
+const cache = {
+  schools: null,
+  driveTimes: null,
+  settings: null,
+  meetingTypes: null,
+  calendarConfig: null,
+  logo: null
+}
+
+// Cached wrappers for storage functions
+function getCachedSchools() {
+  if (cache.schools === null) cache.schools = loadSchools()
+  return cache.schools
+}
+function getCachedDriveTimes() {
+  if (cache.driveTimes === null) cache.driveTimes = loadDriveTimes()
+  return cache.driveTimes
+}
+function getCachedSettings() {
+  if (cache.settings === null) cache.settings = loadSettings()
+  return cache.settings
+}
+function getCachedMeetingTypes() {
+  const settings = getCachedSettings()
+  if (cache.meetingTypes === null) cache.meetingTypes = loadMeetingTypes(settings.googleMeetDuration)
+  return cache.meetingTypes
+}
+function getCachedCalendarConfig() {
+  if (cache.calendarConfig === null) cache.calendarConfig = loadCalendarConfig()
+  return cache.calendarConfig
+}
+function getCachedLogo() {
+  if (cache.logo === null) cache.logo = loadLogo()
+  return cache.logo
+}
+
+// Invalidate cache when data is written
+function invalidateCache(key) {
+  cache[key] = null
+}
 
 // Google Calendar API setup (to be configured)
 let calendar = null
@@ -205,7 +259,7 @@ function tzDate(baseDate, hours, minutes) {
 
 // Helper function to get drive time buffer — prefers GUI-stored data, falls back to schoolConfig.js
 function getDriveTimeBuffer(fromSchoolId, toSchoolId) {
-  const stored = loadDriveTimes()
+  const stored = getCachedDriveTimes()
   const hasStoredData = Object.keys(stored).length > 0
   return hasStoredData
     ? getDriveTimeFromStorage(fromSchoolId, toSchoolId)
@@ -215,7 +269,7 @@ function getDriveTimeBuffer(fromSchoolId, toSchoolId) {
 // Fetch events from all configured check-calendars in parallel and merge
 async function fetchEventsForPeriod(timeMin, timeMax) {
   if (!calendar) return []
-  const { checkCalendars } = loadCalendarConfig()
+  const { checkCalendars } = getCachedCalendarConfig()
   const ids = checkCalendars.length > 0 ? checkCalendars : ['primary']
   const results = await Promise.all(
     ids.map(calId =>
@@ -390,8 +444,7 @@ function validateBookingPayload(payload) {
     return { ok: false, error: 'sessionDuration must be an integer between 5 and 240 minutes' }
   }
 
-  const settings = loadSettings()
-  const allMeetingTypes = loadMeetingTypes(settings.googleMeetDuration)
+  const allMeetingTypes = getCachedMeetingTypes()
   const meetingTypeObj = allMeetingTypes.find(t => t.id === meetingType)
   if (!meetingTypeObj || !meetingTypeObj.enabled) {
     return { ok: false, error: 'Invalid or disabled meeting type' }
@@ -423,7 +476,7 @@ app.post('/api/availability', availabilityLimiter, async (req, res) => {
     // Resolve availability blocks: use request body (sent by client) or server-stored school
     let blocks = availabilityBlocks
     if (!blocks) {
-      const schools = loadSchools()
+      const schools = getCachedSchools()
       const school = schools.find(s => s.id === schoolId)
       blocks = school?.availability?.[dayOfWeek] || []
     } else {
@@ -474,7 +527,7 @@ app.post('/api/availability/days', availabilityLimiter, async (req, res) => {
       if (!availabilityValidation.ok) return res.status(400).json({ error: availabilityValidation.error })
       availability = availabilityBlocks
     } else {
-      const schools = loadSchools()
+      const schools = getCachedSchools()
       const school = schools.find(s => s.id === schoolId)
       availability = school?.availability || {}
     }
@@ -618,7 +671,7 @@ app.post('/api/bookings', bookingLimiter, async (req, res) => {
     }
 
     // Look up schools for event title
-    const schools = loadSchools()
+    const schools = getCachedSchools()
 
     // If Google Calendar is configured, create calendar event
     if (calendar) {
@@ -626,8 +679,7 @@ app.post('/api/bookings', bookingLimiter, async (req, res) => {
       const durationMs = (sessionDuration || 60) * 60 * 1000 // Convert minutes to milliseconds
       const endDateTime = new Date(startDateTime.getTime() + durationMs)
 
-      const settings = loadSettings()
-      const allMeetingTypes = loadMeetingTypes(settings.googleMeetDuration)
+      const allMeetingTypes = getCachedMeetingTypes()
       const meetingTypeObj = allMeetingTypes.find(t => t.id === meetingType)
 
       const hasConflict = await hasSchedulingConflictForBooking(startDateTime, endDateTime, schoolId)
@@ -691,7 +743,7 @@ ${notes ? `Notes: ${notes}` : ''}
         event.location = location
       }
 
-      const { bookingCalendar } = loadCalendarConfig()
+      const { bookingCalendar } = getCachedCalendarConfig()
       let calendarWarning = null
       try {
         const calendarEvent = await calendar.events.insert({
@@ -776,7 +828,7 @@ function saveSettings(settings) {
 
 // Public config (safe values the frontend needs at runtime)
 app.get('/api/config', (req, res) => {
-  const settings = loadSettings()
+  const settings = getCachedSettings()
   res.json({
     googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY || '',
     googleMeetDuration: settings.googleMeetDuration,
@@ -789,15 +841,13 @@ app.get('/api/config', (req, res) => {
 
 // Meeting types — GET is public (booking page), admin endpoints for management
 app.get('/api/meeting-types', (req, res) => {
-  const settings = loadSettings()
-  const types = loadMeetingTypes(settings.googleMeetDuration)
+  const types = getCachedMeetingTypes()
   const enabled = types.filter(t => t.enabled).sort((a, b) => a.order - b.order)
   res.json(enabled)
 })
 
 app.get('/api/meeting-types/all', adminAuth, (req, res) => {
-  const settings = loadSettings()
-  res.json(loadMeetingTypes(settings.googleMeetDuration))
+  res.json(getCachedMeetingTypes())
 })
 
 app.put('/api/meeting-types', adminAuth, (req, res) => {
@@ -811,13 +861,17 @@ app.put('/api/meeting-types', adminAuth, (req, res) => {
     }
   }
   const ok = saveMeetingTypes(types)
-  if (ok) res.json({ success: true })
-  else res.status(500).json({ error: 'Failed to save meeting types' })
+  if (ok) {
+    invalidateCache('meetingTypes')
+    res.json({ success: true })
+  } else {
+    res.status(500).json({ error: 'Failed to save meeting types' })
+  }
 })
 
 // Logo
 app.get('/api/logo', (req, res) => {
-  const logo = loadLogo()
+  const logo = getCachedLogo()
   if (!logo) return res.status(404).json({ error: 'No logo uploaded' })
   res.json(logo)
 })
@@ -829,6 +883,7 @@ app.put('/api/logo', adminAuth, express.json({ limit: '4mb' }), (req, res) => {
   }
   try {
     writeFileSync(logoFile(), JSON.stringify({ dataUrl }, null, 2))
+    invalidateCache('logo')
     res.json({ success: true })
   } catch (err) {
     res.status(500).json({ error: 'Failed to save logo' })
@@ -838,17 +893,18 @@ app.put('/api/logo', adminAuth, express.json({ limit: '4mb' }), (req, res) => {
 app.delete('/api/logo', adminAuth, (req, res) => {
   try {
     if (existsSync(logoFile())) unlinkSync(logoFile())
+    invalidateCache('logo')
     res.json({ success: true })
   } catch { res.status(500).json({ error: 'Failed to remove logo' }) }
 })
 
 // General settings (Google Meet duration, etc.) — admin only
 app.get('/api/settings', adminAuth, (req, res) => {
-  res.json(loadSettings())
+  res.json(getCachedSettings())
 })
 
 app.put('/api/settings', adminAuth, (req, res) => {
-  const current = loadSettings()
+  const current = getCachedSettings()
   const updated = { ...current }
   if (typeof req.body.googleMeetDuration === 'number' && req.body.googleMeetDuration > 0)
     updated.googleMeetDuration = req.body.googleMeetDuration
@@ -861,8 +917,13 @@ app.put('/api/settings', adminAuth, (req, res) => {
   if (typeof req.body.businessDescription === 'string')
     updated.businessDescription = req.body.businessDescription.trim()
   const ok = saveSettings(updated)
-  if (ok) res.json({ success: true, settings: updated })
-  else res.status(500).json({ error: 'Failed to save settings' })
+  if (ok) {
+    invalidateCache('settings')
+    invalidateCache('meetingTypes') // Settings affect meeting types (googleMeetDuration)
+    res.json({ success: true, settings: updated })
+  } else {
+    res.status(500).json({ error: 'Failed to save settings' })
+  }
 })
 
 // List all Google Calendars accessible to the connected account — admin only
@@ -888,7 +949,7 @@ app.get('/api/calendars', adminAuth, async (req, res) => {
 
 // Calendar selection config — admin only
 app.get('/api/config/calendars', adminAuth, (req, res) => {
-  res.json(loadCalendarConfig())
+  res.json(getCachedCalendarConfig())
 })
 
 app.put('/api/config/calendars', adminAuth, (req, res) => {
@@ -900,13 +961,17 @@ app.put('/api/config/calendars', adminAuth, (req, res) => {
     return res.status(400).json({ error: 'bookingCalendar must be a non-empty string' })
   }
   const ok = saveCalendarConfig({ checkCalendars, bookingCalendar })
-  if (ok) res.json({ success: true })
-  else res.status(500).json({ error: 'Failed to save calendar config' })
+  if (ok) {
+    invalidateCache('calendarConfig')
+    res.json({ success: true })
+  } else {
+    res.status(500).json({ error: 'Failed to save calendar config' })
+  }
 })
 
 // Schools — GET is public (booking page needs the list), PUT is admin only
 app.get('/api/schools', (req, res) => {
-  res.json(loadSchools())
+  res.json(getCachedSchools())
 })
 
 app.put('/api/schools', adminAuth, (req, res) => {
@@ -915,13 +980,17 @@ app.put('/api/schools', adminAuth, (req, res) => {
     return res.status(400).json({ error: 'Expected an array of schools' })
   }
   const ok = saveSchools(schools)
-  if (ok) res.json({ success: true })
-  else res.status(500).json({ error: 'Failed to save schools' })
+  if (ok) {
+    invalidateCache('schools')
+    res.json({ success: true })
+  } else {
+    res.status(500).json({ error: 'Failed to save schools' })
+  }
 })
 
 // Drive times — admin only
 app.get('/api/drivetimes', adminAuth, (req, res) => {
-  res.json(loadDriveTimes())
+  res.json(getCachedDriveTimes())
 })
 
 app.put('/api/drivetimes', adminAuth, (req, res) => {
@@ -930,8 +999,12 @@ app.put('/api/drivetimes', adminAuth, (req, res) => {
     return res.status(400).json({ error: 'Expected an object' })
   }
   const ok = saveDriveTimes(driveTimes)
-  if (ok) res.json({ success: true })
-  else res.status(500).json({ error: 'Failed to save drive times' })
+  if (ok) {
+    invalidateCache('driveTimes')
+    res.json({ success: true })
+  } else {
+    res.status(500).json({ error: 'Failed to save drive times' })
+  }
 })
 
 // Auto-calculate drive times using Google Maps Distance Matrix API — admin only
