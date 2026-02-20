@@ -116,7 +116,12 @@ const ALLOWED_ORIGINS = (process.env.CORS_ORIGINS || '')
   .filter(Boolean)
 
 const corsOrigins = ALLOWED_ORIGINS.length > 0 ? ALLOWED_ORIGINS : DEFAULT_CORS_ORIGINS
-app.set('trust proxy', parseTrustProxy(process.env.TRUST_PROXY))
+
+// Trust proxy for Docker/nginx environment (enable by default for Docker, override with TRUST_PROXY env var)
+const trustProxyValue = process.env.TRUST_PROXY !== undefined
+  ? parseTrustProxy(process.env.TRUST_PROXY)
+  : true  // Default to true for Docker environment
+app.set('trust proxy', trustProxyValue)
 
 // Middleware
 app.use(cors({
@@ -137,7 +142,7 @@ app.use(helmet({
     }
   }
 }))
-app.use(express.json())
+app.use(express.json({ limit: '4mb' }))  // Increased from default 100kb to support logo uploads
 
 // Store bookings in memory (replace with database in production)
 const bookings = []
@@ -876,7 +881,7 @@ app.get('/api/logo', (req, res) => {
   res.json(logo)
 })
 
-app.put('/api/logo', adminAuth, express.json({ limit: '4mb' }), (req, res) => {
+app.put('/api/logo', adminAuth, (req, res) => {
   const { dataUrl } = req.body
   if (!dataUrl || !dataUrl.startsWith('data:image/')) {
     return res.status(400).json({ error: 'dataUrl must be a valid image data URL' })
