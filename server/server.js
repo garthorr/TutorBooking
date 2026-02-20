@@ -5,6 +5,7 @@ import { google } from 'googleapis'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { readFileSync, writeFileSync, existsSync, unlinkSync } from 'fs'
+import { randomBytes } from 'crypto'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import { rateLimit } from 'express-rate-limit'
@@ -21,6 +22,32 @@ const __dirname = path.dirname(__filename)
 
 const app = express()
 const PORT = process.env.PORT || 5000
+
+const OAUTH_STATE_TTL_MS = 10 * 60 * 1000 // 10 minutes
+const oauthStates = new Map()
+
+function createOAuthState() {
+  const state = randomBytes(24).toString('hex')
+  const expiresAt = Date.now() + OAUTH_STATE_TTL_MS
+  oauthStates.set(state, expiresAt)
+
+  if (oauthStates.size > 500) {
+    const now = Date.now()
+    for (const [key, expiry] of oauthStates.entries()) {
+      if (expiry <= now) oauthStates.delete(key)
+    }
+  }
+
+  return state
+}
+
+function consumeOAuthState(state) {
+  if (typeof state !== 'string' || !state) return false
+  const expiresAt = oauthStates.get(state)
+  if (!expiresAt) return false
+  oauthStates.delete(state)
+  return expiresAt > Date.now()
+}
 
 const JWT_SECRET = process.env.JWT_SECRET || (() => {
   console.warn('⚠️  JWT_SECRET not set — using insecure default. Set JWT_SECRET in .env for production!')
@@ -1006,13 +1033,15 @@ app.get('/auth/google', (req, res) => {
   }
 
   const oauth2Client = getOAuthClient()
+  const state = createOAuthState()
   const authUrl = oauth2Client.generateAuthUrl({
     access_type: 'offline',
     scope: [
       'https://www.googleapis.com/auth/calendar',
       'https://www.googleapis.com/auth/calendar.events'
     ],
-    prompt: 'consent' // Force consent screen to ensure we get refresh token
+    prompt: 'consent', // Force consent screen to ensure we get refresh token
+    state
   })
 
   res.redirect(authUrl)
@@ -1020,7 +1049,7 @@ app.get('/auth/google', (req, res) => {
 
 // OAuth callback
 app.get('/auth/google/callback', async (req, res) => {
-  const { code, error } = req.query
+  const { code, error, state } = req.query
 
   if (error) {
     console.error('OAuth error:', error)
@@ -1029,6 +1058,10 @@ app.get('/auth/google/callback', async (req, res) => {
 
   if (!code) {
     return res.redirect('/admin?error=no_code')
+  }
+
+  if (!consumeOAuthState(String(state || ''))) {
+    return res.redirect('/admin?error=invalid_state')
   }
 
   try {
@@ -1054,7 +1087,7 @@ app.get('/auth/google/callback', async (req, res) => {
 })
 
 // Check OAuth status
-app.get('/auth/status', (req, res) => {
+app.get('/auth/status', adminAuth, (req, res) => {
   const tokenInfo = getTokenInfo()
   res.json({
     connected: calendar !== null,
