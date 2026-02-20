@@ -135,10 +135,11 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'"], // React needs inline scripts
-      styleSrc: ["'self'", "'unsafe-inline'"], // Inline styles
-      imgSrc: ["'self'", 'data:', 'https:'],
-      connectSrc: ["'self'"]
+      scriptSrc: ["'self'", "'unsafe-inline'", "https://maps.googleapis.com"], // React + Google Maps
+      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+      fontSrc: ["'self'", "https://fonts.gstatic.com"],
+      imgSrc: ["'self'", 'data:', 'https:', "https://*.googleapis.com", "https://*.gstatic.com"],
+      connectSrc: ["'self'", "https://maps.googleapis.com"]  // Allow Google Maps API calls
     }
   }
 }))
