@@ -86,7 +86,7 @@ function Admin() {
 
   const checkStatus = async () => {
     try {
-      const response = await fetch('/auth/status')
+      const response = await adminFetch('/auth/status')
       const data = await response.json()
       setStatus({ ...data, loading: false })
       if (data.connected) {
