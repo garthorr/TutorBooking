@@ -117,10 +117,11 @@ const ALLOWED_ORIGINS = (process.env.CORS_ORIGINS || '')
 
 const corsOrigins = ALLOWED_ORIGINS.length > 0 ? ALLOWED_ORIGINS : DEFAULT_CORS_ORIGINS
 
-// Trust proxy for Docker/nginx environment (enable by default for Docker, override with TRUST_PROXY env var)
+// Trust proxy for Docker/nginx environment (trust first hop only by default)
+// For Docker: nginx is the only proxy, so trust 1 hop. For Cloudflare: set TRUST_PROXY=2 or true
 const trustProxyValue = process.env.TRUST_PROXY !== undefined
   ? parseTrustProxy(process.env.TRUST_PROXY)
-  : true  // Default to true for Docker environment
+  : 1  // Default: trust only the first proxy (nginx in Docker)
 app.set('trust proxy', trustProxyValue)
 
 // Middleware
