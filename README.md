@@ -9,25 +9,43 @@ Designed for a single tutor/admin workflow:
 
 ## What the app does today
 
-- Meeting types (built-in + custom)
+- **Meeting types** (built-in + custom)
   - Built-ins: **Phone Call**, **Google Meet**, **School Location**
-  - You can create/edit/reorder/enable/disable meeting types in Admin
-- School/location scheduling
+  - Create/edit/reorder/enable/disable meeting types in Admin
+
+- **School/location scheduling**
   - Per-school session length and weekly availability blocks
   - Optional custom location bookings
-- Availability engine
+  - Configurable "Other Location" session duration
+
+- **Availability engine**
   - Pulls events from one or more Google calendars
   - Applies drive-time buffers between school locations
-- Booking flow
+  - Automatic conflict detection with double-booking prevention
+
+- **Booking flow**
   - Student chooses meeting type, location (if needed), date/time, and contact info
-  - Event is created in the selected booking calendar
+  - Event is created in the selected booking calendar with proper timezone
   - Google Meet links generated automatically for online meetings
-- Admin auth + config
-  - bcrypt password login, JWT session, protected admin APIs
-  - Manage business branding, theme color, logo, calendar selection, schools, drive times, meeting types
-- Security improvements in API
-  - Server-side validation for availability and booking payloads
-  - Rate limiting on login, availability checks, and booking creation
+
+- **White-label branding**
+  - Custom business name and description
+  - Theme color picker (4 presets: Indigo, Blue, Teal, Purple + custom hex)
+  - Logo upload support
+
+- **Admin auth + config**
+  - bcrypt password login, JWT session tokens (24hr expiry)
+  - Protected admin APIs with middleware
+  - Manage branding, calendar selection, schools, drive times, meeting types
+
+- **Security & performance**
+  - Server-side validation for all inputs (availability and booking payloads)
+  - Rate limiting on login (10/15min), availability checks (90/min), and bookings (12/15min)
+  - CORS whitelisting for production domains
+  - HTTP security headers via helmet (CSP, X-Frame-Options, etc.)
+  - OAuth CSRF protection with time-limited state tokens
+  - In-memory caching for file-based data to reduce disk I/O
+  - Error message sanitization (no sensitive details leaked to clients)
 
 ---
 
@@ -69,11 +87,13 @@ Set these in `server/.env`:
 - `GOOGLE_REDIRECT_URI` - for example `https://yourdomain.com/auth/google/callback`
 
 Optional:
-- `TIMEZONE` (default `America/Chicago`)
-- `GOOGLE_MAPS_API_KEY` (address autocomplete + drive-time matrix)
+- `TIMEZONE` (default `America/Chicago`) - **Important**: Set this to your local timezone (e.g., `America/New_York`, `Europe/London`) to ensure availability slots display at correct times
+- `GOOGLE_MAPS_API_KEY` (enables address autocomplete in admin + drive-time matrix calculations)
 - `GOOGLE_REFRESH_TOKEN` (fallback/manual setup)
 - `PORT` (default `5000`)
 - `DATA_DIR` (defaults to app directory unless overridden)
+- `TRUST_PROXY` (set to `1` or `true` when behind Cloudflare/reverse proxy)
+- `CORS_ORIGINS` (comma-separated list for production, e.g., `https://booking.yourdomain.com`)
 
 ---
 
@@ -99,6 +119,25 @@ Put the hash into `ADMIN_PASSWORD_HASH` in `server/.env`.
 4. In Admin, choose:
    - calendars to check for availability
    - calendar where new bookings are created
+
+---
+
+## White-label customization
+
+Customize the booking page appearance in `/admin` → **Settings** tab:
+
+1. **Business name** - Replaces default "Book a Tutoring Session" header
+2. **Business description** - Replaces default subtitle text
+3. **Theme color** - Choose from 4 presets or enter custom hex color:
+   - Indigo (default): `#4f46e5`
+   - Blue: `#3b82f6`
+   - Teal: `#14b8a6`
+   - Purple: `#a855f7`
+   - Or use any hex color: `#c026d3`, `#dc2626`, etc.
+4. **Logo** - Upload your logo (appears at top of booking page)
+5. **Custom location duration** - Default session length for "Other Location" bookings
+
+All changes take effect immediately on the booking page (no restart needed).
 
 ---
 
@@ -172,3 +211,87 @@ docker compose down -v
 
 Health endpoint:
 - `GET /api/health`
+
+---
+
+## Troubleshooting
+
+### Availability times are wrong / timezone mismatch
+
+**Problem**: School availability slots show at incorrect times (e.g., 3:00 PM instead of 9:00 AM)
+
+**Solution**: Set `TIMEZONE` in `server/.env` to match your local timezone:
+```bash
+# In server/.env
+TIMEZONE=America/New_York  # or America/Chicago, Europe/London, etc.
+```
+
+After changing, restart the server:
+```bash
+docker compose restart server
+```
+
+### Address field not accepting input / shows as verified
+
+**Problem**: When editing a school, the address field shows a green checkmark but you can't type
+
+**Solution**: This was a bug in v1.0 - upgrade to latest or:
+1. Clear the address field completely
+2. Type your new address
+3. Click "Verify" button (if Google Maps API key is configured)
+
+### Address autocomplete not working
+
+**Problem**: Address field doesn't suggest addresses as you type
+
+**Solution**: Set `GOOGLE_MAPS_API_KEY` in `server/.env`:
+```bash
+# In server/.env
+GOOGLE_MAPS_API_KEY=your_api_key_here
+```
+
+To get a Google Maps API key:
+1. Go to [Google Cloud Console](https://console.cloud.google.com)
+2. Enable "Places API" and "Geocoding API"
+3. Create credentials → API key
+4. Restrict the key to your domain for security
+
+### Google Calendar tokens expire frequently
+
+**Problem**: Admin shows "token expired" even though you just connected
+
+**Solution**: This was fixed in recent updates. The app now automatically refreshes tokens and persists them. If still seeing issues:
+1. Disconnect Google Calendar in admin
+2. Reconnect by clicking "Connect Google Calendar"
+3. Ensure you selected "Allow" for both calendar scopes in Google's consent screen
+
+### CORS errors in production
+
+**Problem**: Browser console shows CORS errors when accessing from your domain
+
+**Solution**: Set `CORS_ORIGINS` in `server/.env`:
+```bash
+# In server/.env
+CORS_ORIGINS=https://booking.yourdomain.com,https://yourdomain.com
+```
+
+### Bookings not creating calendar events
+
+**Problem**: Bookings succeed but no Google Calendar event is created
+
+**Checklist**:
+1. Check `/admin` shows "Google Calendar: Connected"
+2. In admin, verify you've selected a "Booking calendar" under Settings → Calendars
+3. Check server logs: `docker compose logs -f server`
+4. Try the "Test Connection" button in admin
+
+### Rate limit errors
+
+**Problem**: "Too many requests" error when checking availability
+
+**Solution**: The app has rate limits for security:
+- Availability checks: 90 per minute
+- Bookings: 12 per 15 minutes
+- Login attempts: 10 per 15 minutes
+
+If you're hitting these during normal use, they reset automatically. For development/testing, you can temporarily increase limits in `server/server.js`.

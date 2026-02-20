@@ -57,7 +57,7 @@ function TimeBlock({ block, onChange, onRemove }) {
 
 export default function SchoolForm({ initial, onSave, onCancel, mapsApiKey }) {
   const [school, setSchool] = useState(initial ? { ...initial } : emptySchool())
-  const [addressVerified, setAddressVerified] = useState(!!initial?.address)
+  const [addressVerified, setAddressVerified] = useState(false)
   const [verifying, setVerifying] = useState(false)
   const [verifyError, setVerifyError] = useState('')
   const [copyMenuDay, setCopyMenuDay] = useState(null) // which day's copy menu is open
