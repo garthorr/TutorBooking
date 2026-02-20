@@ -70,19 +70,29 @@ export default function SchoolForm({ initial, onSave, onCancel, mapsApiKey }) {
     if (!mapsApiKey || !addressRef.current) return
     if (!window.google?.maps?.places) return
 
-    autocompleteRef.current = new window.google.maps.places.Autocomplete(addressRef.current, {
+    const input = addressRef.current
+    const autocomplete = new window.google.maps.places.Autocomplete(input, {
       types: ['address'],
     })
+    autocompleteRef.current = autocomplete
 
-    autocompleteRef.current.addListener('place_changed', () => {
-      const place = autocompleteRef.current.getPlace()
+    const listener = autocomplete.addListener('place_changed', () => {
+      const place = autocomplete.getPlace()
       if (place.formatted_address) {
         setSchool(s => ({ ...s, address: place.formatted_address }))
         setAddressVerified(true)
         setVerifyError('')
       }
     })
-  }, [mapsApiKey, addressRef.current])
+
+    // Cleanup function to remove event listeners when component unmounts
+    return () => {
+      if (window.google?.maps?.event && listener) {
+        window.google.maps.event.removeListener(listener)
+      }
+      autocompleteRef.current = null
+    }
+  }, [mapsApiKey])  // Only re-run when mapsApiKey changes, not on every render
 
   const handleVerifyAddress = async () => {
     if (!school.address.trim()) {
