@@ -231,30 +231,53 @@ After changing, restart the server:
 docker compose restart server
 ```
 
-### Address field not accepting input / shows as verified
+### Address field not accepting input
 
-**Problem**: When editing a school, the address field shows a green checkmark but you can't type
+**Problem**: Address field in school form is uneditable, blocked, or shows error icon
 
-**Solution**: This was a bug in v1.0 - upgrade to latest or:
-1. Clear the address field completely
-2. Type your new address
-3. Click "Verify" button (if Google Maps API key is configured)
+**Root causes** (fixed in recent versions):
+1. Google Maps autocomplete creating multiple instances on the same input (React useEffect bug)
+2. Content Security Policy blocking Google Maps resources (`maps.gstatic.com`)
+
+**Solution**: Update to the latest version (commit 8319649 or later) which includes:
+- Fixed React useEffect cleanup in SchoolForm component
+- Expanded CSP to allow all Google Maps domains
+
+If still experiencing issues after updating:
+```bash
+git pull origin claude/booking-page-frontend-SRTuz
+docker compose build
+docker compose up -d
+```
 
 ### Address autocomplete not working
 
-**Problem**: Address field doesn't suggest addresses as you type
+**Problem**: Address field doesn't suggest addresses as you type, or autocomplete appears broken
 
-**Solution**: Set `GOOGLE_MAPS_API_KEY` in `server/.env`:
+**Solution**:
+
+1. **Add Google Maps API key** in `server/.env`:
 ```bash
 # In server/.env
 GOOGLE_MAPS_API_KEY=your_api_key_here
 ```
 
-To get a Google Maps API key:
-1. Go to [Google Cloud Console](https://console.cloud.google.com)
-2. Enable "Places API" and "Geocoding API"
-3. Create credentials → API key
-4. Restrict the key to your domain for security
+2. **Enable required Google Cloud APIs**:
+   - Go to [Google Cloud Console](https://console.cloud.google.com)
+   - Enable "Places API" (for autocomplete)
+   - Enable "Geocoding API" (for address verification)
+   - Enable "Distance Matrix API" (for drive time calculations)
+   - Create credentials → API key
+   - Restrict the key to your domain for security
+
+3. **Verify CSP is correctly configured** (should be automatic in latest version):
+   - Check that `server/server.js` includes `maps.gstatic.com` in CSP directives
+   - This is required for Google Maps JavaScript library to load properly
+
+4. **Restart server** after adding API key:
+```bash
+docker compose restart server
+```
 
 ### Google Calendar tokens expire frequently
 
@@ -295,3 +318,73 @@ CORS_ORIGINS=https://booking.yourdomain.com,https://yourdomain.com
 - Login attempts: 10 per 15 minutes
 
 If you're hitting these during normal use, they reset automatically. For development/testing, you can temporarily increase limits in `server/server.js`.
+
+### Data appears lost after git pull / update
+
+**Problem**: After pulling latest code, all schools/settings/config reverted to defaults
+
+**Root cause**: App data files (`.json`, `.tokens.json`) are gitignored for security/privacy. They exist in the Docker volume but the server's in-memory cache needs to reload them.
+
+**Solution**: Your data is safe in the Docker volume! Simply restart the server:
+```bash
+docker compose restart server
+```
+
+To verify your data is still there:
+```bash
+# List files in the data volume
+docker compose exec server ls -la /app/data/
+```
+
+**Prevention**: Data files are never committed to git (by design). Always use Docker volumes for persistence in production.
+
+### Logo uploads fail with "Payload too large"
+
+**Problem**: Logo upload returns 413 error or "request entity too large"
+
+**Solution**: This was fixed in recent versions (increased limit to 4MB). Update to latest:
+```bash
+git pull origin claude/booking-page-frontend-SRTuz
+docker compose build server
+docker compose up -d
+```
+
+For custom deployments, ensure your nginx/reverse proxy also allows 4MB+ uploads.
+
+### Changes not appearing after update
+
+**Problem**: Pulled latest code but UI/functionality hasn't changed
+
+**Solution**:
+
+1. **Rebuild Docker containers** (required for code changes):
+```bash
+git pull origin claude/booking-page-frontend-SRTuz
+docker compose build
+docker compose up -d
+```
+
+2. **Clear browser cache** (for client-side changes):
+   - Hard refresh: `Ctrl+Shift+R` (Windows/Linux) or `Cmd+Shift+R` (Mac)
+   - Or clear site data in browser DevTools → Application → Clear storage
+
+3. **Check logs for errors**:
+```bash
+docker compose logs -f server
+docker compose logs -f client
+```
+
+### Server won't start - missing dependencies
+
+**Problem**: Server container fails with "Cannot find package" error (e.g., helmet)
+
+**Solution**: Ensure `package-lock.json` is in sync:
+```bash
+cd server
+npm install
+cd ..
+docker compose build server
+docker compose up -d
+```
+
+This was an issue in earlier versions where `package.json` was updated but `package-lock.json` wasn't regenerated.
