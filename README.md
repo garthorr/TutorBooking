@@ -61,6 +61,8 @@ The client proxies `/api` and `/auth` to the server through nginx.
 
 ## Quick start (Docker)
 
+**Local testing** - works out of the box with Caddy on localhost:
+
 ```bash
 git clone <your-repo-url>
 cd TutorBooking
@@ -72,6 +74,8 @@ docker compose up -d --build
 Open:
 - Booking page: `http://localhost/`
 - Admin page: `http://localhost/admin`
+
+The Caddyfile is pre-configured for localhost. No changes needed for local development!
 
 ---
 
@@ -91,12 +95,18 @@ For production deployment with automatic HTTPS via Let's Encrypt:
 
 ### Setup steps
 
-1. **Update Caddyfile with your domain**:
+1. **Update Caddyfile for production**:
 ```bash
-# Edit Caddyfile and replace YOUR_DOMAIN_HERE
+# Edit Caddyfile
 nano Caddyfile
-# Change: YOUR_DOMAIN_HERE
-# To:     booking.yourdomain.com
+
+# Comment out the localhost block:
+# localhost, http://localhost {
+#   ...
+# }
+
+# Uncomment and configure the production block:
+# Replace YOUR_DOMAIN_HERE with: booking.yourdomain.com
 ```
 
 2. **Configure environment variables in `server/.env`**:
@@ -145,23 +155,16 @@ Let's Encrypt certificates are stored in Docker volumes:
 
 These volumes persist across container restarts. **Do not delete them** or Caddy will need to re-obtain certificates (rate limits apply).
 
-### Localhost testing without Caddy
+### Switching between localhost and production
 
-For local development without HTTPS, you can still use the client directly:
+**Localhost is active by default** in the Caddyfile. To switch to production:
 
-```bash
-# Temporarily stop Caddy
-docker compose stop caddy
+1. Edit `Caddyfile`
+2. Comment out the localhost block
+3. Uncomment the production block and set your domain
+4. Restart: `docker compose restart caddy`
 
-# Access via client container (port 80)
-# Uncomment ports in docker-compose.yml client service:
-#   ports:
-#     - "80:80"
-
-docker compose up -d client
-```
-
-Then access `http://localhost` as usual.
+To switch back to localhost, reverse the process.
 
 ---
 
