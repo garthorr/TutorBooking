@@ -11,6 +11,7 @@ services:
     environment:
       - NODE_ENV=production
       - DATA_DIR=/app/data
+      - TRUST_PROXY=1
     env_file:
       - ./server/.env
     volumes:
@@ -31,8 +32,8 @@ services:
       dockerfile: Dockerfile
     container_name: tutor-booking-client
     restart: unless-stopped
-    ports:
-      - "80:80"
+    expose:
+      - "80"
     depends_on:
       - server
     networks:
@@ -44,9 +45,36 @@ services:
       retries: 3
       start_period: 10s
 
+  # Reverse Proxy (Caddy) for production HTTPS
+  caddy:
+    image: caddy:2-alpine
+    container_name: tutor-booking-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"  # HTTP/3 support
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - client
+      - server
+    networks:
+      - booking-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:2019/metrics"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
 networks:
   booking-network:
     driver: bridge
 
 volumes:
   token-data:
+  caddy-data:
+  caddy-config:

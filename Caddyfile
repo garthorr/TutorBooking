@@ -1,0 +1,65 @@
+# Caddy reverse proxy configuration for TutorBooking
+# Replace YOUR_DOMAIN_HERE with your actual domain (e.g., booking.yourdomain.com)
+# Caddy will automatically obtain and renew Let's Encrypt TLS certificates
+
+YOUR_DOMAIN_HERE {
+    # Enable compression
+    encode gzip zstd
+
+    # Security headers (additional layer on top of helmet in server)
+    header {
+        # Enable HSTS
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        # Prevent clickjacking
+        X-Frame-Options "SAMEORIGIN"
+        # Prevent MIME type sniffing
+        X-Content-Type-Options "nosniff"
+        # Remove Server header
+        -Server
+    }
+
+    # Proxy API requests directly to Express server
+    handle /api/* {
+        reverse_proxy server:5000 {
+            # Preserve original host and IP
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    # Proxy auth requests directly to Express server
+    handle /auth/* {
+        reverse_proxy server:5000 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    # Everything else (React app, static assets) goes to nginx
+    handle {
+        reverse_proxy client:80 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    # Access logs (optional, comment out if not needed)
+    log {
+        output file /data/access.log {
+            roll_size 10mb
+            roll_keep 5
+        }
+    }
+}
+
+# Optional: HTTP to HTTPS redirect for localhost testing
+# Uncomment if you want to test with localhost
+# localhost {
+#     redir https://localhost{uri}
+# }

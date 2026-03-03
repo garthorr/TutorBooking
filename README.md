@@ -75,6 +75,96 @@ Open:
 
 ---
 
+## Production deployment with Caddy
+
+For production deployment with automatic HTTPS via Let's Encrypt:
+
+### Prerequisites
+
+1. **Domain name** pointing to your server's IP address
+   - Create an A record: `booking.yourdomain.com` → `your.server.ip`
+   - Wait for DNS propagation (can take up to 48 hours, usually much faster)
+
+2. **Firewall configuration**
+   - Ensure ports 80 (HTTP) and 443 (HTTPS) are open
+   - Port 80 is required for Let's Encrypt challenge validation
+
+### Setup steps
+
+1. **Update Caddyfile with your domain**:
+```bash
+# Edit Caddyfile and replace YOUR_DOMAIN_HERE
+nano Caddyfile
+# Change: YOUR_DOMAIN_HERE
+# To:     booking.yourdomain.com
+```
+
+2. **Configure environment variables in `server/.env`**:
+```bash
+# Google OAuth redirect URI (must match Google Cloud Console)
+GOOGLE_REDIRECT_URI=https://booking.yourdomain.com/auth/google/callback
+
+# CORS origins (your production domain)
+CORS_ORIGINS=https://booking.yourdomain.com
+
+# Timezone (set to your location)
+TIMEZONE=America/New_York
+
+# Trust proxy is automatically set to 1 in docker-compose.yml
+```
+
+3. **Update Google Cloud Console**:
+   - Go to [Google Cloud Console](https://console.cloud.google.com) → APIs & Services → Credentials
+   - Edit your OAuth 2.0 Client ID
+   - Add authorized redirect URI: `https://booking.yourdomain.com/auth/google/callback`
+   - Save changes
+
+4. **Deploy**:
+```bash
+docker compose up -d --build
+```
+
+5. **Verify HTTPS is working**:
+   - Visit `https://booking.yourdomain.com` (should show valid certificate)
+   - Check admin: `https://booking.yourdomain.com/admin`
+   - Caddy will automatically obtain Let's Encrypt certificates on first request
+
+### What Caddy does
+
+- **Automatic HTTPS**: Obtains and renews Let's Encrypt TLS certificates
+- **HTTP/3 support**: Modern protocol for faster connections
+- **Reverse proxy**: Routes requests to client (nginx) and server (Express)
+- **Security headers**: HSTS, X-Frame-Options, etc.
+- **Compression**: gzip and zstd for smaller payloads
+
+### Certificate storage
+
+Let's Encrypt certificates are stored in Docker volumes:
+- `caddy-data`: Certificate files and ACME account info
+- `caddy-config`: Caddy configuration cache
+
+These volumes persist across container restarts. **Do not delete them** or Caddy will need to re-obtain certificates (rate limits apply).
+
+### Localhost testing without Caddy
+
+For local development without HTTPS, you can still use the client directly:
+
+```bash
+# Temporarily stop Caddy
+docker compose stop caddy
+
+# Access via client container (port 80)
+# Uncomment ports in docker-compose.yml client service:
+#   ports:
+#     - "80:80"
+
+docker compose up -d client
+```
+
+Then access `http://localhost` as usual.
+
+---
+
 ## Required environment variables
 
 Set these in `server/.env`:
@@ -143,23 +233,42 @@ All changes take effect immediately on the booking page (no restart needed).
 
 ## Cloudflare Zero Trust / Tunnel notes
 
+**Alternative to Caddy**: If you prefer Cloudflare Tunnel over direct HTTPS exposure:
+
 - Put this app behind Cloudflare Tunnel / Zero Trust as your public entry.
 - Restrict `/admin` access with Zero Trust policy (you only).
 - Keep booking page public if students need direct access.
-- Ensure `GOOGLE_REDIRECT_URI` uses your public HTTPS domain.
+- When using Cloudflare Tunnel, you can **disable Caddy** in `docker-compose.yml`:
+  ```bash
+  docker compose stop caddy
+  # Or comment out the caddy service entirely
+  ```
+- Point Cloudflare Tunnel to `client:80` (internal port, no public exposure needed)
+- Ensure `GOOGLE_REDIRECT_URI` uses your public HTTPS domain (the Cloudflare one)
+- Set `CORS_ORIGINS` to your Cloudflare domain
+- `TRUST_PROXY=1` is still required when behind Cloudflare
+
+**Summary**: Use **Caddy** for simple VPS/dedicated server setups. Use **Cloudflare Tunnel** if you want Zero Trust access policies or don't want to open ports 80/443 on your firewall.
 
 ---
 
 ## Data storage
 
-With Docker Compose, persistent app data is stored in the `token-data` volume (`/app/data` inside server container), including:
+Docker Compose volumes for persistent data:
 
+**Application data** (`token-data` volume → `/app/data` inside server container):
 - encrypted OAuth tokens
 - schools
 - drive times
 - calendar config
 - meeting types
 - settings/logo
+
+**Caddy data** (production HTTPS only):
+- `caddy-data`: Let's Encrypt certificates and ACME account
+- `caddy-config`: Caddy configuration cache
+
+**Important**: Never delete `caddy-data` volume in production or you'll hit Let's Encrypt rate limits when re-obtaining certificates.
 
 ---
 
