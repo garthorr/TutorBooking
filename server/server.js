@@ -127,10 +127,21 @@ app.set('trust proxy', trustProxyValue)
 // Middleware
 app.use(cors({
   origin(origin, callback) {
+    // Allow requests with no origin (e.g., mobile apps, curl, server-to-server)
     if (!origin) return callback(null, true)
+
+    // Check if origin is in allowed list
     if (corsOrigins.includes(origin)) return callback(null, true)
+
+    // For localhost/development, be more permissive with origin matching
+    if (origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1')) {
+      return callback(null, true)
+    }
+
+    console.error(`CORS blocked origin: ${origin}. Allowed origins:`, corsOrigins)
     return callback(new Error('CORS origin not allowed'))
-  }
+  },
+  credentials: true
 }))
 app.use(helmet({
   contentSecurityPolicy: {
