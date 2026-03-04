@@ -15,6 +15,7 @@ import { saveTokens, loadTokens, deleteTokens, hasTokens, getTokenInfo } from '.
 import { loadSchools, saveSchools, loadDriveTimes, saveDriveTimes, getDriveTimeFromStorage } from './schoolsStorage.js'
 import { loadCalendarConfig, saveCalendarConfig } from './calendarStorage.js'
 import { loadMeetingTypes, saveMeetingTypes } from './meetingTypesStorage.js'
+import passwordStore from './passwordStore.js'
 
 dotenv.config()
 
@@ -1094,17 +1095,33 @@ app.post('/api/drivetimes/calculate', adminAuth, async (req, res) => {
 
 app.post('/auth/admin/login', loginLimiter, async (req, res) => {
   const { password } = req.body
-  const hash = process.env.ADMIN_PASSWORD_HASH
+  const hash = passwordStore.getPasswordHash()
   if (!hash) {
     return res.status(503).json({ error: 'Admin auth not configured. Set ADMIN_PASSWORD_HASH in server/.env' })
   }
   try {
-    const match = await bcrypt.compare(password || '', hash)
+    const match = await passwordStore.verifyPassword(password || '')
     if (!match) return res.status(401).json({ error: 'Invalid password' })
     const token = jwt.sign({ admin: true }, JWT_SECRET, { expiresIn: '24h' })
     res.json({ token })
   } catch {
     res.status(500).json({ error: 'Login error' })
+  }
+})
+
+// Change admin password
+app.post('/api/admin/change-password', adminAuth, async (req, res) => {
+  const { currentPassword, newPassword } = req.body
+
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ error: 'Current password and new password are required' })
+  }
+
+  try {
+    await passwordStore.changePassword(currentPassword, newPassword)
+    res.json({ success: true, message: 'Password changed successfully' })
+  } catch (error) {
+    res.status(400).json({ error: error.message })
   }
 })
 

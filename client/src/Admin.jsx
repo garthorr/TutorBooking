@@ -36,6 +36,9 @@ function Admin() {
   })
   const [settingsSaving, setSettingsSaving] = useState(false)
   const [customColorInput, setCustomColorInput] = useState('')
+  // Change password
+  const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' })
+  const [passwordChanging, setPasswordChanging] = useState(false)
 
   useEffect(() => {
     checkStatus()
@@ -250,6 +253,43 @@ function Admin() {
     } catch {
       showMessage('Error disconnecting', 'error')
     }
+  }
+
+  const handlePasswordChange = async (e) => {
+    e.preventDefault()
+
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      showMessage('New passwords do not match', 'error')
+      return
+    }
+
+    if (passwordForm.newPassword.length < 8) {
+      showMessage('New password must be at least 8 characters', 'error')
+      return
+    }
+
+    setPasswordChanging(true)
+    try {
+      const res = await adminFetch('/api/admin/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          currentPassword: passwordForm.currentPassword,
+          newPassword: passwordForm.newPassword
+        })
+      })
+      const data = await res.json()
+
+      if (data.success) {
+        showMessage('Password changed successfully!', 'success')
+        setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' })
+      } else {
+        showMessage(data.error || 'Failed to change password', 'error')
+      }
+    } catch {
+      showMessage('Error changing password', 'error')
+    }
+    setPasswordChanging(false)
   }
 
   if (status.loading) {
@@ -609,6 +649,53 @@ function Admin() {
             <button className="btn btn-primary" onClick={handleSettingsSave} disabled={settingsSaving}>
               {settingsSaving ? 'Saving…' : 'Save Settings'}
             </button>
+
+            {/* Change Password */}
+            <div className="settings-section" style={{ marginTop: '2rem', borderTop: '1px solid #e5e7eb', paddingTop: '2rem' }}>
+              <h2>Change Admin Password</h2>
+              <p className="field-hint">Update your admin password. Requires at least 8 characters.</p>
+
+              <form onSubmit={handlePasswordChange}>
+                <div className="settings-field">
+                  <label>Current Password</label>
+                  <input
+                    type="password"
+                    value={passwordForm.currentPassword}
+                    onChange={e => setPasswordForm(f => ({ ...f, currentPassword: e.target.value }))}
+                    required
+                    autoComplete="current-password"
+                  />
+                </div>
+
+                <div className="settings-field">
+                  <label>New Password</label>
+                  <input
+                    type="password"
+                    value={passwordForm.newPassword}
+                    onChange={e => setPasswordForm(f => ({ ...f, newPassword: e.target.value }))}
+                    required
+                    minLength={8}
+                    autoComplete="new-password"
+                  />
+                </div>
+
+                <div className="settings-field">
+                  <label>Confirm New Password</label>
+                  <input
+                    type="password"
+                    value={passwordForm.confirmPassword}
+                    onChange={e => setPasswordForm(f => ({ ...f, confirmPassword: e.target.value }))}
+                    required
+                    minLength={8}
+                    autoComplete="new-password"
+                  />
+                </div>
+
+                <button className="btn btn-primary" type="submit" disabled={passwordChanging}>
+                  {passwordChanging ? 'Changing…' : 'Change Password'}
+                </button>
+              </form>
+            </div>
 
           </div>
         )}
