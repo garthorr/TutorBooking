@@ -49,6 +49,65 @@ Designed for a single tutor/admin workflow:
 
 ---
 
+## Security
+
+This application implements multiple layers of security:
+
+### Authentication & Access Control
+- **Password hashing**: bcrypt with 10 rounds
+- **Session management**: JWT tokens with 24-hour expiry
+- **Admin password changes**: Available in admin panel at `/admin` → Change Password
+- **Rate limiting**:
+  - Login: 10 attempts per 15 minutes
+  - Availability checks: 90 requests per minute
+  - Bookings: 12 attempts per 15 minutes
+
+### Input Validation & Sanitization
+- All API endpoints validate input types, formats, and lengths
+- Email validation with regex
+- String length limits prevent buffer overflow attacks
+- Meeting type validation ensures only enabled types are bookable
+- React auto-escapes all output (XSS protection)
+
+### Network Security
+- **CORS**: Whitelist-based origin validation (configure `CORS_ORIGINS` in production)
+- **CSP headers**: Helmet-enforced Content Security Policy
+- **HTTPS**: Automatic TLS via Caddy/Let's Encrypt in production
+- **Reverse proxy**: Caddy handles TLS termination and security headers
+- **Trust proxy**: Configured for proper IP handling behind proxies
+
+### Data Protection
+- **OAuth tokens**: Encrypted at rest using `ENCRYPTION_KEY`
+- **Secrets**: All sensitive data stored in environment variables (never committed)
+- **Admin passwords**: Persisted as bcrypt hashes in secure volume
+- **.gitignore**: Prevents accidental commit of `.env`, tokens, and runtime data
+
+### OAuth Security
+- **CSRF protection**: Time-limited state tokens (10-minute TTL)
+- **State validation**: Single-use tokens prevent replay attacks
+- **Automatic cleanup**: Expired OAuth states purged when map exceeds 500 entries
+
+### Production Checklist
+Before going public, ensure:
+1. ✅ Strong admin password set (minimum 8 characters)
+2. ✅ `JWT_SECRET` is random and strong (use 32+ character random string)
+3. ✅ `ENCRYPTION_KEY` is random and strong (use 32+ character random string)
+4. ✅ `CORS_ORIGINS` set to your production domain only
+5. ✅ `TRUST_PROXY=1` when behind Caddy/Cloudflare
+6. ✅ Firewall allows only ports 80/443 (block direct access to 5000)
+7. ✅ Google OAuth redirect URI matches your production domain
+8. ✅ Regular updates: `docker compose pull && docker compose up -d --build`
+
+### Known Issues (Low Risk)
+- **Dev dependencies**: esbuild has a moderate vulnerability affecting dev servers only
+  - Impact: None in production (only affects `npm run dev`)
+  - Mitigation: Production builds are unaffected; dev server should not be exposed publicly
+
+### Security Contact
+For security issues, please create a private security advisory on GitHub.
+
+---
+
 ## Architecture
 
 - `client/`: React (Vite), served by nginx
@@ -192,6 +251,8 @@ Optional:
 
 ## Admin password setup
 
+### Initial Setup
+
 Generate a bcrypt hash:
 
 ```bash
@@ -201,6 +262,17 @@ node -e "require('bcryptjs').hash('your-password-here', 12).then(console.log)"
 Put the hash into `ADMIN_PASSWORD_HASH` in `server/.env`.
 
 > If you use Docker Compose `env_file`, escape `$` as `$$` in bcrypt hashes.
+
+### Changing Your Password
+
+After initial setup, you can change your admin password from the web interface:
+
+1. Log in to `/admin`
+2. Click the **"Change Password"** button (top-right menu)
+3. Enter your current password and new password
+4. New password is immediately active and persists across container restarts
+
+The password is stored in the Docker volume (`/app/data/admin-password.json`) and takes precedence over the `ADMIN_PASSWORD_HASH` environment variable.
 
 ---
 
