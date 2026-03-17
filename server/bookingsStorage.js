@@ -1,8 +1,13 @@
-import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import path from 'path';
 
 const DATA_DIR = process.env.DATA_DIR || './data';
 const BOOKINGS_FILE = path.join(DATA_DIR, 'bookings.json');
+
+// Ensure data directory exists
+if (!existsSync(DATA_DIR)) {
+  mkdirSync(DATA_DIR, { recursive: true });
+}
 
 // Maximum bookings to keep in memory (older ones are archived)
 const MAX_BOOKINGS_IN_MEMORY = 100;
@@ -57,16 +62,17 @@ export function saveBookings(bookings) {
  * Returns the updated bookings array
  */
 export function addBooking(bookings, newBooking) {
-  bookings.push(newBooking);
+  // Create new array to avoid mutating original during trimming
+  let updatedBookings = [...bookings, newBooking];
 
   // Trim to MAX_BOOKINGS_IN_MEMORY before saving
-  if (bookings.length > MAX_BOOKINGS_IN_MEMORY) {
-    console.log(`⚠️  Trimming bookings array: ${bookings.length} -> ${MAX_BOOKINGS_IN_MEMORY}`);
-    bookings = bookings.slice(-MAX_BOOKINGS_IN_MEMORY);
+  if (updatedBookings.length > MAX_BOOKINGS_IN_MEMORY) {
+    console.log(`⚠️  Trimming bookings array: ${updatedBookings.length} -> ${MAX_BOOKINGS_IN_MEMORY}`);
+    updatedBookings = updatedBookings.slice(-MAX_BOOKINGS_IN_MEMORY);
   }
 
-  saveBookings(bookings);
-  return bookings;
+  saveBookings(updatedBookings);
+  return updatedBookings;
 }
 
 /**
