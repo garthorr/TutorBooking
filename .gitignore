@@ -48,9 +48,13 @@ calendar-config.json
 meeting-types.json
 settings.json
 logo.json
+bookings.json
+admin-password.json
 server/schools.json
 server/drivetimes.json
 server/calendar-config.json
 server/meeting-types.json
 server/settings.json
 server/logo.json
+server/bookings.json
+server/admin-password.json

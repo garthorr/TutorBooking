@@ -15,6 +15,7 @@ import { saveTokens, loadTokens, deleteTokens, hasTokens, getTokenInfo } from '.
 import { loadSchools, saveSchools, loadDriveTimes, saveDriveTimes, getDriveTimeFromStorage } from './schoolsStorage.js'
 import { loadCalendarConfig, saveCalendarConfig } from './calendarStorage.js'
 import { loadMeetingTypes, saveMeetingTypes } from './meetingTypesStorage.js'
+import { loadBookings, addBooking as addBookingToDisk } from './bookingsStorage.js'
 import passwordStore from './passwordStore.js'
 
 dotenv.config()
@@ -158,8 +159,8 @@ app.use(helmet({
 }))
 app.use(express.json({ limit: '4mb' }))  // Increased from default 100kb to support logo uploads
 
-// Store bookings in memory (replace with database in production)
-const bookings = []
+// Store bookings in persistent storage (limited to prevent memory leaks on low-RAM instances)
+let bookings = loadBookings()
 
 // In-memory cache for file-based data to reduce disk I/O
 const cache = {
@@ -789,7 +790,7 @@ ${notes ? `Notes: ${notes}` : ''}
       }
     }
 
-    bookings.push(booking)
+    bookings = addBookingToDisk(bookings, booking)
 
     console.log(`✓ New booking created: ${name} - ${new Date(time).toLocaleString()} (${sessionDuration || 60} min)${schoolId ? ` at school: ${schoolId}` : ''}`)
 

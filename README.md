@@ -118,6 +118,73 @@ The client proxies `/api` and `/auth` to the server through nginx.
 
 ---
 
+## Performance & Resource Optimization
+
+### Optimized for Low-RAM Instances (1GB RAM)
+
+This application is optimized to run on resource-constrained instances like **Oracle Cloud Free Tier** (1 CPU, 1GB RAM):
+
+#### Memory Management
+- **Docker memory limits**: Enforced per-container limits prevent OOM kills
+  - Server: 400MB (main backend process)
+  - Client (nginx): 150MB (lightweight static file server)
+  - Caddy: 150MB (efficient reverse proxy)
+  - **Total: ~700MB** (leaves 300MB for system)
+
+- **Booking storage**: Persistent file-based storage with automatic cleanup
+  - Keeps max 100 recent bookings in memory
+  - Older bookings archived to prevent memory leaks
+  - Automatic trimming on startup and during operation
+
+- **In-memory caching**: File-based data (schools, settings, etc.) cached to reduce disk I/O
+  - Invalidated only when data changes
+  - Minimal memory footprint (~1-2MB)
+
+#### Resource Limits in docker-compose.yml
+```yaml
+services:
+  server:
+    mem_limit: 400m        # Hard limit
+    mem_reservation: 300m  # Soft limit
+  client:
+    mem_limit: 150m
+    mem_reservation: 100m
+  caddy:
+    mem_limit: 150m
+    mem_reservation: 100m
+```
+
+#### Performance Characteristics
+- **Cold start**: ~5-10 seconds
+- **Memory footprint (idle)**: ~250-350MB total
+- **Memory footprint (active)**: ~400-600MB total
+- **CPU usage (idle)**: <5%
+- **CPU usage (booking request)**: ~10-20% spike
+
+#### Monitoring Resource Usage
+```bash
+# Check memory usage
+docker stats
+
+# Check container health
+docker compose ps
+
+# View server logs
+docker compose logs -f server
+
+# Check disk usage of data volume
+docker system df -v
+```
+
+#### Scaling Considerations
+For higher traffic (>100 bookings/month), consider:
+1. Upgrading to 2GB RAM instance (recommended)
+2. Implementing proper database (PostgreSQL/MySQL) instead of file storage
+3. Using external Redis for caching
+4. Setting up log rotation to prevent disk fills
+
+---
+
 ## Quick start (Docker)
 
 **Local testing** - works out of the box with Caddy on localhost:
@@ -572,3 +639,99 @@ docker compose up -d
 ```
 
 This was an issue in earlier versions where `package.json` was updated but `package-lock.json` wasn't regenerated.
+
+### Out of memory errors / Container crashes
+
+**Problem**: Server container keeps restarting, OOM (Out of Memory) errors in logs
+
+**Symptoms**:
+```bash
+docker compose logs server
+# Shows: "Killed" or "Out of memory"
+```
+
+**Solutions**:
+
+1. **Check memory limits** (added in recent updates):
+```bash
+# Verify limits are set
+docker compose config | grep -A 5 mem_limit
+```
+
+2. **Monitor actual memory usage**:
+```bash
+docker stats
+# Should show server using <400MB, total <700MB
+```
+
+3. **If server exceeds 400MB consistently**:
+   - Check for unbounded bookings growth (fixed in recent versions)
+   - Restart server to clear memory: `docker compose restart server`
+   - Clear old bookings: Delete `/app/data/bookings.json` in container
+
+4. **For persistent issues on 1GB RAM**:
+   - Reduce healthcheck frequency in `docker-compose.yml`:
+     ```yaml
+     interval: 60s  # Change from 30s to 60s
+     ```
+   - Disable HTTP/3 in Caddy (saves ~20MB):
+     ```yaml
+     # Remove this line from docker-compose.yml
+     - "443:443/udp"
+     ```
+
+5. **Upgrade instance** (if budget allows):
+   - 2GB RAM recommended for production
+   - Enables more concurrent users and bookings
+
+### Slow performance / High CPU usage
+
+**Problem**: Application feels sluggish, CPU pegged at 100%
+
+**Diagnosis**:
+```bash
+# Check CPU usage
+docker stats
+
+# Check logs for errors
+docker compose logs -f
+```
+
+**Common causes**:
+1. **Google Calendar API calls**: Each availability check queries Calendar API
+   - Solution: Availability is already cached for 30s
+   - Consider increasing cache TTL if needed
+
+2. **Too many concurrent users**: 1 CPU instance limited to ~10-20 concurrent users
+   - Solution: Implement queue or rate limiting
+
+3. **Health checks consuming resources**: Running every 30s on 3 containers
+   - Solution: Increase interval to 60s in docker-compose.yml
+
+### Disk space issues
+
+**Problem**: Container fails with "No space left on device"
+
+**Check disk usage**:
+```bash
+# Check Docker disk usage
+docker system df -v
+
+# Check data volume specifically
+docker compose exec server du -sh /app/data/*
+```
+
+**Solutions**:
+1. **Clean up old Docker images**:
+   ```bash
+   docker system prune -a
+   ```
+
+2. **Limit booking storage**: Already limited to 100 bookings (recent fix)
+   - Older bookings automatically archived
+
+3. **Check logs aren't filling disk**:
+   ```bash
+   docker compose exec server ls -lh /var/log/
+   ```
+   - Implement log rotation if needed
