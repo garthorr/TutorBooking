@@ -12,25 +12,18 @@ if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true });
 const TOKEN_FILE = join(DATA_DIR, '.tokens.json');
 const ALGORITHM = 'aes-256-gcm';
 
-// Get encryption key from environment or generate one
-function getEncryptionKey() {
-  const keyFromEnv = process.env.ENCRYPTION_KEY;
-
-  if (keyFromEnv) {
-    // Derive key from environment variable
-    return scryptSync(keyFromEnv, 'salt', 32);
-  }
-
-  // For development, use a default key (NOT SECURE FOR PRODUCTION)
+// Derive key once at startup — scryptSync is intentionally expensive; calling it
+// per-request would block the event loop on every token read/write.
+const ENCRYPTION_KEY_MATERIAL = process.env.ENCRYPTION_KEY || (() => {
   console.warn('WARNING: Using default encryption key. Set ENCRYPTION_KEY in .env for production!');
-  return scryptSync('default-key-change-in-production', 'salt', 32);
-}
+  return 'default-key-change-in-production';
+})();
+const DERIVED_KEY = scryptSync(ENCRYPTION_KEY_MATERIAL, 'salt', 32);
 
 // Encrypt data
 function encrypt(text) {
-  const key = getEncryptionKey();
   const iv = randomBytes(16);
-  const cipher = createCipheriv(ALGORITHM, key, iv);
+  const cipher = createCipheriv(ALGORITHM, DERIVED_KEY, iv);
 
   let encrypted = cipher.update(text, 'utf8', 'hex');
   encrypted += cipher.final('hex');
@@ -46,10 +39,9 @@ function encrypt(text) {
 
 // Decrypt data
 function decrypt(encryptedData) {
-  const key = getEncryptionKey();
   const decipher = createDecipheriv(
     ALGORITHM,
-    key,
+    DERIVED_KEY,
     Buffer.from(encryptedData.iv, 'hex')
   );
 
