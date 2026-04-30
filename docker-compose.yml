@@ -11,15 +11,15 @@ services:
     environment:
       - NODE_ENV=production
       - DATA_DIR=/app/data
-      - TRUST_PROXY=1
+      # Traefik → nginx → Express = 2 hops; trust both so rate limiting sees
+      # the real client IP rather than the nginx container address.
+      - TRUST_PROXY=2
     env_file:
       - ./server/.env
     volumes:
       - token-data:/app/data
     networks:
       - booking-network
-    # Memory limits for 1GB RAM instances (Oracle free tier)
-    # Allocate 400MB to server (main backend process)
     mem_limit: 400m
     mem_reservation: 300m
     healthcheck:
@@ -29,7 +29,7 @@ services:
       retries: 3
       start_period: 10s
 
-  # Frontend (React + Nginx)
+  # Frontend (React + Nginx) — Traefik entry point
   client:
     build:
       context: ./client
@@ -42,8 +42,19 @@ services:
       - server
     networks:
       - booking-network
-    # Memory limits for 1GB RAM instances
-    # Nginx is lightweight, allocate 150MB
+      - traefik          # must share a network with Traefik to be reachable
+    labels:
+      - "traefik.enable=true"
+      # ── Router ────────────────────────────────────────────────────────────
+      - "traefik.http.routers.tutorbooking.rule=Host(`tutorbooking.home.tastymath.com`)"
+      - "traefik.http.routers.tutorbooking.entrypoints=websecure"
+      - "traefik.http.routers.tutorbooking.tls=true"
+      # If you use a cert resolver (e.g. Let's Encrypt via Cloudflare DNS):
+      # - "traefik.http.routers.tutorbooking.tls.certresolver=cloudflare"
+      # ── Service ───────────────────────────────────────────────────────────
+      - "traefik.http.services.tutorbooking.loadbalancer.server.port=80"
+      # Tell Traefik which network to use when this container is on multiple networks
+      - "traefik.docker.network=traefik"
     mem_limit: 150m
     mem_reservation: 100m
     healthcheck:
@@ -53,40 +64,11 @@ services:
       retries: 3
       start_period: 10s
 
-  # Reverse Proxy (Caddy) for production HTTPS
-  caddy:
-    image: caddy:2-alpine
-    container_name: tutor-booking-caddy
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"  # HTTP/3 support
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy-data:/data
-      - caddy-config:/config
-    depends_on:
-      - client
-      - server
-    networks:
-      - booking-network
-    # Memory limits for 1GB RAM instances
-    # Caddy is efficient, allocate 150MB
-    mem_limit: 150m
-    mem_reservation: 100m
-    healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:2019/metrics"]
-      interval: 30s
-      timeout: 3s
-      retries: 3
-      start_period: 10s
-
 networks:
   booking-network:
     driver: bridge
+  traefik:
+    external: true   # must match the network name Traefik itself is attached to
 
 volumes:
   token-data:
-  caddy-data:
-  caddy-config:
