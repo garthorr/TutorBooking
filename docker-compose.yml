@@ -36,13 +36,14 @@ services:
       dockerfile: Dockerfile
     container_name: tutor-booking-client
     restart: unless-stopped
-    expose:
-      - "80"
+    ports:
+      # Bind to localhost only — Traefik or cloudflared proxies inbound traffic.
+      # Change to "0.0.0.0:80:80" only if you need direct LAN access.
+      - "127.0.0.1:8080:80"
     depends_on:
       - server
     networks:
       - booking-network
-      - traefik          # must share a network with Traefik to be reachable
     labels:
       - "traefik.enable=true"
       # ── Router ────────────────────────────────────────────────────────────
@@ -67,8 +68,6 @@ services:
 networks:
   booking-network:
     driver: bridge
-  traefik:
-    external: true   # must match the network name Traefik itself is attached to
 
 volumes:
   token-data:
