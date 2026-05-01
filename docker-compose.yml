@@ -1,5 +1,4 @@
 services:
-  # Backend API Server
   server:
     build:
       context: ./server
@@ -11,8 +10,7 @@ services:
     environment:
       - NODE_ENV=production
       - DATA_DIR=/app/data
-      # Traefik/cloudflared → nginx → Express = 2 hops
-      - TRUST_PROXY=2
+      - TRUST_PROXY=1
     env_file:
       - ./server/.env
     volumes:
@@ -28,7 +26,6 @@ services:
       retries: 3
       start_period: 10s
 
-  # Frontend (React + Nginx)
   client:
     build:
       context: ./client
@@ -41,18 +38,6 @@ services:
       - server
     networks:
       - booking-network
-      # Whichever proxy you use must share a network with this container.
-      # Traefik: uncomment 'traefik' here and in the networks section below.
-      # Cloudflare Tunnel: add cloudflared to booking-network (see below).
-      - traefik
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.tutorbooking.rule=Host(`tutorbooking.home.tastymath.com`)"
-      - "traefik.http.routers.tutorbooking.entrypoints=websecure"
-      - "traefik.http.routers.tutorbooking.tls=true"
-      # - "traefik.http.routers.tutorbooking.tls.certresolver=cloudflare"
-      - "traefik.http.services.tutorbooking.loadbalancer.server.port=80"
-      - "traefik.docker.network=traefik"
     mem_limit: 150m
     mem_reservation: 100m
     healthcheck:
@@ -62,26 +47,9 @@ services:
       retries: 3
       start_period: 10s
 
-  # ── Cloudflare Tunnel (future) ────────────────────────────────────────────
-  # Uncomment to replace Traefik with a Cloudflare Tunnel. cloudflared runs
-  # on booking-network so it can reach client:80 with no host port exposed.
-  # Get your token from the Cloudflare Zero Trust dashboard.
-  #
-  # cloudflared:
-  #   image: cloudflare/cloudflared:latest
-  #   container_name: tutor-booking-cloudflared
-  #   restart: unless-stopped
-  #   command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
-  #   networks:
-  #     - booking-network
-  #   depends_on:
-  #     - client
-
 networks:
   booking-network:
     driver: bridge
-  traefik:
-    external: true   # must match the network your Traefik instance is on
 
 volumes:
   token-data:
