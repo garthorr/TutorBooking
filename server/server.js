@@ -20,6 +20,14 @@ import passwordStore from './passwordStore.js'
 
 dotenv.config()
 
+if (process.env.NODE_ENV === 'production') {
+  const missing = ['JWT_SECRET', 'ENCRYPTION_KEY'].filter(k => !process.env[k])
+  if (missing.length) {
+    console.error(`FATAL: Missing required environment variables: ${missing.join(', ')}. Set them in .env before starting in production.`)
+    process.exit(1)
+  }
+}
+
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
@@ -847,10 +855,11 @@ function saveSettings(settings) {
 }
 
 // Public config (safe values the frontend needs at runtime)
+// NOTE: googleMapsApiKey is intentionally excluded — it is served only to
+// authenticated admins via GET /api/settings to prevent public key exposure.
 app.get('/api/config', (req, res) => {
   const settings = getCachedSettings()
   res.json({
-    googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY || '',
     googleMeetDuration: settings.googleMeetDuration,
     customLocationDuration: settings.customLocationDuration,
     themeColor: settings.themeColor,
@@ -920,7 +929,10 @@ app.delete('/api/logo', adminAuth, (req, res) => {
 
 // General settings (Google Meet duration, etc.) — admin only
 app.get('/api/settings', adminAuth, (req, res) => {
-  res.json(getCachedSettings())
+  res.json({
+    ...getCachedSettings(),
+    googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY || ''
+  })
 })
 
 app.put('/api/settings', adminAuth, (req, res) => {

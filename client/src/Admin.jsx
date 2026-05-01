@@ -42,7 +42,6 @@ function Admin() {
 
   useEffect(() => {
     checkStatus()
-    loadPublicConfig()
     // Load current logo and settings for the Settings tab
     adminFetch('/api/logo').then(r => r.ok ? r.json() : null).then(d => { if (d?.dataUrl) setLogoPreview(d.dataUrl) }).catch(() => {})
     adminFetch('/api/settings').then(r => r.ok ? r.json() : null).then(d => {
@@ -57,6 +56,7 @@ function Admin() {
       })
       const isPreset = THEME_PRESETS.some(p => p.primary.toLowerCase() === color.toLowerCase())
       if (!isPreset) setCustomColorInput(color)
+      if (d.googleMapsApiKey) setMapsApiKey(d.googleMapsApiKey)
     }).catch(() => {})
 
     const params = new URLSearchParams(window.location.search)
@@ -78,14 +78,6 @@ function Admin() {
     script.onload = () => setMapsLoaded(true)
     document.head.appendChild(script)
   }, [mapsApiKey])
-
-  const loadPublicConfig = async () => {
-    try {
-      const res = await fetch('/api/config')
-      const data = await res.json()
-      if (data.googleMapsApiKey) setMapsApiKey(data.googleMapsApiKey)
-    } catch {}
-  }
 
   const checkStatus = async () => {
     try {

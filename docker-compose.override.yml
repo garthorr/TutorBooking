@@ -1,0 +1,14 @@
+# Loaded automatically alongside docker-compose.yml for local/Oracle dev.
+# NOT used when -f is specified explicitly (e.g. production Traefik command).
+services:
+  server:
+    environment:
+      - NODE_ENV=development
+      - TRUST_PROXY=1
+
+  client:
+    # Bind to loopback only — access remotely via SSH tunnel:
+    #   ssh -L 8080:localhost:8080 <oracle-user>@<oracle-ip>
+    #   then open http://localhost:8080 in your browser
+    ports:
+      - "127.0.0.1:8080:80"

@@ -1,5 +1,4 @@
 services:
-  # Backend API Server
   server:
     build:
       context: ./server
@@ -18,8 +17,6 @@ services:
       - token-data:/app/data
     networks:
       - booking-network
-    # Memory limits for 1GB RAM instances (Oracle free tier)
-    # Allocate 400MB to server (main backend process)
     mem_limit: 400m
     mem_reservation: 300m
     healthcheck:
@@ -29,7 +26,6 @@ services:
       retries: 3
       start_period: 10s
 
-  # Frontend (React + Nginx)
   client:
     build:
       context: ./client
@@ -42,41 +38,10 @@ services:
       - server
     networks:
       - booking-network
-    # Memory limits for 1GB RAM instances
-    # Nginx is lightweight, allocate 150MB
     mem_limit: 150m
     mem_reservation: 100m
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:80"]
-      interval: 30s
-      timeout: 3s
-      retries: 3
-      start_period: 10s
-
-  # Reverse Proxy (Caddy) for production HTTPS
-  caddy:
-    image: caddy:2-alpine
-    container_name: tutor-booking-caddy
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"  # HTTP/3 support
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy-data:/data
-      - caddy-config:/config
-    depends_on:
-      - client
-      - server
-    networks:
-      - booking-network
-    # Memory limits for 1GB RAM instances
-    # Caddy is efficient, allocate 150MB
-    mem_limit: 150m
-    mem_reservation: 100m
-    healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:2019/metrics"]
       interval: 30s
       timeout: 3s
       retries: 3
@@ -88,5 +53,3 @@ networks:
 
 volumes:
   token-data:
-  caddy-data:
-  caddy-config:
