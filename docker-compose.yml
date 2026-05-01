@@ -11,8 +11,7 @@ services:
     environment:
       - NODE_ENV=production
       - DATA_DIR=/app/data
-      # Traefik → nginx → Express = 2 hops; trust both so rate limiting sees
-      # the real client IP rather than the nginx container address.
+      # Traefik/cloudflared → nginx → Express = 2 hops
       - TRUST_PROXY=2
     env_file:
       - ./server/.env
@@ -29,32 +28,30 @@ services:
       retries: 3
       start_period: 10s
 
-  # Frontend (React + Nginx) — Traefik entry point
+  # Frontend (React + Nginx)
   client:
     build:
       context: ./client
       dockerfile: Dockerfile
     container_name: tutor-booking-client
     restart: unless-stopped
-    ports:
-      # Bind to localhost only — Traefik or cloudflared proxies inbound traffic.
-      # Change to "0.0.0.0:80:80" only if you need direct LAN access.
-      - "127.0.0.1:8080:80"
+    expose:
+      - "80"
     depends_on:
       - server
     networks:
       - booking-network
+      # Whichever proxy you use must share a network with this container.
+      # Traefik: uncomment 'traefik' here and in the networks section below.
+      # Cloudflare Tunnel: add cloudflared to booking-network (see below).
+      - traefik
     labels:
       - "traefik.enable=true"
-      # ── Router ────────────────────────────────────────────────────────────
       - "traefik.http.routers.tutorbooking.rule=Host(`tutorbooking.home.tastymath.com`)"
       - "traefik.http.routers.tutorbooking.entrypoints=websecure"
       - "traefik.http.routers.tutorbooking.tls=true"
-      # If you use a cert resolver (e.g. Let's Encrypt via Cloudflare DNS):
       # - "traefik.http.routers.tutorbooking.tls.certresolver=cloudflare"
-      # ── Service ───────────────────────────────────────────────────────────
       - "traefik.http.services.tutorbooking.loadbalancer.server.port=80"
-      # Tell Traefik which network to use when this container is on multiple networks
       - "traefik.docker.network=traefik"
     mem_limit: 150m
     mem_reservation: 100m
@@ -65,9 +62,26 @@ services:
       retries: 3
       start_period: 10s
 
+  # ── Cloudflare Tunnel (future) ────────────────────────────────────────────
+  # Uncomment to replace Traefik with a Cloudflare Tunnel. cloudflared runs
+  # on booking-network so it can reach client:80 with no host port exposed.
+  # Get your token from the Cloudflare Zero Trust dashboard.
+  #
+  # cloudflared:
+  #   image: cloudflare/cloudflared:latest
+  #   container_name: tutor-booking-cloudflared
+  #   restart: unless-stopped
+  #   command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+  #   networks:
+  #     - booking-network
+  #   depends_on:
+  #     - client
+
 networks:
   booking-network:
     driver: bridge
+  traefik:
+    external: true   # must match the network your Traefik instance is on
 
 volumes:
   token-data:
