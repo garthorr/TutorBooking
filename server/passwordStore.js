@@ -84,9 +84,12 @@ class PasswordStore {
     }
 
     // Validate new password
-    if (!newPassword || newPassword.length < 8) {
-      throw new Error('New password must be at least 8 characters');
+    if (!newPassword || newPassword.length < 12) {
+      throw new Error('New password must be at least 12 characters');
     }
+    if (!/[A-Z]/.test(newPassword)) throw new Error('New password must contain an uppercase letter');
+    if (!/[a-z]/.test(newPassword)) throw new Error('New password must contain a lowercase letter');
+    if (!/[0-9]/.test(newPassword)) throw new Error('New password must contain a number');
 
     // Hash and store new password
     const newHash = await this.hashPassword(newPassword);

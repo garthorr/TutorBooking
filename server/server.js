@@ -143,9 +143,11 @@ app.use(cors({
     // Check if origin is in allowed list
     if (corsOrigins.includes(origin)) return callback(null, true)
 
-    // For localhost/development, be more permissive with origin matching
-    if (origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1')) {
-      return callback(null, true)
+    // Allow localhost origins in development only
+    if (process.env.NODE_ENV !== 'production') {
+      if (origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1')) {
+        return callback(null, true)
+      }
     }
 
     console.error(`CORS blocked origin: ${origin}. Allowed origins:`, corsOrigins)
@@ -154,6 +156,9 @@ app.use(cors({
   credentials: true
 }))
 app.use(helmet({
+  hsts: process.env.NODE_ENV === 'production'
+    ? { maxAge: 31536000, includeSubDomains: true }
+    : false,
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
@@ -161,7 +166,7 @@ app.use(helmet({
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://fonts.gstatic.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com"],
       imgSrc: ["'self'", 'data:', 'https:', "https://*.googleapis.com", "https://*.gstatic.com"],
-      connectSrc: ["'self'", "https://maps.googleapis.com", "https://*.googleapis.com"]  // Allow Google Maps API calls
+      connectSrc: ["'self'", "https://maps.googleapis.com", "https://*.googleapis.com"]
     }
   }
 }))
@@ -905,10 +910,17 @@ app.get('/api/logo', (req, res) => {
   res.json(logo)
 })
 
+const ALLOWED_LOGO_MIME_PREFIXES = [
+  'data:image/png;base64,',
+  'data:image/jpeg;base64,',
+  'data:image/gif;base64,',
+  'data:image/webp;base64,'
+]
+
 app.put('/api/logo', adminAuth, (req, res) => {
   const { dataUrl } = req.body
-  if (!dataUrl || !dataUrl.startsWith('data:image/')) {
-    return res.status(400).json({ error: 'dataUrl must be a valid image data URL' })
+  if (!dataUrl || !ALLOWED_LOGO_MIME_PREFIXES.some(p => dataUrl.startsWith(p))) {
+    return res.status(400).json({ error: 'Logo must be a PNG, JPEG, GIF, or WebP image' })
   }
   try {
     writeFileSync(logoFile(), JSON.stringify({ dataUrl }, null, 2))
