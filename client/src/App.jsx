@@ -139,6 +139,7 @@ function App() {
       schoolId = school.id
       sessionDuration = school.sessionDuration
       availabilityBlocks = school.availability
+      slotInterval = school.slotInterval || 0
     } else {
       setAvailableDates(new Set())
       return
@@ -204,6 +205,7 @@ function App() {
       availability = selectedSchool.availability[dayOfWeek] || []
       sessionDuration = selectedSchool.sessionDuration
       schoolId = selectedSchool.id
+      slotInterval = selectedSchool.slotInterval || 0
     }
 
     if (availability.length === 0) {

@@ -19,6 +19,7 @@ function emptySchool() {
     name: '',
     address: '',
     sessionDuration: 60,
+    slotInterval: 0,
     availability: {},
     logoUrl: null
   }
@@ -268,6 +269,20 @@ export default function SchoolForm({ initial, onSave, onCancel, mapsApiKey }) {
                   : `${Math.floor(d / 60)} hr ${d % 60} min`
             return <option key={d} value={d}>{label}</option>
           })}
+        </select>
+      </div>
+
+      <div className="form-group">
+        <label>Scheduling Interval</label>
+        <p className="field-hint">How often session start times are offered. Shorter intervals give students more choices.</p>
+        <select
+          value={school.slotInterval ?? 0}
+          onChange={e => setSchool(s => ({ ...s, slotInterval: Number(e.target.value) }))}
+        >
+          <option value={0}>Same as session length</option>
+          {[5, 10, 15, 20, 30, 45, 60].map(m => (
+            <option key={m} value={m}>{m} minutes</option>
+          ))}
         </select>
       </div>
 
