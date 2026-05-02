@@ -345,9 +345,25 @@
 .address-row {
   display: flex;
   gap: 0.5rem;
+  align-items: flex-start;
 }
 
 .address-row input { flex: 1; }
+
+.autocomplete-wrapper {
+  flex: 1;
+  min-width: 0;
+}
+
+.autocomplete-wrapper gmp-place-autocomplete {
+  width: 100%;
+  --gmpx-font-family-base: inherit;
+  --gmpx-font-size-base: 0.875rem;
+}
+
+.autocomplete-wrapper.input-verified gmp-place-autocomplete {
+  --gmpx-color-surface: #f0fdf4;
+}
 
 .verify-btn {
   padding: 0.6rem 1rem;

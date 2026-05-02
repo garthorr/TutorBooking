@@ -73,7 +73,7 @@ function Admin() {
   useEffect(() => {
     if (!mapsApiKey || mapsLoaded || window.google?.maps) return
     const script = document.createElement('script')
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${mapsApiKey}&libraries=places`
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${mapsApiKey}&v=weekly&libraries=places`
     script.async = true
     script.onload = () => setMapsLoaded(true)
     document.head.appendChild(script)
