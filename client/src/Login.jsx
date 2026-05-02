@@ -18,7 +18,6 @@ function Login({ onLogin }) {
       })
       const data = await r.json()
       if (r.ok) {
-        localStorage.setItem('adminToken', data.token)
         onLogin()
       } else {
         setError(data.error || 'Login failed')

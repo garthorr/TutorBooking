@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import SchoolsManager from './components/SchoolsManager'
 import MeetingTypesManager from './components/MeetingTypesManager'
-import { adminFetch, clearToken } from './auth'
+import { adminFetch } from './auth'
 import { THEME_PRESETS, applyTheme, applyFont, FONT_OPTIONS } from './theme'
 import './Admin.css'
 
@@ -265,8 +265,8 @@ function Admin() {
     }
   }
 
-  const handleLogout = () => {
-    clearToken()
+  const handleLogout = async () => {
+    await adminFetch('/auth/admin/logout', { method: 'POST' })
     window.location.reload()
   }
 
@@ -290,8 +290,9 @@ function Admin() {
       return
     }
 
-    if (passwordForm.newPassword.length < 8) {
-      showMessage('New password must be at least 8 characters', 'error')
+    const pw = passwordForm.newPassword
+    if (pw.length < 12 || !/[A-Z]/.test(pw) || !/[a-z]/.test(pw) || !/[0-9]/.test(pw)) {
+      showMessage('New password must be at least 12 characters and include uppercase, lowercase, and a number', 'error')
       return
     }
 
@@ -737,7 +738,7 @@ function Admin() {
             {/* Change Password */}
             <div className="settings-section" style={{ marginTop: '2rem', borderTop: '1px solid #e5e7eb', paddingTop: '2rem' }}>
               <h2>Change Admin Password</h2>
-              <p className="field-hint">Update your admin password. Requires at least 8 characters.</p>
+              <p className="field-hint">Update your admin password. Requires 12+ characters with uppercase, lowercase, and a number.</p>
 
               <form onSubmit={handlePasswordChange}>
                 <div className="settings-field">

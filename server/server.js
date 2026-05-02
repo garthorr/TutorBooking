@@ -10,6 +10,7 @@ import { randomBytes } from 'crypto'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import { rateLimit } from 'express-rate-limit'
+import cookieParser from 'cookie-parser'
 import { getDriveTime } from './schoolConfig.js'
 import { saveTokens, loadTokens, deleteTokens, hasTokens, getTokenInfo } from './tokenStorage.js'
 import { loadSchools, saveSchools, loadDriveTimes, saveDriveTimes, getDriveTimeFromStorage } from './schoolsStorage.js'
@@ -66,20 +67,42 @@ const JWT_SECRET = process.env.JWT_SECRET || (() => {
 })()
 
 // ── Admin auth middleware ─────────────────────────────────────────────────────
+
+// Rate limiter for all authenticated admin endpoints (per IP)
+const adminLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  message: { error: 'Too many requests — please slow down' },
+  standardHeaders: true,
+  legacyHeaders: false
+})
+
+const COOKIE_OPTS = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: 'strict',
+  maxAge: 24 * 60 * 60 * 1000
+}
+
 function adminAuth(req, res, next) {
-  const auth = req.headers.authorization
-  if (!auth?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' })
-  try {
-    jwt.verify(auth.slice(7), JWT_SECRET)
-    next()
-  } catch {
-    res.status(401).json({ error: 'Invalid or expired token — please log in again' })
-  }
+  // Prevent admin API responses from being stored in caches or proxies
+  res.set('Cache-Control', 'no-store')
+  return adminLimiter(req, res, () => {
+    const token = req.cookies?.adminToken
+    if (!token) return res.status(401).json({ error: 'Unauthorized' })
+    try {
+      jwt.verify(token, JWT_SECRET)
+      next()
+    } catch {
+      res.clearCookie('adminToken', COOKIE_OPTS)
+      res.status(401).json({ error: 'Session expired — please log in again' })
+    }
+  })
 }
 
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10,
+  max: 5,
   message: { error: 'Too many login attempts, please try again in 15 minutes' },
   standardHeaders: true,
   legacyHeaders: false
@@ -162,7 +185,7 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "https://maps.googleapis.com", "https://maps.gstatic.com"], // React + Google Maps
+      scriptSrc: ["'self'", "https://maps.googleapis.com", "https://maps.gstatic.com"],
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://fonts.gstatic.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com"],
       imgSrc: ["'self'", 'data:', 'https:', "https://*.googleapis.com", "https://*.gstatic.com"],
@@ -171,6 +194,7 @@ app.use(helmet({
   }
 }))
 app.use(express.json({ limit: '4mb' }))  // Increased from default 100kb to support logo uploads
+app.use(cookieParser())
 
 // Store bookings in persistent storage (limited to prevent memory leaks on low-RAM instances)
 let bookings = loadBookings()
@@ -901,9 +925,13 @@ app.put('/api/meeting-types', adminAuth, (req, res) => {
   if (!Array.isArray(types)) {
     return res.status(400).json({ error: 'Expected an array of meeting types' })
   }
+  const MEETING_TYPE_ID_RE = /^[a-z0-9][a-z0-9-]{0,59}$/
   for (const t of types) {
-    if (!t.id || typeof t.label !== 'string' || !t.label.trim()) {
-      return res.status(400).json({ error: 'Each type must have an id and a non-empty label' })
+    if (!t.id || !MEETING_TYPE_ID_RE.test(t.id)) {
+      return res.status(400).json({ error: 'Each meeting type id must be lowercase alphanumeric/hyphens, 1–60 chars, starting with a letter or digit' })
+    }
+    if (typeof t.label !== 'string' || !t.label.trim()) {
+      return res.status(400).json({ error: 'Each type must have a non-empty label' })
     }
   }
   const ok = saveMeetingTypes(types)
@@ -929,10 +957,15 @@ const ALLOWED_LOGO_MIME_PREFIXES = [
   'data:image/webp;base64,'
 ]
 
+const MAX_LOGO_CHARS = 750_000 // ~512 KB source image after base64 overhead
+
 app.put('/api/logo', adminAuth, (req, res) => {
   const { dataUrl } = req.body
   if (!dataUrl || !ALLOWED_LOGO_MIME_PREFIXES.some(p => dataUrl.startsWith(p))) {
     return res.status(400).json({ error: 'Logo must be a PNG, JPEG, GIF, or WebP image' })
+  }
+  if (dataUrl.length > MAX_LOGO_CHARS) {
+    return res.status(413).json({ error: 'Logo exceeds maximum allowed size (512 KB)' })
   }
   try {
     writeFileSync(logoFile(), JSON.stringify({ dataUrl }, null, 2))
@@ -1003,7 +1036,7 @@ app.get('/api/calendars', adminAuth, async (req, res) => {
     res.json(items)
   } catch (err) {
     console.error('Error listing calendars:', err.message)
-    res.status(500).json({ error: 'Failed to list calendars', detail: err.message })
+    res.status(500).json({ error: 'Failed to list calendars' })
   }
 })
 
@@ -1093,7 +1126,7 @@ app.post('/api/drivetimes/calculate', adminAuth, async (req, res) => {
     const data = await response.json()
 
     if (data.status !== 'OK') {
-      return res.status(500).json({ error: `Maps API error: ${data.status}`, detail: data.error_message })
+      return res.status(500).json({ error: `Maps API error: ${data.status}` })
     }
 
     // Extract minutes for each pair (prefer duration_in_traffic when available)
@@ -1128,7 +1161,7 @@ app.post('/api/drivetimes/calculate', adminAuth, async (req, res) => {
     res.json({ driveTimes })
   } catch (err) {
     console.error('Drive time calculation error:', err.message)
-    res.status(500).json({ error: 'Failed to calculate drive times', detail: err.message })
+    res.status(500).json({ error: 'Failed to calculate drive times' })
   }
 })
 
@@ -1144,10 +1177,16 @@ app.post('/auth/admin/login', loginLimiter, async (req, res) => {
     const match = await passwordStore.verifyPassword(password || '')
     if (!match) return res.status(401).json({ error: 'Invalid password' })
     const token = jwt.sign({ admin: true }, JWT_SECRET, { expiresIn: '24h' })
-    res.json({ token })
+    res.cookie('adminToken', token, COOKIE_OPTS)
+    res.json({ ok: true })
   } catch {
     res.status(500).json({ error: 'Login error' })
   }
+})
+
+app.post('/auth/admin/logout', (req, res) => {
+  res.clearCookie('adminToken', COOKIE_OPTS)
+  res.json({ ok: true })
 })
 
 // Change admin password
@@ -1276,9 +1315,10 @@ app.get('/auth/test', adminAuth, async (req, res) => {
       primaryCalendar: items.find(c => c.primary)?.summary || items[0]?.summary || null
     })
   } catch (err) {
+    console.error('Calendar test error:', err.message)
     res.json({
       success: false,
-      error: err.message,
+      error: 'Calendar API request failed',
       code: err.code || err.status || null
     })
   }
