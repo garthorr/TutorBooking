@@ -323,11 +323,29 @@ function getDriveTimeBuffer(fromSchoolId, toSchoolId) {
     : getDriveTime(fromSchoolId, toSchoolId)
 }
 
+// Short-lived cache for Google Calendar event fetches (TTL: 60 s)
+// Keyed by "<calIds>|<timeMin>|<timeMax>" — avoids redundant API calls for
+// concurrent users browsing the same month or rapid prev/next navigation.
+const calendarEventsCache = new Map()
+const CALENDAR_CACHE_TTL_MS = 60 * 1000
+
+function pruneCalendarCache() {
+  const now = Date.now()
+  for (const [k, v] of calendarEventsCache) {
+    if (v.expiresAt <= now) calendarEventsCache.delete(k)
+  }
+}
+
 // Fetch events from all configured check-calendars in parallel and merge
 async function fetchEventsForPeriod(timeMin, timeMax) {
   if (!calendar) return []
   const { checkCalendars } = getCachedCalendarConfig()
   const ids = checkCalendars.length > 0 ? checkCalendars : ['primary']
+
+  const cacheKey = `${ids.join(',')}|${timeMin.toISOString()}|${timeMax.toISOString()}`
+  const cached = calendarEventsCache.get(cacheKey)
+  if (cached && cached.expiresAt > Date.now()) return cached.events
+
   const results = await Promise.all(
     ids.map(calId =>
       calendar.events.list({
@@ -342,7 +360,12 @@ async function fetchEventsForPeriod(timeMin, timeMax) {
       })
     )
   )
-  return results.flat()
+  const events = results.flat()
+
+  if (calendarEventsCache.size >= 100) pruneCalendarCache()
+  calendarEventsCache.set(cacheKey, { events, expiresAt: Date.now() + CALENDAR_CACHE_TTL_MS })
+
+  return events
 }
 
 
@@ -836,6 +859,7 @@ ${notes ? `Notes: ${notes}` : ''}
     }
 
     bookings = addBookingToDisk(bookings, booking)
+    calendarEventsCache.clear() // Invalidate so next availability check sees the new event
 
     console.log(`✓ New booking created: ${name} - ${new Date(time).toLocaleString()} (${sessionDuration || 60} min)${schoolId ? ` at school: ${schoolId}` : ''}`)
 
