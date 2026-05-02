@@ -72,26 +72,35 @@ function Admin() {
 
   useEffect(() => {
     document.title = 'Admin'
-    checkStatus()
-    // Load current logo and settings for the Settings tab
-    adminFetch('/api/logo').then(r => r.ok ? r.json() : null).then(d => { if (d?.dataUrl) setLogoPreview(d.dataUrl) }).catch(() => {})
-    adminFetch('/api/settings').then(r => r.ok ? r.json() : null).then(d => {
-      if (!d) return
-      const color = d.themeColor || '#4f46e5'
-      applyTheme(color)
-      setSettingsForm({
-        businessName: d.businessName || '',
-        businessDescription: d.businessDescription || '',
-        customLocationDuration: d.customLocationDuration || 60,
-        googleMeetSlotInterval: d.googleMeetSlotInterval || 0,
-        themeColor: color,
-        fontFamily: d.fontFamily || ''
-      })
-      applyFont(d.fontFamily || '')
-      const isPreset = THEME_PRESETS.some(p => p.primary.toLowerCase() === color.toLowerCase())
-      if (!isPreset) setCustomColorInput(color)
-      if (d.googleMapsApiKey) setMapsApiKey(d.googleMapsApiKey)
-    }).catch(() => {})
+
+    const loadInitial = async () => {
+      const [logoRes, settingsRes] = await Promise.all([
+        adminFetch('/api/logo').then(r => r.ok ? r.json() : null).catch(() => null),
+        adminFetch('/api/settings').then(r => r.ok ? r.json() : null).catch(() => null),
+      ])
+
+      if (logoRes?.dataUrl) setLogoPreview(logoRes.dataUrl)
+
+      if (settingsRes) {
+        const d = settingsRes
+        const color = d.themeColor || '#4f46e5'
+        applyTheme(color)
+        setSettingsForm({
+          businessName: d.businessName || '',
+          businessDescription: d.businessDescription || '',
+          customLocationDuration: d.customLocationDuration || 60,
+          googleMeetSlotInterval: d.googleMeetSlotInterval || 0,
+          themeColor: color,
+          fontFamily: d.fontFamily || ''
+        })
+        applyFont(d.fontFamily || '')
+        const isPreset = THEME_PRESETS.some(p => p.primary.toLowerCase() === color.toLowerCase())
+        if (!isPreset) setCustomColorInput(color)
+        if (d.googleMapsApiKey) setMapsApiKey(d.googleMapsApiKey)
+      }
+    }
+
+    Promise.all([loadInitial(), checkStatus()])
 
     const params = new URLSearchParams(window.location.search)
     if (params.get('success') === 'true') {
