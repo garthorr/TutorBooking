@@ -467,8 +467,12 @@ function App() {
               {meetingTypes.map(mt => (
                 <div
                   key={mt.id}
+                  role="button"
+                  tabIndex={0}
                   className={`meeting-option ${bookingData.meetingType === mt.id ? 'selected' : ''}`}
                   onClick={() => handleMeetingTypeSelect(mt.id)}
+                  onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && handleMeetingTypeSelect(mt.id)}
+                  aria-pressed={bookingData.meetingType === mt.id}
                 >
                   <div className="meeting-option-icon">{mt.icon}</div>
                   <div className="meeting-option-content">
@@ -491,8 +495,12 @@ function App() {
                   {schools.map(school => (
                     <div
                       key={school.id}
+                      role="button"
+                      tabIndex={0}
                       className={`school-tile ${bookingData.schoolId === school.id ? 'selected' : ''}`}
                       onClick={() => handleLocationSelect(school.id)}
+                      onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && handleLocationSelect(school.id)}
+                      aria-pressed={bookingData.schoolId === school.id}
                     >
                       <div className="school-tile-logo">
                         {school.logoUrl
@@ -513,8 +521,12 @@ function App() {
                   ))}
                   {config.locationOptions.allowCustomLocation && (
                     <div
+                      role="button"
+                      tabIndex={0}
                       className={`school-tile school-tile-custom ${isCustomLocation ? 'selected' : ''}`}
                       onClick={() => handleLocationSelect(CUSTOM_LOCATION_VALUE)}
+                      onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && handleLocationSelect(CUSTOM_LOCATION_VALUE)}
+                      aria-pressed={isCustomLocation}
                     >
                       <div className="school-tile-logo">
                         <div className="school-tile-logo-placeholder">✏️</div>
@@ -532,6 +544,7 @@ function App() {
                       value={bookingData.customLocation}
                       onChange={handleCustomLocationChange}
                       placeholder={config.locationOptions.customLocationPlaceholder}
+                      maxLength={200}
                       style={{ width: '100%' }}
                     />
                     <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginTop: '0.5rem' }}>
@@ -647,24 +660,27 @@ function App() {
             </div>
 
             <div className="form-group">
-              <label>Full Name *</label>
-              <input type="text" name="name" value={bookingData.name} onChange={handleInputChange} placeholder="John Doe" required />
+              <label htmlFor="input-name">Full Name *</label>
+              <input id="input-name" type="text" name="name" value={bookingData.name} onChange={handleInputChange}
+                placeholder="John Doe" required maxLength={120} aria-required="true" />
             </div>
 
             <div className="form-group">
-              <label>Email Address *</label>
-              <input type="email" name="email" value={bookingData.email} onChange={handleInputChange} placeholder="john@example.com" required />
+              <label htmlFor="input-email">Email Address *</label>
+              <input id="input-email" type="email" name="email" value={bookingData.email} onChange={handleInputChange}
+                placeholder="john@example.com" required maxLength={254} aria-required="true" />
             </div>
 
             <div className="form-group">
-              <label>Phone Number (Optional)</label>
-              <input type="tel" name="phone" value={bookingData.phone} onChange={handleInputChange} placeholder="+1 (555) 123-4567" />
+              <label htmlFor="input-phone">Phone Number (Optional)</label>
+              <input id="input-phone" type="tel" name="phone" value={bookingData.phone} onChange={handleInputChange}
+                placeholder="+1 (555) 123-4567" maxLength={40} />
             </div>
 
             <div className="form-group">
-              <label>Additional Notes (Optional)</label>
-              <textarea name="notes" value={bookingData.notes} onChange={handleInputChange} rows="4"
-                placeholder="Any specific topics you'd like to cover or questions you have..." />
+              <label htmlFor="input-notes">Additional Notes (Optional)</label>
+              <textarea id="input-notes" name="notes" value={bookingData.notes} onChange={handleInputChange} rows="4"
+                maxLength={2000} placeholder="Any specific topics you'd like to cover or questions you have..." />
             </div>
 
             {bookingError && (

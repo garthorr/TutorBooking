@@ -142,3 +142,12 @@
   font-size: 0.9rem;
   margin-bottom: 0.75rem;
 }
+
+/* ── Very small screens (< 380px) ── */
+@media (max-width: 380px) {
+  .container { padding: 0.5rem; }
+  .booking-card { padding: 1rem; border-radius: 8px; }
+  .time-slots { grid-template-columns: repeat(2, 1fr); }
+  .react-datepicker { font-size: 0.75rem; }
+  .react-datepicker__day { width: 1.6rem; line-height: 1.6rem; }
+}

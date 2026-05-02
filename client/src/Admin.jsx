@@ -69,6 +69,7 @@ function Admin() {
   // Change password
   const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' })
   const [passwordChanging, setPasswordChanging] = useState(false)
+  const [confirmDisconnect, setConfirmDisconnect] = useState(false)
 
   useEffect(() => {
     document.title = 'Admin'
@@ -280,7 +281,8 @@ function Admin() {
   }
 
   const handleDisconnect = async () => {
-    if (!confirm('Disconnect Google Calendar?')) return
+    if (!confirmDisconnect) { setConfirmDisconnect(true); return }
+    setConfirmDisconnect(false)
     try {
       const res = await adminFetch('/auth/disconnect', { method: 'POST' })
       const data = await res.json()
@@ -460,9 +462,15 @@ function Admin() {
                     <button className="btn btn-primary" onClick={handleConnect}>
                       Reconnect Google Calendar
                     </button>
-                    <button className="btn btn-danger" onClick={handleDisconnect}>
-                      Disconnect
-                    </button>
+                    {confirmDisconnect ? (
+                      <>
+                        <span style={{ fontSize: '0.875rem', color: '#b91c1c', alignSelf: 'center' }}>Are you sure?</span>
+                        <button className="btn btn-danger" onClick={handleDisconnect}>Yes, disconnect</button>
+                        <button className="btn btn-secondary" onClick={() => setConfirmDisconnect(false)}>Cancel</button>
+                      </>
+                    ) : (
+                      <button className="btn btn-danger" onClick={handleDisconnect}>Disconnect</button>
+                    )}
                   </div>
 
                   {testResult && (
