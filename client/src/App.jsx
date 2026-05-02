@@ -67,38 +67,30 @@ function App() {
 
   // Fetch schools, logo, meeting types, and public config on mount
   useEffect(() => {
-    fetch('/api/schools')
-      .then(r => r.json())
-      .then(data => {
-        if (Array.isArray(data) && data.length > 0) setSchools(data)
-        else setSchools(config.schools)
-      })
-      .catch(() => setSchools(config.schools))
+    Promise.all([
+      fetch('/api/schools').then(r => r.json()).catch(() => null),
+      fetch('/api/logo').then(r => r.ok ? r.json() : null).catch(() => null),
+      fetch('/api/meeting-types').then(r => r.ok ? r.json() : null).catch(() => null),
+      fetch('/api/config').then(r => r.ok ? r.json() : null).catch(() => null),
+    ]).then(([schools, logo, types, cfg]) => {
+      if (Array.isArray(schools) && schools.length > 0) setSchools(schools)
+      else setSchools(config.schools)
 
-    fetch('/api/logo')
-      .then(r => r.ok ? r.json() : null)
-      .then(data => { if (data?.dataUrl) setLogoUrl(data.dataUrl) })
-      .catch(() => {})
+      if (logo?.dataUrl) setLogoUrl(logo.dataUrl)
 
-    fetch('/api/meeting-types')
-      .then(r => r.ok ? r.json() : null)
-      .then(data => { if (Array.isArray(data) && data.length > 0) setMeetingTypes(data) })
-      .catch(() => {})
+      if (Array.isArray(types) && types.length > 0) setMeetingTypes(types)
 
-    fetch('/api/config')
-      .then(r => r.ok ? r.json() : null)
-      .then(data => {
-        if (!data) return
-        if (data.themeColor) applyTheme(data.themeColor)
-        applyFont(data.fontFamily || '')
+      if (cfg) {
+        if (cfg.themeColor) applyTheme(cfg.themeColor)
+        applyFont(cfg.fontFamily || '')
         setSiteConfig({
-          businessName: data.businessName || config.businessName,
-          businessDescription: data.businessDescription || config.businessDescription,
-          customLocationDuration: data.customLocationDuration || config.locationOptions.customLocationSessionDuration,
-          googleMeetSlotInterval: data.googleMeetSlotInterval || 0
+          businessName: cfg.businessName || config.businessName,
+          businessDescription: cfg.businessDescription || config.businessDescription,
+          customLocationDuration: cfg.customLocationDuration || config.locationOptions.customLocationSessionDuration,
+          googleMeetSlotInterval: cfg.googleMeetSlotInterval || 0
         })
-      })
-      .catch(() => {})
+      }
+    })
   }, [])
 
   const [bookingData, setBookingData] = useState({

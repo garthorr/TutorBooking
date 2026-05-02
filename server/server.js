@@ -921,6 +921,7 @@ function saveSettings(settings) {
 // NOTE: googleMapsApiKey is intentionally excluded — it is served only to
 // authenticated admins via GET /api/settings to prevent public key exposure.
 app.get('/api/config', (req, res) => {
+  res.set('Cache-Control', 'public, max-age=30')
   const settings = getCachedSettings()
   res.json({
     googleMeetDuration: settings.googleMeetDuration,
@@ -935,6 +936,7 @@ app.get('/api/config', (req, res) => {
 
 // Meeting types — GET is public (booking page), admin endpoints for management
 app.get('/api/meeting-types', (req, res) => {
+  res.set('Cache-Control', 'public, max-age=30')
   const types = getCachedMeetingTypes()
   const enabled = types.filter(t => t.enabled).sort((a, b) => a.order - b.order)
   res.json(enabled)
@@ -969,6 +971,7 @@ app.put('/api/meeting-types', adminAuth, (req, res) => {
 
 // Logo
 app.get('/api/logo', (req, res) => {
+  res.set('Cache-Control', 'public, max-age=30')
   const logo = getCachedLogo()
   if (!logo) return res.status(404).json({ error: 'No logo uploaded' })
   res.json(logo)
@@ -1088,6 +1091,7 @@ app.put('/api/config/calendars', adminAuth, (req, res) => {
 
 // Schools — GET is public (booking page needs the list), PUT is admin only
 app.get('/api/schools', (req, res) => {
+  res.set('Cache-Control', 'public, max-age=30')
   res.json(getCachedSchools())
 })
 
