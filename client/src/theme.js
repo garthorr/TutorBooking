@@ -79,3 +79,34 @@ export function applyTheme(hex) {
     root.style.setProperty('--primary-subtle', lightenHex(hex, 0.78))
   }
 }
+
+// ── Apply font family to document root ───────────────────────────────────────
+
+export const FONT_OPTIONS = [
+  { value: '', label: 'System default' },
+  { value: 'Inter', label: 'Inter' },
+  { value: 'Lato', label: 'Lato' },
+  { value: 'Montserrat', label: 'Montserrat' },
+  { value: 'Nunito', label: 'Nunito' },
+  { value: 'Open Sans', label: 'Open Sans' },
+  { value: 'Poppins', label: 'Poppins' },
+  { value: 'Raleway', label: 'Raleway' },
+  { value: 'Roboto', label: 'Roboto' },
+]
+
+export function applyFont(name) {
+  const root = document.documentElement
+  if (!name) {
+    root.style.removeProperty('--font-family')
+    return
+  }
+  const linkId = `gfont-${name.replace(/\s+/g, '-').toLowerCase()}`
+  if (!document.getElementById(linkId)) {
+    const link = document.createElement('link')
+    link.id = linkId
+    link.rel = 'stylesheet'
+    link.href = `https://fonts.googleapis.com/css2?family=${name.replace(/ /g, '+')}:wght@400;500;600;700&display=swap`
+    document.head.appendChild(link)
+  }
+  root.style.setProperty('--font-family', `'${name}', sans-serif`)
+}

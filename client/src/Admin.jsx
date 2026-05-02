@@ -2,8 +2,36 @@ import { useState, useEffect } from 'react'
 import SchoolsManager from './components/SchoolsManager'
 import MeetingTypesManager from './components/MeetingTypesManager'
 import { adminFetch, clearToken } from './auth'
-import { THEME_PRESETS, applyTheme } from './theme'
+import { THEME_PRESETS, applyTheme, applyFont, FONT_OPTIONS } from './theme'
 import './Admin.css'
+
+function EmbedSnippet() {
+  const [copied, setCopied] = useState(false)
+  const origin = window.location.origin
+  const snippet = `<iframe\n  src="${origin}/?embed=1"\n  width="100%"\n  height="720"\n  frameborder="0"\n  style="border:none;border-radius:12px;"\n  title="Book a Session"\n></iframe>`
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(snippet).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }
+
+  return (
+    <div className="embed-snippet-wrap">
+      <pre className="embed-snippet">{snippet}</pre>
+      <div className="embed-snippet-actions">
+        <button className="btn btn-secondary" onClick={handleCopy}>
+          {copied ? 'Copied!' : 'Copy'}
+        </button>
+      </div>
+      <p className="field-hint" style={{ marginTop: '0.75rem' }}>
+        Add <code>?embed=1</code> to the URL for a transparent background that blends into your page.
+        Remove it to keep the standard light-grey background.
+      </p>
+    </div>
+  )
+}
 
 function Admin() {
   const [tab, setTab] = useState('calendar')
@@ -33,7 +61,8 @@ function Admin() {
     businessDescription: '',
     customLocationDuration: 60,
     googleMeetSlotInterval: 0,
-    themeColor: '#4f46e5'
+    themeColor: '#4f46e5',
+    fontFamily: ''
   })
   const [settingsSaving, setSettingsSaving] = useState(false)
   const [customColorInput, setCustomColorInput] = useState('')
@@ -42,6 +71,7 @@ function Admin() {
   const [passwordChanging, setPasswordChanging] = useState(false)
 
   useEffect(() => {
+    document.title = 'Admin'
     checkStatus()
     // Load current logo and settings for the Settings tab
     adminFetch('/api/logo').then(r => r.ok ? r.json() : null).then(d => { if (d?.dataUrl) setLogoPreview(d.dataUrl) }).catch(() => {})
@@ -54,8 +84,10 @@ function Admin() {
         businessDescription: d.businessDescription || '',
         customLocationDuration: d.customLocationDuration || 60,
         googleMeetSlotInterval: d.googleMeetSlotInterval || 0,
-        themeColor: color
+        themeColor: color,
+        fontFamily: d.fontFamily || ''
       })
+      applyFont(d.fontFamily || '')
       const isPreset = THEME_PRESETS.some(p => p.primary.toLowerCase() === color.toLowerCase())
       if (!isPreset) setCustomColorInput(color)
       if (d.googleMapsApiKey) setMapsApiKey(d.googleMapsApiKey)
@@ -156,6 +188,7 @@ function Admin() {
       const data = await res.json()
       if (data.success) {
         applyTheme(settingsForm.themeColor)
+        applyFont(settingsForm.fontFamily)
         showMessage('Settings saved!', 'success')
       } else {
         showMessage(data.error || 'Failed to save settings', 'error')
@@ -658,9 +691,48 @@ function Admin() {
               </div>
             </div>
 
+            {/* Font */}
+            <div className="settings-section">
+              <h2>Font</h2>
+              <p className="field-hint">Applied to the booking page. Choose a Google Font or leave as system default.</p>
+              <div className="settings-field settings-field-inline">
+                <label>Font family</label>
+                <select
+                  value={FONT_OPTIONS.some(f => f.value === settingsForm.fontFamily) ? settingsForm.fontFamily : '__custom__'}
+                  onChange={e => {
+                    if (e.target.value !== '__custom__') setSettingsForm(f => ({ ...f, fontFamily: e.target.value }))
+                  }}
+                >
+                  {FONT_OPTIONS.map(f => (
+                    <option key={f.value} value={f.value}>{f.label}</option>
+                  ))}
+                  {!FONT_OPTIONS.some(f => f.value === settingsForm.fontFamily) && (
+                    <option value="__custom__">{settingsForm.fontFamily} (custom)</option>
+                  )}
+                </select>
+              </div>
+              <div className="settings-field settings-field-inline" style={{ marginTop: '0.5rem' }}>
+                <label>Custom Google Font</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Playfair Display"
+                  value={settingsForm.fontFamily}
+                  onChange={e => setSettingsForm(f => ({ ...f, fontFamily: e.target.value }))}
+                  maxLength={64}
+                />
+              </div>
+            </div>
+
             <button className="btn btn-primary" onClick={handleSettingsSave} disabled={settingsSaving}>
               {settingsSaving ? 'Saving…' : 'Save Settings'}
             </button>
+
+            {/* Embed */}
+            <div className="settings-section" style={{ marginTop: '2rem' }}>
+              <h2>Embed Booking Widget</h2>
+              <p className="field-hint">Paste this snippet into any webpage to embed the booking widget in an iframe. The widget inherits your theme color and font settings.</p>
+              <EmbedSnippet />
+            </div>
 
             {/* Change Password */}
             <div className="settings-section" style={{ marginTop: '2rem', borderTop: '1px solid #e5e7eb', paddingTop: '2rem' }}>

@@ -852,6 +852,7 @@ const DEFAULT_SETTINGS = {
   googleMeetSlotInterval: 0,
   customLocationDuration: 60,
   themeColor: '#4f46e5',
+  fontFamily: '',
   businessName: '',
   businessDescription: ''
 }
@@ -878,6 +879,7 @@ app.get('/api/config', (req, res) => {
     googleMeetSlotInterval: settings.googleMeetSlotInterval,
     customLocationDuration: settings.customLocationDuration,
     themeColor: settings.themeColor,
+    fontFamily: settings.fontFamily,
     businessName: settings.businessName,
     businessDescription: settings.businessDescription
   })
@@ -964,6 +966,8 @@ app.put('/api/settings', adminAuth, (req, res) => {
     updated.googleMeetDuration = req.body.googleMeetDuration
   if (typeof req.body.googleMeetSlotInterval === 'number' && req.body.googleMeetSlotInterval >= 0)
     updated.googleMeetSlotInterval = req.body.googleMeetSlotInterval
+  if (typeof req.body.fontFamily === 'string' && req.body.fontFamily.length <= 64)
+    updated.fontFamily = req.body.fontFamily.trim()
   if (typeof req.body.customLocationDuration === 'number' && req.body.customLocationDuration > 0)
     updated.customLocationDuration = req.body.customLocationDuration
   if (typeof req.body.themeColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(req.body.themeColor))

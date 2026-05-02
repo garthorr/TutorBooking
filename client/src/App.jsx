@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import DatePicker from 'react-datepicker'
 import 'react-datepicker/dist/react-datepicker.css'
 import './App.css'
 import { format, addDays, isBefore, startOfDay, getDay } from 'date-fns'
 import config from './config'
-import { applyTheme } from './theme'
+import { applyTheme, applyFont } from './theme'
 
 const CUSTOM_LOCATION_VALUE = '__CUSTOM__'
 
@@ -49,6 +49,12 @@ const DEFAULT_MEETING_TYPES = [
 ]
 
 function App() {
+  const isEmbed = useMemo(() => new URLSearchParams(window.location.search).get('embed') === '1', [])
+  useEffect(() => {
+    if (isEmbed) document.body.classList.add('embed-mode')
+    return () => document.body.classList.remove('embed-mode')
+  }, [isEmbed])
+
   const [step, setStep] = useState(1)
   const [schools, setSchools] = useState([])
   const [meetingTypes, setMeetingTypes] = useState(DEFAULT_MEETING_TYPES)
@@ -84,6 +90,7 @@ function App() {
       .then(data => {
         if (!data) return
         if (data.themeColor) applyTheme(data.themeColor)
+        applyFont(data.fontFamily || '')
         setSiteConfig({
           businessName: data.businessName || config.businessName,
           businessDescription: data.businessDescription || config.businessDescription,
