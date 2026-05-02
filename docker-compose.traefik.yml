@@ -13,10 +13,10 @@ services:
       - traefik
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.tutorbooking.rule=Host(`tutorbooking.home.tastymath.com`)"
+      - "traefik.http.routers.tutorbooking.rule=Host(`tutorbooking.oracle.tastymath.com`)"
       - "traefik.http.routers.tutorbooking.entrypoints=websecure"
       - "traefik.http.routers.tutorbooking.tls=true"
-      # - "traefik.http.routers.tutorbooking.tls.certresolver=cloudflare"
+      - "traefik.http.routers.tutorbooking.tls.certresolver=letsencrypt"
       - "traefik.http.services.tutorbooking.loadbalancer.server.port=80"
       - "traefik.docker.network=traefik"
 
