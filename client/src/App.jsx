@@ -108,8 +108,11 @@ function App() {
   const [availableSlots, setAvailableSlots] = useState([])
   const [availableDates, setAvailableDates] = useState(new Set())
   const [loadingDays, setLoadingDays] = useState(false)
+  const [loadingSlots, setLoadingSlots] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [bookingError, setBookingError] = useState('')
   const [isBooked, setIsBooked] = useState(false)
+  const [bookingResult, setBookingResult] = useState(null)
   const [isCustomLocation, setIsCustomLocation] = useState(false)
   const [selectedSchool, setSelectedSchool] = useState(null)
   const [logoUrl, setLogoUrl] = useState(null)
@@ -212,6 +215,7 @@ function App() {
       return
     }
 
+    setLoadingSlots(true)
     try {
       const response = await fetch('/api/availability', {
         method: 'POST',
@@ -227,6 +231,8 @@ function App() {
     } catch (error) {
       console.error('Error fetching availability:', error)
       setAvailableSlots([])
+    } finally {
+      setLoadingSlots(false)
     }
   }
 
@@ -314,6 +320,7 @@ function App() {
 
   const handleSubmit = async () => {
     setIsSubmitting(true)
+    setBookingError('')
     try {
       const mt = getMeetingType(bookingData.meetingType)
       const finalBookingData = {
@@ -329,14 +336,16 @@ function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(finalBookingData)
       })
+      const data = await response.json()
       if (response.ok) {
+        setBookingResult(data)
         setIsBooked(true)
       } else {
-        alert('Failed to book appointment. Please try again.')
+        setBookingError(data.error || 'Failed to book appointment. Please try again.')
       }
     } catch (error) {
       console.error('Booking error:', error)
-      alert('An error occurred. Please try again.')
+      setBookingError('A network error occurred. Please try again.')
     } finally {
       setIsSubmitting(false)
     }
@@ -368,6 +377,9 @@ function App() {
   }
 
   if (isBooked) {
+    const meetLink = bookingResult?.meetLink
+    const calendarWarning = bookingResult?.calendarWarning
+
     return (
       <div className="container">
         <div className="booking-card">
@@ -399,6 +411,14 @@ function App() {
                   <span className="summary-value">{getFinalLocation()}</span>
                 </div>
               )}
+              {meetLink && (
+                <div className="summary-item">
+                  <span className="summary-label">Meet Link:</span>
+                  <span className="summary-value">
+                    <a href={meetLink} target="_blank" rel="noopener noreferrer">{meetLink}</a>
+                  </span>
+                </div>
+              )}
               <div className="summary-item">
                 <span className="summary-label">Name:</span>
                 <span className="summary-value">{bookingData.name}</span>
@@ -409,9 +429,14 @@ function App() {
               </div>
             </div>
 
-            <p style={{ marginTop: '1.5rem', color: 'var(--text-secondary)' }}>
-              A confirmation email has been sent to {bookingData.email}
-              {bookingData.meetingType === 'google-meet' && ' with the Google Meet link'}.
+            {calendarWarning && (
+              <p style={{ marginTop: '1rem', color: '#b45309', fontSize: '0.875rem' }}>
+                Note: your booking was saved but could not be added to Google Calendar. Please contact us to confirm.
+              </p>
+            )}
+
+            <p style={{ marginTop: '1rem', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
+              A confirmation has been sent to {bookingData.email}.
             </p>
           </div>
         </div>
@@ -567,6 +592,8 @@ function App() {
                   <p style={{ color: 'var(--text-secondary)' }}>
                     Select a date to see available times.
                   </p>
+                ) : loadingSlots ? (
+                  <p style={{ color: 'var(--text-secondary)' }}>Loading available times…</p>
                 ) : availableSlots.length === 0 ? (
                   <p style={{ color: 'var(--text-secondary)' }}>
                     No available time slots on this date. Please select another date.
@@ -639,6 +666,10 @@ function App() {
               <textarea name="notes" value={bookingData.notes} onChange={handleInputChange} rows="4"
                 placeholder="Any specific topics you'd like to cover or questions you have..." />
             </div>
+
+            {bookingError && (
+              <div className="booking-error-message">{bookingError}</div>
+            )}
 
             <div className="button-group">
               <button className="btn btn-secondary" onClick={handleBack}>Back</button>
