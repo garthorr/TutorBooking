@@ -28,24 +28,34 @@ Designed for a single tutor/admin workflow:
   - Event is created in the selected booking calendar with proper timezone
   - Google Meet links generated automatically for online meetings
 
+- **Scheduling intervals**
+  - Configurable slot interval for Google Meet (e.g. start times every 15 min regardless of session length)
+  - Same per-school for physical meetings
+
 - **White-label branding**
   - Custom business name and description
   - Theme color picker (4 presets: Indigo, Blue, Teal, Purple + custom hex)
-  - Logo upload support
+  - Logo upload support (max 512 KB)
+  - Font selector (system default or Google Fonts: Inter, Lato, Montserrat, etc.)
+  - Embed widget: copy-paste `<iframe>` snippet for embedding in any website
 
 - **Admin auth + config**
-  - bcrypt password login, JWT session tokens (24hr expiry)
-  - Protected admin APIs with middleware
+  - bcrypt password login, httpOnly SameSite=Strict session cookie (24hr)
+  - Protected admin APIs with middleware; admin panel title shown in browser tab
   - Manage branding, calendar selection, schools, drive times, meeting types
 
 - **Security & performance**
   - Server-side validation for all inputs (availability and booking payloads)
-  - Rate limiting on login (10/15min), availability checks (90/min), and bookings (12/15min)
+  - Rate limiting: login 5/15min, availability 90/min, bookings 12/15min, admin APIs 60/min
   - CORS whitelisting for production domains
-  - HTTP security headers via helmet (CSP, X-Frame-Options, etc.)
+  - HTTP security headers via helmet (strict CSP, X-Frame-Options per route)
+  - httpOnly SameSite=Strict cookie eliminates XSS token theft and CSRF
+  - Cache-Control: no-store on all admin API responses
   - OAuth CSRF protection with time-limited state tokens
-  - In-memory caching for file-based data to reduce disk I/O
-  - Error message sanitization (no sensitive details leaked to clients)
+  - In-memory caching: file-based data (no disk I/O on reads) + 60s calendar events cache
+  - Parallel startup fetches on both booking page and admin panel
+  - HTTP cache headers (max-age=30) on public read endpoints
+  - Error message sanitization (no internal details leaked to clients)
 
 ---
 
@@ -54,13 +64,15 @@ Designed for a single tutor/admin workflow:
 This application implements multiple layers of security:
 
 ### Authentication & Access Control
-- **Password hashing**: bcrypt with 10 rounds
-- **Session management**: JWT tokens with 24-hour expiry
+- **Password hashing**: bcrypt with 10 rounds; 12+ character minimum with complexity requirements
+- **Session management**: httpOnly SameSite=Strict cookie, 24-hour expiry — token never accessible to JavaScript
+- **CSRF protection**: SameSite=Strict cookie policy; no separate token needed
 - **Admin password changes**: Available in admin panel at `/admin` → Change Password
 - **Rate limiting**:
-  - Login: 10 attempts per 15 minutes
+  - Login: 5 attempts per 15 minutes
   - Availability checks: 90 requests per minute
   - Bookings: 12 attempts per 15 minutes
+  - All admin endpoints: 60 requests per minute per IP
 
 ### Input Validation & Sanitization
 - All API endpoints validate input types, formats, and lengths
@@ -89,7 +101,7 @@ This application implements multiple layers of security:
 
 ### Production Checklist
 Before going public, ensure:
-1. ✅ Strong admin password set (minimum 8 characters)
+1. ✅ Strong admin password set (12+ characters, uppercase + lowercase + digit)
 2. ✅ `JWT_SECRET` is random and strong (use 32+ character random string)
 3. ✅ `ENCRYPTION_KEY` is random and strong (use 32+ character random string)
 4. ✅ `CORS_ORIGINS` set to your production domain only
@@ -160,6 +172,9 @@ services:
 - **Memory footprint (active)**: ~400-600MB total
 - **CPU usage (idle)**: <5%
 - **CPU usage (booking request)**: ~10-20% spike
+- **Page load**: booking page and admin panel fire all startup requests in parallel
+- **Calendar API calls**: deduplicated with a 60s in-memory cache; invalidated on new bookings
+- **Static config**: `Cache-Control: public, max-age=30` on schools/config/meeting-types/logo endpoints
 
 #### Monitoring Resource Usage
 ```bash
@@ -358,16 +373,15 @@ The password is stored in the Docker volume (`/app/data/admin-password.json`) an
 
 Customize the booking page appearance in `/admin` → **Settings** tab:
 
-1. **Business name** - Replaces default "Book a Tutoring Session" header
-2. **Business description** - Replaces default subtitle text
-3. **Theme color** - Choose from 4 presets or enter custom hex color:
-   - Indigo (default): `#4f46e5`
-   - Blue: `#3b82f6`
-   - Teal: `#14b8a6`
-   - Purple: `#a855f7`
-   - Or use any hex color: `#c026d3`, `#dc2626`, etc.
-4. **Logo** - Upload your logo (appears at top of booking page)
-5. **Custom location duration** - Default session length for "Other Location" bookings
+1. **Business name** — Replaces default "Book a Tutoring Session" header
+2. **Business description** — Replaces default subtitle text
+3. **Theme color** — Choose from 4 presets or enter custom hex color:
+   - Indigo (default): `#4f46e5` · Blue: `#3b82f6` · Teal: `#14b8a6` · Purple: `#a855f7`
+   - Or any hex color: `#c026d3`, `#dc2626`, etc.
+4. **Font** — System default or a curated set of Google Fonts (Inter, Lato, Montserrat, Nunito, Open Sans, Poppins, Raleway, Roboto) or any custom Google Fonts family name
+5. **Logo** — Upload your logo (PNG/JPEG/GIF/WebP, max 512 KB; appears at top of booking page)
+6. **Custom location duration** — Default session length for "Other Location" bookings
+7. **Embed widget** — Copy the generated `<iframe>` snippet to embed the booking form in any website (`?embed=1` activates transparent/compact mode)
 
 All changes take effect immediately on the booking page (no restart needed).
 
@@ -566,7 +580,8 @@ CORS_ORIGINS=https://booking.yourdomain.com,https://yourdomain.com
 **Solution**: The app has rate limits for security:
 - Availability checks: 90 per minute
 - Bookings: 12 per 15 minutes
-- Login attempts: 10 per 15 minutes
+- Login attempts: 5 per 15 minutes
+- Admin endpoints: 60 per minute per IP
 
 If you're hitting these during normal use, they reset automatically. For development/testing, you can temporarily increase limits in `server/server.js`.
 
@@ -699,8 +714,8 @@ docker compose logs -f
 
 **Common causes**:
 1. **Google Calendar API calls**: Each availability check queries Calendar API
-   - Solution: Availability is already cached for 30s
-   - Consider increasing cache TTL if needed
+   - Solution: Calendar events are cached for 60s; concurrent users share the same result
+   - Consider increasing `CALENDAR_CACHE_TTL_MS` in `server.js` if needed
 
 2. **Too many concurrent users**: 1 CPU instance limited to ~10-20 concurrent users
    - Solution: Implement queue or rate limiting

@@ -171,7 +171,7 @@ function App() {
     } else {
       setAvailableDates(new Set())
     }
-  }, [selectedSchool, isCustomLocation, bookingData.meetingType, meetingTypes])
+  }, [selectedSchool, isCustomLocation, bookingData.meetingType])
 
   // Regenerate time slots when date or location changes
   useEffect(() => {

@@ -369,6 +369,7 @@ async function fetchEventsForPeriod(timeMin, timeMax) {
 }
 
 
+// Used by hasSchedulingConflictForBooking (raw events, no pre-computation)
 function hasSchedulingConflict(slotStart, slotEnd, events, schoolId) {
   for (const event of events) {
     const eventStart = new Date(event.start.dateTime || event.start.date)
@@ -388,6 +389,16 @@ function hasSchedulingConflict(slotStart, slotEnd, events, schoolId) {
       const bufferStart = new Date(eventStart.getTime() - driveTimeAfter * 60 * 1000)
       if (slotEnd > bufferStart) return true
     }
+  }
+  return false
+}
+
+// Used by getAvailableSlotsForDay — drive times pre-computed once per event, not per slot
+function hasSchedulingConflictFast(slotStart, slotEnd, eventMeta) {
+  for (const { start, end, before, after } of eventMeta) {
+    if (slotStart < end && slotEnd > start) return true
+    if (before > 0 && slotStart < new Date(end.getTime() + before * 60 * 1000)) return true
+    if (after  > 0 && slotEnd   > new Date(start.getTime() - after  * 60 * 1000)) return true
   }
   return false
 }
@@ -413,8 +424,17 @@ async function hasSchedulingConflictForBooking(slotStart, slotEnd, schoolId) {
 function getAvailableSlotsForDay(date, availabilityBlocks, sessionDuration, events, schoolId, slotInterval = 0) {
   const slots = []
   const duration = sessionDuration || 60
-  // slotInterval controls how far apart start times are; 0 means "same as duration"
   const step = slotInterval > 0 ? slotInterval : duration
+
+  // Pre-compute per-event derived values once instead of per slot
+  const eventMeta = events.map(e => {
+    const start = new Date(e.start.dateTime || e.start.date)
+    const end   = new Date(e.end.dateTime   || e.end.date)
+    const esid  = e.extendedProperties?.private?.schoolId
+    const before = getDriveTimeBuffer(esid, schoolId)
+    const after  = getDriveTimeBuffer(schoolId, esid)
+    return { start, end, before, after }
+  })
 
   for (const block of availabilityBlocks) {
     const [startH, startM] = block.start.split(':').map(Number)
@@ -427,7 +447,7 @@ function getAvailableSlotsForDay(date, availabilityBlocks, sessionDuration, even
       const slotEnd = new Date(slotStart.getTime() + duration * 60 * 1000)
       if (slotEnd > blockEnd) break // Not enough room for a full session
 
-      const isBlocked = hasSchedulingConflict(slotStart, slotEnd, events, schoolId)
+      const isBlocked = hasSchedulingConflictFast(slotStart, slotEnd, eventMeta)
 
       if (!isBlocked) slots.push({ time: slotStart.toISOString(), available: true, blockName: block.name || null })
       slotStart = new Date(slotStart.getTime() + step * 60 * 1000)
