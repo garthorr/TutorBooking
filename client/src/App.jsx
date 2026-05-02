@@ -55,7 +55,8 @@ function App() {
   const [siteConfig, setSiteConfig] = useState({
     businessName: config.businessName,
     businessDescription: config.businessDescription,
-    customLocationDuration: config.locationOptions.customLocationSessionDuration
+    customLocationDuration: config.locationOptions.customLocationSessionDuration,
+    googleMeetSlotInterval: 0
   })
 
   // Fetch schools, logo, meeting types, and public config on mount
@@ -86,7 +87,8 @@ function App() {
         setSiteConfig({
           businessName: data.businessName || config.businessName,
           businessDescription: data.businessDescription || config.businessDescription,
-          customLocationDuration: data.customLocationDuration || config.locationOptions.customLocationSessionDuration
+          customLocationDuration: data.customLocationDuration || config.locationOptions.customLocationSessionDuration,
+          googleMeetSlotInterval: data.googleMeetSlotInterval || 0
         })
       })
       .catch(() => {})
@@ -123,10 +125,12 @@ function App() {
     let availabilityBlocks = null
 
     const mt = getMeetingType(meetingType)
+    let slotInterval = 0
     if (mt && !mt.requiresSchool) {
       schoolId = ''
       sessionDuration = mt.sessionDuration
       availabilityBlocks = mt.availability
+      slotInterval = siteConfig.googleMeetSlotInterval || 0
     } else if (isCustom) {
       schoolId = 'custom'
       sessionDuration = siteConfig.customLocationDuration
@@ -145,7 +149,7 @@ function App() {
       const res = await fetch('/api/availability/days', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ year, month, schoolId, sessionDuration, availabilityBlocks })
+        body: JSON.stringify({ year, month, schoolId, sessionDuration, availabilityBlocks, slotInterval })
       })
       if (res.ok) {
         const data = await res.json()
@@ -186,10 +190,12 @@ function App() {
     let schoolId = ''
 
     const mt = getMeetingType(bookingData.meetingType)
+    let slotInterval = 0
     if (mt && !mt.requiresSchool) {
       availability = (mt.availability || {})[dayOfWeek] || []
       sessionDuration = mt.sessionDuration
       schoolId = ''
+      slotInterval = siteConfig.googleMeetSlotInterval || 0
     } else if (isCustomLocation) {
       availability = config.locationOptions.customLocationAvailability[dayOfWeek] || []
       sessionDuration = siteConfig.customLocationDuration
@@ -209,7 +215,7 @@ function App() {
       const response = await fetch('/api/availability', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ date: date.toISOString(), schoolId, sessionDuration, availabilityBlocks: availability })
+        body: JSON.stringify({ date: date.toISOString(), schoolId, sessionDuration, availabilityBlocks: availability, slotInterval })
       })
       if (response.ok) {
         const data = await response.json()

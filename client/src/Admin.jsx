@@ -32,6 +32,7 @@ function Admin() {
     businessName: '',
     businessDescription: '',
     customLocationDuration: 60,
+    googleMeetSlotInterval: 0,
     themeColor: '#4f46e5'
   })
   const [settingsSaving, setSettingsSaving] = useState(false)
@@ -52,6 +53,7 @@ function Admin() {
         businessName: d.businessName || '',
         businessDescription: d.businessDescription || '',
         customLocationDuration: d.customLocationDuration || 60,
+        googleMeetSlotInterval: d.googleMeetSlotInterval || 0,
         themeColor: color
       })
       const isPreset = THEME_PRESETS.some(p => p.primary.toLowerCase() === color.toLowerCase())
@@ -591,6 +593,24 @@ function Admin() {
                   onChange={e => setSettingsForm(f => ({ ...f, customLocationDuration: Number(e.target.value) }))}
                 >
                   {[15, 30, 45, 60, 75, 90, 120].map(m => (
+                    <option key={m} value={m}>{m} minutes</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Google Meet scheduling interval */}
+            <div className="settings-section">
+              <h2>Google Meet Scheduling Interval</h2>
+              <p className="field-hint">How often session start times are offered within your availability windows. Shorter intervals give students more choices; the session length stays the same.</p>
+              <div className="settings-field settings-field-inline">
+                <label>Start times every</label>
+                <select
+                  value={settingsForm.googleMeetSlotInterval}
+                  onChange={e => setSettingsForm(f => ({ ...f, googleMeetSlotInterval: Number(e.target.value) }))}
+                >
+                  <option value={0}>Same as session length</option>
+                  {[5, 10, 15, 20, 30, 45, 60].map(m => (
                     <option key={m} value={m}>{m} minutes</option>
                   ))}
                 </select>

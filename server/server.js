@@ -363,9 +363,11 @@ async function hasSchedulingConflictForBooking(slotStart, slotEnd, schoolId) {
 //   - No schoolId on either side   → 0 min buffer (Google Meet / online sessions)
 //   - One side has no schoolId     → 0 min buffer (online ↔ physical needs no travel)
 //   - Different schoolIds          → drive time + 5 min walking, rounded to nearest 5
-function getAvailableSlotsForDay(date, availabilityBlocks, sessionDuration, events, schoolId) {
+function getAvailableSlotsForDay(date, availabilityBlocks, sessionDuration, events, schoolId, slotInterval = 0) {
   const slots = []
   const duration = sessionDuration || 60
+  // slotInterval controls how far apart start times are; 0 means "same as duration"
+  const step = slotInterval > 0 ? slotInterval : duration
 
   for (const block of availabilityBlocks) {
     const [startH, startM] = block.start.split(':').map(Number)
@@ -381,7 +383,7 @@ function getAvailableSlotsForDay(date, availabilityBlocks, sessionDuration, even
       const isBlocked = hasSchedulingConflict(slotStart, slotEnd, events, schoolId)
 
       if (!isBlocked) slots.push({ time: slotStart.toISOString(), available: true, blockName: block.name || null })
-      slotStart = new Date(slotStart.getTime() + duration * 60 * 1000)
+      slotStart = new Date(slotStart.getTime() + step * 60 * 1000)
     }
   }
   return slots
@@ -492,7 +494,7 @@ function validateBookingPayload(payload) {
 // Get available time slots for a specific date (with drive time consideration)
 app.post('/api/availability', availabilityLimiter, async (req, res) => {
   try {
-    const { date, schoolId, sessionDuration, availabilityBlocks } = req.body
+    const { date, schoolId, sessionDuration, availabilityBlocks, slotInterval } = req.body
     if (!isValidDateInput(date)) {
       return res.status(400).json({ error: 'date is required and must be a valid date string' })
     }
@@ -501,6 +503,9 @@ app.post('/api/availability', availabilityLimiter, async (req, res) => {
     }
     if (schoolId !== undefined && schoolId !== null && (typeof schoolId !== 'string' || schoolId.length > 80)) {
       return res.status(400).json({ error: 'schoolId must be a string up to 80 characters' })
+    }
+    if (slotInterval !== undefined && slotInterval !== 0 && !isValidPositiveInteger(slotInterval, 5, 120)) {
+      return res.status(400).json({ error: 'slotInterval must be 0 or an integer between 5 and 120 minutes' })
     }
 
     const selectedDate = new Date(date)
@@ -522,11 +527,11 @@ app.post('/api/availability', availabilityLimiter, async (req, res) => {
       const timeMax = new Date(selectedDate); timeMax.setHours(23, 59, 59, 999)
 
       const events = await fetchEventsForPeriod(timeMin, timeMax)
-      const slots = getAvailableSlotsForDay(selectedDate, blocks, sessionDuration, events, schoolId)
+      const slots = getAvailableSlotsForDay(selectedDate, blocks, sessionDuration, events, schoolId, slotInterval)
       res.json({ slots })
     } else {
       // No calendar — return all potential slots within blocks
-      const slots = getAvailableSlotsForDay(selectedDate, blocks, sessionDuration, [], schoolId)
+      const slots = getAvailableSlotsForDay(selectedDate, blocks, sessionDuration, [], schoolId, slotInterval)
       res.json({ slots })
     }
   } catch (error) {
@@ -538,7 +543,7 @@ app.post('/api/availability', availabilityLimiter, async (req, res) => {
 // Get which days in a month have at least one available slot
 app.post('/api/availability/days', availabilityLimiter, async (req, res) => {
   try {
-    const { year, month, schoolId, sessionDuration, availabilityBlocks } = req.body // month: 0-indexed (JS convention)
+    const { year, month, schoolId, sessionDuration, availabilityBlocks, slotInterval } = req.body // month: 0-indexed (JS convention)
     if (!isValidPositiveInteger(year, 2020, 2100)) {
       return res.status(400).json({ error: 'year must be an integer between 2020 and 2100' })
     }
@@ -550,6 +555,9 @@ app.post('/api/availability/days', availabilityLimiter, async (req, res) => {
     }
     if (schoolId !== undefined && schoolId !== null && (typeof schoolId !== 'string' || schoolId.length > 80)) {
       return res.status(400).json({ error: 'schoolId must be a string up to 80 characters' })
+    }
+    if (slotInterval !== undefined && slotInterval !== 0 && !isValidPositiveInteger(slotInterval, 5, 120)) {
+      return res.status(400).json({ error: 'slotInterval must be 0 or an integer between 5 and 120 minutes' })
     }
 
     // Resolve availability: client-provided blocks take priority (supports config fallbacks),
@@ -591,7 +599,7 @@ app.post('/api/availability/days', availabilityLimiter, async (req, res) => {
           return start.getFullYear() === year && start.getMonth() === month && start.getDate() === d
         })
 
-        const slots = getAvailableSlotsForDay(date, blocks, sessionDuration, dayEvents, schoolId)
+        const slots = getAvailableSlotsForDay(date, blocks, sessionDuration, dayEvents, schoolId, slotInterval)
         if (slots.length > 0) {
           availableDates.push(`${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`)
         }
@@ -841,6 +849,7 @@ function settingsFile() { return path.join(process.env.DATA_DIR || __dirname, 's
 
 const DEFAULT_SETTINGS = {
   googleMeetDuration: 60,
+  googleMeetSlotInterval: 0,
   customLocationDuration: 60,
   themeColor: '#4f46e5',
   businessName: '',
@@ -866,6 +875,7 @@ app.get('/api/config', (req, res) => {
   const settings = getCachedSettings()
   res.json({
     googleMeetDuration: settings.googleMeetDuration,
+    googleMeetSlotInterval: settings.googleMeetSlotInterval,
     customLocationDuration: settings.customLocationDuration,
     themeColor: settings.themeColor,
     businessName: settings.businessName,
@@ -952,6 +962,8 @@ app.put('/api/settings', adminAuth, (req, res) => {
   const updated = { ...current }
   if (typeof req.body.googleMeetDuration === 'number' && req.body.googleMeetDuration > 0)
     updated.googleMeetDuration = req.body.googleMeetDuration
+  if (typeof req.body.googleMeetSlotInterval === 'number' && req.body.googleMeetSlotInterval >= 0)
+    updated.googleMeetSlotInterval = req.body.googleMeetSlotInterval
   if (typeof req.body.customLocationDuration === 'number' && req.body.customLocationDuration > 0)
     updated.customLocationDuration = req.body.customLocationDuration
   if (typeof req.body.themeColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(req.body.themeColor))
