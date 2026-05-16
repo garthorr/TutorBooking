@@ -1,13 +1,6 @@
-import { readFileSync, writeFileSync, existsSync } from 'fs'
-import { join } from 'path'
+import dbService from './services/dbService.js';
 
-function getDataDir() {
-  return process.env.DATA_DIR || join(process.cwd())
-}
-
-function meetingTypesFile() {
-  return join(getDataDir(), 'meeting-types.json')
-}
+const ADMIN_ID = 1;
 
 const DEFAULT_WEEKDAY_AVAILABILITY = {
   0: [],
@@ -19,8 +12,6 @@ const DEFAULT_WEEKDAY_AVAILABILITY = {
   6: []
 }
 
-// Returns the baseline meeting types.
-// googleMeetDuration lets legacy settings.googleMeetDuration seed the default.
 export function getDefaultMeetingTypes(googleMeetDuration = 60) {
   return [
     {
@@ -63,23 +54,11 @@ export function getDefaultMeetingTypes(googleMeetDuration = 60) {
 }
 
 export function loadMeetingTypes(googleMeetDuration = 60) {
-  try {
-    if (!existsSync(meetingTypesFile())) return getDefaultMeetingTypes(googleMeetDuration)
-    const raw = readFileSync(meetingTypesFile(), 'utf8').trim()
-    if (!raw) return getDefaultMeetingTypes(googleMeetDuration)
-    return JSON.parse(raw)
-  } catch (err) {
-    console.error('Error loading meeting types:', err.message)
-    return getDefaultMeetingTypes(googleMeetDuration)
-  }
+  const types = dbService.getMeetingTypes(ADMIN_ID);
+  if (types.length === 0) return getDefaultMeetingTypes(googleMeetDuration);
+  return types;
 }
 
 export function saveMeetingTypes(types) {
-  try {
-    writeFileSync(meetingTypesFile(), JSON.stringify(types, null, 2))
-    return true
-  } catch (err) {
-    console.error('Error saving meeting types:', err.message)
-    return false
-  }
+  return dbService.saveMeetingTypes(ADMIN_ID, types);
 }
