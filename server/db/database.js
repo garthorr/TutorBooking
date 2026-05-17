@@ -16,6 +16,7 @@ if (!existsSync(DATA_DIR)) {
 }
 
 const dbPath = path.join(DATA_DIR, 'database.sqlite');
+console.log(`Connecting to database at: ${dbPath}`);
 const db = new Database(dbPath);
 
 // Enable foreign keys
@@ -32,7 +33,7 @@ export async function initializeDefaultUser() {
 
   if (userCount === 0) {
     console.log('Initializing default admin user...');
-    // $2b$12$cIQGLBLEIgm6yFVWW3jo2eOKN7AlZ80v1AC3PII7FAZWMq06DK1ZK is 'password'
+    // Use hash for 'password' if not set in .env
     const passwordHash = process.env.ADMIN_PASSWORD_HASH || '$2b$12$cIQGLBLEIgm6yFVWW3jo2eOKN7AlZ80v1AC3PII7FAZWMq06DK1ZK';
 
     db.prepare('INSERT INTO users (username, password_hash) VALUES (?, ?)')

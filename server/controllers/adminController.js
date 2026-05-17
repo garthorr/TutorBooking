@@ -35,8 +35,8 @@ export const updateSettings = (req, res) => {
     googleMeetDuration: req.body.googleMeetDuration || current.google_meet_duration,
     customLocationDuration: req.body.customLocationDuration || current.custom_location_duration,
     themeColor: req.body.themeColor || current.theme_color,
-    businessName: (req.body.businessName || current.business_name).trim(),
-    businessDescription: (req.body.businessDescription || current.business_description).trim()
+    businessName: (req.body.businessName || current.business_name || '').trim(),
+    businessDescription: (req.body.businessDescription || current.business_description || '').trim()
   };
   dbService.updateSettings(ADMIN_ID, updated);
   res.json({ success: true, settings: updated });
@@ -61,6 +61,12 @@ export const updateDriveTimes = (req, res) => {
 };
 
 export const getMeetingTypes = (req, res) => {
+  const types = loadMeetingTypes();
+  const enabled = types.filter(t => t.enabled).sort((a, b) => a.order - b.order);
+  res.json(enabled);
+};
+
+export const getAllMeetingTypes = (req, res) => {
   res.json(loadMeetingTypes());
 };
 

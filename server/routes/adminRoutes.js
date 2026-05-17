@@ -8,6 +8,7 @@ import {
   getDriveTimes,
   updateDriveTimes,
   getMeetingTypes,
+  getAllMeetingTypes,
   updateMeetingTypes,
   getCalendarConfig,
   updateCalendarConfig,
@@ -31,7 +32,7 @@ router.put('/settings', adminAuth, updateSettings);
 router.put('/schools', adminAuth, updateSchools);
 router.get('/drivetimes', adminAuth, getDriveTimes);
 router.put('/drivetimes', adminAuth, updateDriveTimes);
-router.get('/meeting-types/all', adminAuth, getMeetingTypes);
+router.get('/meeting-types/all', adminAuth, getAllMeetingTypes);
 router.put('/meeting-types', adminAuth, updateMeetingTypes);
 router.get('/config/calendars', adminAuth, getCalendarConfig);
 router.put('/config/calendars', adminAuth, updateCalendarConfig);
