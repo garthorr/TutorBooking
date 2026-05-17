@@ -198,8 +198,8 @@ docker compose up -d --build
 ```
 
 Open:
-- Booking page: `http://localhost/`
-- Admin page: `http://localhost/admin`
+- Booking page: `http://localhost:5500/`
+- Admin page: `http://localhost:5500/admin`
 
 The Caddyfile is pre-configured for localhost. No changes needed for local development!
 
@@ -385,7 +385,7 @@ All changes take effect immediately on the booking page (no restart needed).
   docker compose stop caddy
   # Or comment out the caddy service entirely
   ```
-- Point Cloudflare Tunnel to `client:80` (internal port, no public exposure needed)
+- Point Cloudflare Tunnel to `client:80` (internal port) or use public port `5500`.
 - Ensure `GOOGLE_REDIRECT_URI` uses your public HTTPS domain (the Cloudflare one)
 - Set `CORS_ORIGINS` to your Cloudflare domain
 - `TRUST_PROXY=1` is still required when behind Cloudflare

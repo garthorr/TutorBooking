@@ -1,64 +1,32 @@
 import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'crypto';
-import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync, statSync } from 'fs';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
+import dbService from './services/dbService.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-// Use DATA_DIR env var for Docker volume support, otherwise store alongside server
-const DATA_DIR = process.env.DATA_DIR || __dirname;
-if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true });
-const TOKEN_FILE = join(DATA_DIR, '.tokens.json');
+const ADMIN_ID = 1;
 const ALGORITHM = 'aes-256-gcm';
-
-// Derive key once at startup — scryptSync is intentionally expensive; calling it
-// per-request would block the event loop on every token read/write.
-const ENCRYPTION_KEY_MATERIAL = process.env.ENCRYPTION_KEY || (() => {
-  console.warn('WARNING: Using default encryption key. Set ENCRYPTION_KEY in .env for production!');
-  return 'default-key-change-in-production';
-})();
+const ENCRYPTION_KEY_MATERIAL = process.env.ENCRYPTION_KEY || 'default-key-change-in-production';
 const DERIVED_KEY = scryptSync(ENCRYPTION_KEY_MATERIAL, 'salt', 32);
 
-// Encrypt data
 function encrypt(text) {
   const iv = randomBytes(16);
   const cipher = createCipheriv(ALGORITHM, DERIVED_KEY, iv);
-
   let encrypted = cipher.update(text, 'utf8', 'hex');
   encrypted += cipher.final('hex');
-
   const authTag = cipher.getAuthTag();
-
-  return {
-    encrypted,
-    iv: iv.toString('hex'),
-    authTag: authTag.toString('hex')
-  };
+  return { encrypted, iv: iv.toString('hex'), authTag: authTag.toString('hex') };
 }
 
-// Decrypt data
 function decrypt(encryptedData) {
-  const decipher = createDecipheriv(
-    ALGORITHM,
-    DERIVED_KEY,
-    Buffer.from(encryptedData.iv, 'hex')
-  );
-
+  const decipher = createDecipheriv(ALGORITHM, DERIVED_KEY, Buffer.from(encryptedData.iv, 'hex'));
   decipher.setAuthTag(Buffer.from(encryptedData.authTag, 'hex'));
-
   let decrypted = decipher.update(encryptedData.encrypted, 'hex', 'utf8');
   decrypted += decipher.final('utf8');
-
   return decrypted;
 }
 
-// Save tokens to encrypted file
 export function saveTokens(tokens) {
   try {
     const encryptedData = encrypt(JSON.stringify(tokens));
-    writeFileSync(TOKEN_FILE, JSON.stringify(encryptedData, null, 2));
-    console.log('Tokens saved successfully');
+    dbService.saveTokens(ADMIN_ID, encryptedData);
     return true;
   } catch (error) {
     console.error('Error saving tokens:', error);
@@ -66,14 +34,10 @@ export function saveTokens(tokens) {
   }
 }
 
-// Load tokens from encrypted file
 export function loadTokens() {
   try {
-    if (!existsSync(TOKEN_FILE)) {
-      return null;
-    }
-
-    const encryptedData = JSON.parse(readFileSync(TOKEN_FILE, 'utf8'));
+    const encryptedData = dbService.getTokens(ADMIN_ID);
+    if (!encryptedData) return null;
     const decrypted = decrypt(encryptedData);
     return JSON.parse(decrypted);
   } catch (error) {
@@ -82,60 +46,34 @@ export function loadTokens() {
   }
 }
 
-// Delete tokens
 export function deleteTokens() {
-  try {
-    if (existsSync(TOKEN_FILE)) {
-      unlinkSync(TOKEN_FILE);
-      console.log('Tokens deleted successfully');
-    }
-    return true;
-  } catch (error) {
-    console.error('Error deleting tokens:', error);
-    return false;
-  }
+  dbService.deleteTokens(ADMIN_ID);
+  return true;
 }
 
-// Check if tokens exist
 export function hasTokens() {
-  if (!existsSync(TOKEN_FILE)) return false;
-  const content = readFileSync(TOKEN_FILE, 'utf8').trim();
-  return content !== '';
+  return !!dbService.getTokens(ADMIN_ID);
 }
 
-// Return diagnostic info about token storage (no secrets exposed)
 export function getTokenInfo() {
   const info = {
-    tokenFilePath: TOKEN_FILE,
-    dataDir: DATA_DIR,
-    fileExists: existsSync(TOKEN_FILE),
+    storage: 'sqlite',
+    adminId: ADMIN_ID,
     hasTokens: false,
     hasRefreshToken: false,
-    tokenExpiry: null,
-    writeable: false,
+    tokenExpiry: null
   };
 
-  // Check if data dir is writeable
-  try {
-    statSync(DATA_DIR);
-    info.writeable = true;
-  } catch {}
-
-  if (info.fileExists) {
+  const encryptedData = dbService.getTokens(ADMIN_ID);
+  if (encryptedData) {
+    info.hasTokens = true;
     try {
-      const content = readFileSync(TOKEN_FILE, 'utf8').trim();
-      info.hasTokens = content !== '';
-      if (info.hasTokens) {
-        const tokens = JSON.parse(decrypt(JSON.parse(content)));
-        info.hasRefreshToken = !!tokens.refresh_token;
-        info.tokenExpiry = tokens.expiry_date
-          ? new Date(tokens.expiry_date).toISOString()
-          : null;
-      }
+      const tokens = JSON.parse(decrypt(encryptedData));
+      info.hasRefreshToken = !!tokens.refresh_token;
+      info.tokenExpiry = tokens.expiry_date ? new Date(tokens.expiry_date).toISOString() : null;
     } catch (e) {
       info.readError = e.message;
     }
   }
-
   return info;
 }
