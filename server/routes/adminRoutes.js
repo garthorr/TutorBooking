@@ -16,6 +16,7 @@ import {
   updateLogo,
   deleteLogo
 } from '../controllers/adminController.js';
+import { changePassword } from '../controllers/authController.js';
 import { adminAuth } from './authRoutes.js';
 
 const router = express.Router();
@@ -38,5 +39,8 @@ router.get('/config/calendars', adminAuth, getCalendarConfig);
 router.put('/config/calendars', adminAuth, updateCalendarConfig);
 router.put('/logo', adminAuth, updateLogo);
 router.delete('/logo', adminAuth, deleteLogo);
+
+// Compatibility route for change-password
+router.post('/admin/change-password', adminAuth, changePassword);
 
 export default router;
