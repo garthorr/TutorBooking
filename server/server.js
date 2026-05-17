@@ -17,6 +17,12 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Request logger
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  next();
+});
+
 // Initialize Database
 initializeDefaultUser().then(() => {
   console.log('✓ Database initialized');
@@ -64,6 +70,7 @@ app.use(cors({
     if (origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1')) {
       return callback(null, true);
     }
+    console.warn(`[CORS] Blocked origin: ${origin}`);
     return callback(new Error('CORS origin not allowed'));
   },
   credentials: true
