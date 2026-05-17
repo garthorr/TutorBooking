@@ -58,3 +58,4 @@ server/settings.json
 server/logo.json
 server/bookings.json
 server/admin-password.json
+server/data/database.sqlite

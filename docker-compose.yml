@@ -32,8 +32,8 @@ services:
       dockerfile: Dockerfile
     container_name: tutor-booking-client
     restart: unless-stopped
-    expose:
-      - "80"
+    ports:
+      - "5500:80"
     depends_on:
       - server
     networks:
