@@ -55,7 +55,7 @@ function TimeBlock({ block, onChange, onRemove }) {
   )
 }
 
-export default function SchoolForm({ initial, onSave, onCancel, mapsApiKey }) {
+export default function SchoolForm({ initial, onSave, onCancel, mapsApiKey, mapsLoaded }) {
   const [school, setSchool] = useState(initial ? { ...initial } : emptySchool())
   const [addressVerified, setAddressVerified] = useState(false)
   const [verifying, setVerifying] = useState(false)
@@ -79,6 +79,7 @@ export default function SchoolForm({ initial, onSave, onCancel, mapsApiKey }) {
     const listener = autocomplete.addListener('place_changed', () => {
       const place = autocomplete.getPlace()
       if (place.formatted_address) {
+        if (addressRef.current) addressRef.current.value = place.formatted_address
         setSchool(s => ({ ...s, address: place.formatted_address }))
         setAddressVerified(true)
         setVerifyError('')
@@ -92,7 +93,7 @@ export default function SchoolForm({ initial, onSave, onCancel, mapsApiKey }) {
       }
       autocompleteRef.current = null
     }
-  }, [mapsApiKey])  // Only re-run when mapsApiKey changes, not on every render
+  }, [mapsApiKey, mapsLoaded])
 
   const handleVerifyAddress = async () => {
     if (!school.address.trim()) {
@@ -108,6 +109,7 @@ export default function SchoolForm({ initial, onSave, onCancel, mapsApiKey }) {
       const data = await res.json()
       if (data.status === 'OK' && data.results.length > 0) {
         const formatted = data.results[0].formatted_address
+        if (addressRef.current) addressRef.current.value = formatted
         setSchool(s => ({ ...s, address: formatted }))
         setAddressVerified(true)
         setVerifyError('')
@@ -205,10 +207,11 @@ export default function SchoolForm({ initial, onSave, onCancel, mapsApiKey }) {
           <input
             ref={addressRef}
             type="text"
-            value={school.address}
+            defaultValue={school.address}
             onChange={e => { setSchool(s => ({ ...s, address: e.target.value })); setAddressVerified(false) }}
             placeholder="Start typing an address…"
             className={addressVerified ? 'input-verified' : ''}
+            autoComplete="off"
           />
           {mapsApiKey && !window.google?.maps?.places && (
             <button type="button" className="verify-btn" onClick={handleVerifyAddress} disabled={verifying}>

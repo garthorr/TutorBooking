@@ -19,7 +19,7 @@ function formatSchedule(availability) {
   return active.length ? active.join(' | ') : 'No availability set'
 }
 
-export default function SchoolsManager({ mapsApiKey }) {
+export default function SchoolsManager({ mapsApiKey, mapsLoaded }) {
   const [schools, setSchools] = useState([])
   const [driveTimes, setDriveTimes] = useState({})
   const [editing, setEditing] = useState(null)  // null | 'new' | school object
@@ -161,6 +161,7 @@ export default function SchoolsManager({ mapsApiKey }) {
           onSave={handleSchoolSave}
           onCancel={() => setEditing(null)}
           mapsApiKey={mapsApiKey}
+          mapsLoaded={mapsLoaded}
         />
       </div>
     )

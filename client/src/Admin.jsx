@@ -519,7 +519,7 @@ function Admin() {
         {/* Schools Tab */}
         {tab === 'schools' && (
           <div className="tab-content">
-            <SchoolsManager mapsApiKey={mapsApiKey} />
+            <SchoolsManager mapsApiKey={mapsApiKey} mapsLoaded={mapsLoaded} />
           </div>
         )}
 
