@@ -109,7 +109,12 @@ export const googleOAuthCallback = async (req, res) => {
 };
 
 export const getOAuthStatus = (req, res) => {
-  res.json(getTokenInfo());
+  const info = getTokenInfo();
+  res.json({
+    ...info,
+    configured: !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET),
+    connected: info.hasTokens && info.hasRefreshToken
+  });
 };
 
 export const disconnectGoogleCalendar = (req, res) => {
