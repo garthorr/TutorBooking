@@ -6,6 +6,7 @@ import {
   initiateGoogleOAuth,
   googleOAuthCallback,
   getOAuthStatus,
+  testCalendarConnection,
   disconnectGoogleCalendar
 } from '../controllers/authController.js';
 import jwt from 'jsonwebtoken';
@@ -32,6 +33,7 @@ router.get('/admin/verify', adminAuth, verifyAdmin);
 router.get('/google', initiateGoogleOAuth);
 router.get('/google/callback', googleOAuthCallback);
 router.get('/status', adminAuth, getOAuthStatus);
+router.get('/test', adminAuth, testCalendarConnection);
 router.post('/disconnect', adminAuth, disconnectGoogleCalendar);
 
 export default router;

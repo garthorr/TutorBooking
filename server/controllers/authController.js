@@ -1,7 +1,7 @@
 import jwt from 'jsonwebtoken';
 import passwordStore from '../passwordStore.js';
 import { google } from 'googleapis';
-import { saveTokens, deleteTokens, getTokenInfo } from '../tokenStorage.js';
+import { saveTokens, deleteTokens, getTokenInfo, loadTokens } from '../tokenStorage.js';
 import { randomBytes } from 'crypto';
 
 const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
@@ -115,6 +115,26 @@ export const getOAuthStatus = (req, res) => {
     configured: !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET),
     connected: info.hasTokens && info.hasRefreshToken
   });
+};
+
+export const testCalendarConnection = async (req, res) => {
+  if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+    return res.json({ success: false, error: 'GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET not set in environment' });
+  }
+  const tokens = loadTokens();
+  if (!tokens) {
+    return res.json({ success: false, error: 'No stored tokens — connect Google Calendar first' });
+  }
+  try {
+    const oauth2Client = getOAuthClient();
+    oauth2Client.setCredentials(tokens);
+    const cal = google.calendar({ version: 'v3', auth: oauth2Client });
+    const { data } = await cal.calendarList.list({ maxResults: 1 });
+    const primary = data.items?.find(c => c.primary)?.summary || data.items?.[0]?.summary || 'unknown';
+    res.json({ success: true, message: 'Connected to Google Calendar API.', primaryCalendar: primary });
+  } catch (err) {
+    res.json({ success: false, error: err.message, code: err.code?.toString() });
+  }
 };
 
 export const disconnectGoogleCalendar = (req, res) => {
