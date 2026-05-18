@@ -60,38 +60,61 @@ export default function SchoolForm({ initial, onSave, onCancel, mapsApiKey, maps
   const [addressVerified, setAddressVerified] = useState(false)
   const [verifying, setVerifying] = useState(false)
   const [verifyError, setVerifyError] = useState('')
-  const [copyMenuDay, setCopyMenuDay] = useState(null) // which day's copy menu is open
-  const [copyTargets, setCopyTargets] = useState([])   // days to copy TO
-  const addressRef = useRef(null)
-  const autocompleteRef = useRef(null)
+  const [copyMenuDay, setCopyMenuDay] = useState(null)
+  const [copyTargets, setCopyTargets] = useState([])
+  const [usePlaceElement, setUsePlaceElement] = useState(false)
+  const containerRef = useRef(null)
 
-  // Load Google Maps Places Autocomplete if key is available
+  // Initialise PlaceAutocompleteElement (new Places API, replaces deprecated Autocomplete)
   useEffect(() => {
-    if (!mapsApiKey || !addressRef.current) return
-    if (!window.google?.maps?.places) return
+    if (!mapsApiKey || !containerRef.current) return
+    if (!window.google?.maps?.places?.PlaceAutocompleteElement) return
 
-    const input = addressRef.current
-    const autocomplete = new window.google.maps.places.Autocomplete(input, {
-      types: ['address'],
+    let element
+    try {
+      element = new window.google.maps.places.PlaceAutocompleteElement({ types: ['address'] })
+    } catch (e) {
+      console.warn('PlaceAutocompleteElement failed to initialise:', e.message)
+      return
+    }
+
+    containerRef.current.appendChild(element)
+    setUsePlaceElement(true)
+
+    // Pre-populate existing address when editing a school
+    requestAnimationFrame(() => {
+      const internal = element.querySelector('input') ?? element.shadowRoot?.querySelector('input')
+      if (internal && school.address) internal.value = school.address
     })
-    autocompleteRef.current = autocomplete
 
-    const listener = autocomplete.addListener('place_changed', () => {
-      const place = autocomplete.getPlace()
-      if (place.formatted_address) {
-        if (addressRef.current) addressRef.current.value = place.formatted_address
-        setSchool(s => ({ ...s, address: place.formatted_address }))
-        setAddressVerified(true)
-        setVerifyError('')
+    const handlePlaceSelect = async (event) => {
+      try {
+        await event.place.fetchFields({ fields: ['formattedAddress'] })
+        const addr = event.place.formattedAddress
+        if (addr) {
+          setSchool(s => ({ ...s, address: addr }))
+          setAddressVerified(true)
+          setVerifyError('')
+        }
+      } catch (e) {
+        console.warn('fetchFields failed:', e.message)
       }
-    })
+    }
 
-    // Cleanup function to remove event listeners when component unmounts
+    const handleInput = (event) => {
+      const value = (event.composedPath?.()[0] ?? event.target)?.value ?? ''
+      setSchool(s => ({ ...s, address: value }))
+      setAddressVerified(false)
+    }
+
+    element.addEventListener('gmp-placeselect', handlePlaceSelect)
+    element.addEventListener('input', handleInput)
+
     return () => {
-      if (window.google?.maps?.event && listener) {
-        window.google.maps.event.removeListener(listener)
-      }
-      autocompleteRef.current = null
+      element.removeEventListener('gmp-placeselect', handlePlaceSelect)
+      element.removeEventListener('input', handleInput)
+      element.remove()
+      setUsePlaceElement(false)
     }
   }, [mapsApiKey, mapsLoaded])
 
@@ -109,7 +132,6 @@ export default function SchoolForm({ initial, onSave, onCancel, mapsApiKey, maps
       const data = await res.json()
       if (data.status === 'OK' && data.results.length > 0) {
         const formatted = data.results[0].formatted_address
-        if (addressRef.current) addressRef.current.value = formatted
         setSchool(s => ({ ...s, address: formatted }))
         setAddressVerified(true)
         setVerifyError('')
@@ -204,16 +226,22 @@ export default function SchoolForm({ initial, onSave, onCancel, mapsApiKey, maps
       <div className="form-group">
         <label>Address *</label>
         <div className="address-row">
-          <input
-            ref={addressRef}
-            type="text"
-            defaultValue={school.address}
-            onChange={e => { setSchool(s => ({ ...s, address: e.target.value })); setAddressVerified(false) }}
-            placeholder="Start typing an address…"
-            className={addressVerified ? 'input-verified' : ''}
-            autoComplete="off"
+          {/* PlaceAutocompleteElement mounts here when the new Places API is available */}
+          <div
+            ref={containerRef}
+            className={`place-autocomplete-container${usePlaceElement ? '' : ' hidden'}${addressVerified ? ' input-verified' : ''}`}
           />
-          {mapsApiKey && !window.google?.maps?.places && (
+          {!usePlaceElement && (
+            <input
+              type="text"
+              defaultValue={school.address}
+              onChange={e => { setSchool(s => ({ ...s, address: e.target.value })); setAddressVerified(false) }}
+              placeholder="Start typing an address…"
+              className={addressVerified ? 'input-verified' : ''}
+              autoComplete="off"
+            />
+          )}
+          {mapsApiKey && !usePlaceElement && (
             <button type="button" className="verify-btn" onClick={handleVerifyAddress} disabled={verifying}>
               {verifying ? 'Checking…' : 'Verify'}
             </button>

@@ -349,6 +349,42 @@
 
 .address-row input { flex: 1; }
 
+/* PlaceAutocompleteElement (new Google Maps Places API) */
+.place-autocomplete-container {
+  flex: 1;
+}
+
+.place-autocomplete-container.hidden {
+  display: none;
+}
+
+gmp-placeautocomplete {
+  display: block;
+  width: 100%;
+}
+
+gmp-placeautocomplete::part(input) {
+  width: 100%;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  font-family: inherit;
+  box-sizing: border-box;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+gmp-placeautocomplete::part(input):focus {
+  border-color: var(--primary-color, #4f46e5);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary-color, #4f46e5) 15%, transparent);
+}
+
+.place-autocomplete-container.input-verified gmp-placeautocomplete::part(input) {
+  border-color: #10b981;
+  background-color: #f0fdf4;
+}
+
 .verify-btn {
   padding: 0.6rem 1rem;
   background: #f3f4f6;
