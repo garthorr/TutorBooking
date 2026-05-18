@@ -71,9 +71,15 @@ export default function SchoolForm({ initial, onSave, onCancel, mapsApiKey, maps
     if (!window.google?.maps?.places) return
 
     const input = addressRef.current
-    const autocomplete = new window.google.maps.places.Autocomplete(input, {
-      types: ['address'],
-    })
+    let autocomplete
+    try {
+      autocomplete = new window.google.maps.places.Autocomplete(input, {
+        types: ['address'],
+      })
+    } catch (e) {
+      console.warn('Google Places Autocomplete failed to initialize:', e.message)
+      return
+    }
     autocompleteRef.current = autocomplete
 
     const listener = autocomplete.addListener('place_changed', () => {
@@ -86,7 +92,6 @@ export default function SchoolForm({ initial, onSave, onCancel, mapsApiKey, maps
       }
     })
 
-    // Cleanup function to remove event listeners when component unmounts
     return () => {
       if (window.google?.maps?.event && listener) {
         window.google.maps.event.removeListener(listener)
