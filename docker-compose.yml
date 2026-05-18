@@ -41,11 +41,19 @@ services:
       - traefik
     labels:
       - "traefik.enable=true"
+      - "traefik.docker.network=traefik"
+      # HTTPS router
       - "traefik.http.routers.tutorbooking.rule=Host(`tutorbooking.oracle.tastymath.com`)"
       - "traefik.http.routers.tutorbooking.entrypoints=websecure"
       - "traefik.http.routers.tutorbooking.tls=true"
+      - "traefik.http.routers.tutorbooking.tls.certresolver=letsencrypt"
       - "traefik.http.services.tutorbooking.loadbalancer.server.port=80"
-      - "traefik.docker.network=traefik"
+      # HTTP router → redirect to HTTPS
+      - "traefik.http.routers.tutorbooking-http.rule=Host(`tutorbooking.oracle.tastymath.com`)"
+      - "traefik.http.routers.tutorbooking-http.entrypoints=web"
+      - "traefik.http.routers.tutorbooking-http.middlewares=tutorbooking-https-redirect"
+      - "traefik.http.middlewares.tutorbooking-https-redirect.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.tutorbooking-https-redirect.redirectscheme.permanent=true"
     mem_limit: 150m
     mem_reservation: 100m
     healthcheck:
