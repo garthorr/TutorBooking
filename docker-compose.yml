@@ -42,6 +42,12 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=traefik"
+      # HTTP router (redirects to HTTPS)
+      - "traefik.http.routers.tutorbooking-http.rule=Host(`tutorbooking.oracle.tastymath.com`)"
+      - "traefik.http.routers.tutorbooking-http.entrypoints=web"
+      - "traefik.http.routers.tutorbooking-http.middlewares=redirect-to-https"
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.permanent=true"
       # HTTPS router
       - "traefik.http.routers.tutorbooking.rule=Host(`tutorbooking.oracle.tastymath.com`)"
       - "traefik.http.routers.tutorbooking.entrypoints=websecure"
