@@ -60,12 +60,20 @@ class DBService {
 
   saveSchools(userId, schools) {
     const deleteStmt = db.prepare('DELETE FROM schools WHERE user_id = ?');
-    const insertStmt = db.prepare('INSERT INTO schools (id, user_id, name, address, availability) VALUES (?, ?, ?, ?, ?)');
+    const insertStmt = db.prepare('INSERT INTO schools (id, user_id, name, address, availability, session_duration, logo_url) VALUES (?, ?, ?, ?, ?, ?, ?)');
 
     const transaction = db.transaction((schools) => {
       deleteStmt.run(userId);
       for (const school of schools) {
-        insertStmt.run(school.id, userId, school.name, school.address, JSON.stringify(school.availability));
+        insertStmt.run(
+          school.id,
+          userId,
+          school.name,
+          school.address,
+          JSON.stringify(school.availability),
+          school.sessionDuration || 60,
+          school.logoUrl || null
+        );
       }
     });
 

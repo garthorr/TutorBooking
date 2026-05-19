@@ -82,10 +82,15 @@ export default function SchoolForm({ initial, onSave, onCancel, mapsApiKey, maps
     setUsePlaceElement(true)
 
     // Pre-populate existing address when editing a school
-    requestAnimationFrame(() => {
+    const syncInternalValue = () => {
       const internal = element.querySelector('input') ?? element.shadowRoot?.querySelector('input')
-      if (internal && school.address) internal.value = school.address
-    })
+      if (internal && school.address && !internal.value) {
+        internal.value = school.address
+      }
+    }
+
+    requestAnimationFrame(syncInternalValue)
+    const timeoutId = setTimeout(syncInternalValue, 500)
 
     const handlePlaceSelect = async (event) => {
       try {
@@ -102,7 +107,8 @@ export default function SchoolForm({ initial, onSave, onCancel, mapsApiKey, maps
     }
 
     const handleInput = (event) => {
-      const value = (event.composedPath?.()[0] ?? event.target)?.value ?? ''
+      // Use event.target.value for web components if available, or dig into shadow DOM
+      const value = event.target.value ?? (element.querySelector('input') ?? element.shadowRoot?.querySelector('input'))?.value ?? ''
       setSchool(s => ({ ...s, address: value }))
       setAddressVerified(false)
     }
@@ -111,6 +117,7 @@ export default function SchoolForm({ initial, onSave, onCancel, mapsApiKey, maps
     element.addEventListener('input', handleInput)
 
     return () => {
+      clearTimeout(timeoutId)
       element.removeEventListener('gmp-placeselect', handlePlaceSelect)
       element.removeEventListener('input', handleInput)
       element.remove()
