@@ -96,7 +96,7 @@ export default function SchoolForm({ initial, onSave, onCancel, mapsApiKey, maps
     const timeoutId2 = setTimeout(syncInternalValue, 2000)
 
     const handlePlaceSelect = async (event) => {
-      // Immediately pull the value from the element
+      // Immediately pull the value from the element's value property
       const currentVal = element.value
       if (currentVal) {
         setSchool(s => ({ ...s, address: currentVal }))
@@ -108,6 +108,8 @@ export default function SchoolForm({ initial, onSave, onCancel, mapsApiKey, maps
         await event.place.fetchFields({ fields: ['formattedAddress'] })
         const addr = event.place.formattedAddress
         if (addr) {
+          // Explicitly update the element's value property so the UI matches
+          element.value = addr
           setSchool(s => ({ ...s, address: addr }))
           setAddressVerified(true)
           setVerifyError('')
@@ -118,9 +120,13 @@ export default function SchoolForm({ initial, onSave, onCancel, mapsApiKey, maps
     }
 
     const handleInput = (event) => {
-      const value = event.target.value ?? ''
-      setSchool(s => ({ ...s, address: value }))
-      setAddressVerified(false)
+      // Only reset verification if the input was actually typed by the user
+      // and isn't just a side-effect of programmatic value setting
+      if (event.isTrusted) {
+        const value = event.target.value ?? ''
+        setSchool(s => ({ ...s, address: value }))
+        setAddressVerified(false)
+      }
     }
 
     element.addEventListener('gmp-placeselect', handlePlaceSelect)
