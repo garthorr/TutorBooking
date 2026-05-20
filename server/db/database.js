@@ -25,6 +25,20 @@ db.pragma('foreign_keys = ON');
 // Initialize schema
 db.exec(schema);
 
+// Migration: Add session_duration and logo_url to schools if they don't exist
+const tableInfo = db.prepare("PRAGMA table_info(schools)").all();
+const columns = tableInfo.map(c => c.name);
+
+if (!columns.includes('session_duration')) {
+  console.log('Adding session_duration column to schools table...');
+  db.prepare('ALTER TABLE schools ADD COLUMN session_duration INTEGER DEFAULT 60').run();
+}
+
+if (!columns.includes('logo_url')) {
+  console.log('Adding logo_url column to schools table...');
+  db.prepare('ALTER TABLE schools ADD COLUMN logo_url TEXT').run();
+}
+
 /**
  * Initialize a default admin user if no users exist
  */

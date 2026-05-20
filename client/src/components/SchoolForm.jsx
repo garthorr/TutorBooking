@@ -64,6 +64,7 @@ export default function SchoolForm({ initial, onSave, onCancel, mapsApiKey, maps
   const [copyTargets, setCopyTargets] = useState([])
   const [usePlaceElement, setUsePlaceElement] = useState(false)
   const containerRef = useRef(null)
+  const autocompleteRef = useRef(null)
 
   // Initialise PlaceAutocompleteElement (new Places API, replaces deprecated Autocomplete)
   useEffect(() => {
@@ -79,20 +80,30 @@ export default function SchoolForm({ initial, onSave, onCancel, mapsApiKey, maps
     }
 
     containerRef.current.appendChild(element)
+    autocompleteRef.current = element
     setUsePlaceElement(true)
 
     // Pre-populate existing address when editing a school
     const syncInternalValue = () => {
-      const internal = element.querySelector('input') ?? element.shadowRoot?.querySelector('input')
-      if (internal && school.address && !internal.value) {
-        internal.value = school.address
+      if (element && school.address && !element.value) {
+        element.value = school.address
       }
     }
 
+    // Try a few times as the internal input might take a moment to be ready
     requestAnimationFrame(syncInternalValue)
     const timeoutId = setTimeout(syncInternalValue, 500)
+    const timeoutId2 = setTimeout(syncInternalValue, 2000)
 
     const handlePlaceSelect = async (event) => {
+      // Immediately pull the value from the element
+      const currentVal = element.value
+      if (currentVal) {
+        setSchool(s => ({ ...s, address: currentVal }))
+        setAddressVerified(true)
+        setVerifyError('')
+      }
+
       try {
         await event.place.fetchFields({ fields: ['formattedAddress'] })
         const addr = event.place.formattedAddress
@@ -107,8 +118,7 @@ export default function SchoolForm({ initial, onSave, onCancel, mapsApiKey, maps
     }
 
     const handleInput = (event) => {
-      // Use event.target.value for web components if available, or dig into shadow DOM
-      const value = event.target.value ?? (element.querySelector('input') ?? element.shadowRoot?.querySelector('input'))?.value ?? ''
+      const value = event.target.value ?? ''
       setSchool(s => ({ ...s, address: value }))
       setAddressVerified(false)
     }
@@ -118,9 +128,11 @@ export default function SchoolForm({ initial, onSave, onCancel, mapsApiKey, maps
 
     return () => {
       clearTimeout(timeoutId)
+      clearTimeout(timeoutId2)
       element.removeEventListener('gmp-placeselect', handlePlaceSelect)
       element.removeEventListener('input', handleInput)
       element.remove()
+      autocompleteRef.current = null
       setUsePlaceElement(false)
     }
   }, [mapsApiKey, mapsLoaded])
@@ -210,9 +222,18 @@ export default function SchoolForm({ initial, onSave, onCancel, mapsApiKey, maps
 
   const handleSave = () => {
     if (!school.name.trim()) { alert('School name is required'); return }
-    if (!school.address.trim()) { alert('Address is required'); return }
+
+    // Final check for address from the autocomplete element if it exists
+    let finalAddress = school.address
+    if (usePlaceElement && autocompleteRef.current) {
+      finalAddress = autocompleteRef.current.value || finalAddress
+    }
+
+    if (!finalAddress.trim()) { alert('Address is required'); return }
+
     const finalSchool = {
       ...school,
+      address: finalAddress.trim(),
       id: school.id || generateId(school.name),
     }
     onSave(finalSchool)
