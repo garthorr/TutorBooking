@@ -65,6 +65,7 @@ export default function SchoolForm({ initial, onSave, onCancel, mapsApiKey, maps
   const [usePlaceElement, setUsePlaceElement] = useState(false)
   const containerRef = useRef(null)
   const autocompleteRef = useRef(null)
+  const selectingPlaceRef = useRef(false)
 
   // Initialise PlaceAutocompleteElement (new Places API, replaces deprecated Autocomplete)
   useEffect(() => {
@@ -96,32 +97,35 @@ export default function SchoolForm({ initial, onSave, onCancel, mapsApiKey, maps
     const timeoutId2 = setTimeout(syncInternalValue, 2000)
 
     const handlePlaceSelect = async (event) => {
-      // Immediately pull the value from the element's value property
-      const currentVal = element.value
-      if (currentVal) {
-        setSchool(s => ({ ...s, address: currentVal }))
-        setAddressVerified(true)
-        setVerifyError('')
-      }
-
+      selectingPlaceRef.current = true
       try {
         await event.place.fetchFields({ fields: ['formattedAddress'] })
         const addr = event.place.formattedAddress
         if (addr) {
-          // Explicitly update the element's value property so the UI matches
           element.value = addr
           setSchool(s => ({ ...s, address: addr }))
           setAddressVerified(true)
           setVerifyError('')
+          return
         }
+        setVerifyError('Could not retrieve formatted address. Please try again.')
+        setAddressVerified(false)
       } catch (e) {
         console.warn('fetchFields failed:', e.message)
+        setVerifyError('Could not retrieve formatted address. Please try again.')
+        setAddressVerified(false)
+      } finally {
+        // Give the autocomplete element a moment to settle any trailing
+        // input events triggered by the selection before re-enabling typing sync.
+        setTimeout(() => { selectingPlaceRef.current = false }, 150)
       }
     }
 
     const handleInput = (event) => {
-      // Only reset verification if the input was actually typed by the user
-      // and isn't just a side-effect of programmatic value setting
+      // Ignore input events fired as a side-effect of selecting a place from
+      // the dropdown; otherwise the partial typed text would overwrite the
+      // formatted address resolved via fetchFields.
+      if (selectingPlaceRef.current) return
       if (event.isTrusted) {
         const value = event.target.value ?? ''
         setSchool(s => ({ ...s, address: value }))
@@ -229,10 +233,12 @@ export default function SchoolForm({ initial, onSave, onCancel, mapsApiKey, maps
   const handleSave = () => {
     if (!school.name.trim()) { alert('School name is required'); return }
 
-    // Final check for address from the autocomplete element if it exists
+    // State is the source of truth — it holds the formatted address resolved
+    // via fetchFields. Only fall back to the element's raw value if state is
+    // empty (e.g. user typed something but never selected a suggestion).
     let finalAddress = school.address
-    if (usePlaceElement && autocompleteRef.current) {
-      finalAddress = autocompleteRef.current.value || finalAddress
+    if (!finalAddress && usePlaceElement && autocompleteRef.current) {
+      finalAddress = autocompleteRef.current.value || ''
     }
 
     if (!finalAddress.trim()) { alert('Address is required'); return }
@@ -259,6 +265,9 @@ export default function SchoolForm({ initial, onSave, onCancel, mapsApiKey, maps
 
       <div className="form-group">
         <label>Address *</label>
+        {usePlaceElement && school.address && (
+          <p className="field-hint current-address">Current: {school.address}</p>
+        )}
         <div className="address-row">
           {/* PlaceAutocompleteElement mounts here when the new Places API is available */}
           <div
