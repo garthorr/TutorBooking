@@ -12,6 +12,8 @@ CREATE TABLE IF NOT EXISTS schools (
   name TEXT NOT NULL,
   address TEXT NOT NULL,
   availability TEXT NOT NULL, -- JSON string
+  session_duration INTEGER DEFAULT 60,
+  logo_url TEXT,
   FOREIGN KEY (user_id) REFERENCES users (id)
 );
 

@@ -6,7 +6,9 @@ export function loadSchools() {
   const schools = dbService.getSchools(ADMIN_ID);
   return schools.map(s => ({
     ...s,
-    availability: JSON.parse(s.availability)
+    availability: JSON.parse(s.availability),
+    sessionDuration: s.session_duration,
+    logoUrl: s.logo_url
   }));
 }
 
