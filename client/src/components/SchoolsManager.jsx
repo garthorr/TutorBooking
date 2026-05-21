@@ -157,6 +157,7 @@ export default function SchoolsManager({ mapsApiKey, mapsLoaded }) {
       <div>
         <h3>{editing === 'new' ? 'Add School' : `Edit: ${editing.name}`}</h3>
         <SchoolForm
+          key={editing === 'new' ? 'new' : editing.id}
           initial={editing === 'new' ? null : editing}
           onSave={handleSchoolSave}
           onCancel={() => setEditing(null)}

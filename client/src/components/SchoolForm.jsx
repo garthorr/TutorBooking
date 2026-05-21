@@ -59,12 +59,14 @@ export default function SchoolForm({ initial, onSave, onCancel, mapsApiKey, maps
   const [school, setSchool] = useState(initial ? { ...initial } : emptySchool())
   const [addressVerified, setAddressVerified] = useState(false)
   const [verifying, setVerifying] = useState(false)
+  const [verifyingAutocomplete, setVerifyingAutocomplete] = useState(false)
   const [verifyError, setVerifyError] = useState('')
   const [copyMenuDay, setCopyMenuDay] = useState(null)
   const [copyTargets, setCopyTargets] = useState([])
   const [usePlaceElement, setUsePlaceElement] = useState(false)
   const containerRef = useRef(null)
   const autocompleteRef = useRef(null)
+  const currentAddressRef = useRef(initial?.address || '')
 
   // Initialise PlaceAutocompleteElement (new Places API, replaces deprecated Autocomplete)
   useEffect(() => {
@@ -85,46 +87,60 @@ export default function SchoolForm({ initial, onSave, onCancel, mapsApiKey, maps
 
     // Pre-populate existing address when editing a school
     const syncInternalValue = () => {
-      if (element && school.address && !element.value) {
-        element.value = school.address
+      if (!element || !initial?.address) return
+
+      // If the user has already typed something different, don't overwrite it
+      if (currentAddressRef.current !== initial.address) return
+
+      element.value = initial.address
+      const internal = element.querySelector('input') ?? element.shadowRoot?.querySelector('input')
+      if (internal) {
+        internal.value = initial.address
       }
     }
 
-    // Try a few times as the internal input might take a moment to be ready
-    requestAnimationFrame(syncInternalValue)
-    const timeoutId = setTimeout(syncInternalValue, 500)
-    const timeoutId2 = setTimeout(syncInternalValue, 2000)
+    // Try multiple times as the internal input takes time to mount in shadow DOM
+    // and Google's script might overwrite it initially
+    const timeouts = [0, 100, 500, 1000, 2000, 5000].map(ms => setTimeout(syncInternalValue, ms))
 
     const handlePlaceSelect = async (event) => {
-      // Immediately pull the value from the element's value property
-      const currentVal = element.value
-      if (currentVal) {
-        setSchool(s => ({ ...s, address: currentVal }))
+      setVerifyingAutocomplete(true)
+      const addr = event.place?.formattedAddress || event.place?.name || element.value
+      if (addr) {
+        currentAddressRef.current = addr
+        setSchool(s => ({ ...s, address: addr }))
         setAddressVerified(true)
         setVerifyError('')
       }
 
       try {
         await event.place.fetchFields({ fields: ['formattedAddress'] })
-        const addr = event.place.formattedAddress
-        if (addr) {
-          // Explicitly update the element's value property so the UI matches
-          element.value = addr
-          setSchool(s => ({ ...s, address: addr }))
+        const formatted = event.place.formattedAddress
+        if (formatted) {
+          element.value = formatted
+          const internal = element.querySelector('input') ?? element.shadowRoot?.querySelector('input')
+          if (internal) internal.value = formatted
+
+          currentAddressRef.current = formatted
+          setSchool(s => ({ ...s, address: formatted }))
           setAddressVerified(true)
-          setVerifyError('')
         }
       } catch (e) {
-        console.warn('fetchFields failed:', e.message)
+        console.warn('fetchFields error:', e)
+      } finally {
+        setVerifyingAutocomplete(false)
       }
     }
 
     const handleInput = (event) => {
-      // Only reset verification if the input was actually typed by the user
-      // and isn't just a side-effect of programmatic value setting
+      const internal = element.querySelector('input') ?? element.shadowRoot?.querySelector('input')
+      const val = (event.target.value ?? internal?.value ?? '').trim()
+
+      currentAddressRef.current = val
+      setSchool(s => ({ ...s, address: val }))
+
+      // If it's a real user typing, reset verified status
       if (event.isTrusted) {
-        const value = event.target.value ?? ''
-        setSchool(s => ({ ...s, address: value }))
         setAddressVerified(false)
       }
     }
@@ -132,16 +148,28 @@ export default function SchoolForm({ initial, onSave, onCancel, mapsApiKey, maps
     element.addEventListener('gmp-placeselect', handlePlaceSelect)
     element.addEventListener('input', handleInput)
 
+    // Polling sync as a failsafe for the web component state
+    const intervalId = setInterval(() => {
+      if (!element) return
+      const internal = element.querySelector('input') ?? element.shadowRoot?.querySelector('input')
+      const domValue = (internal?.value ?? element.value ?? '').trim()
+
+      if (domValue && domValue !== currentAddressRef.current) {
+        currentAddressRef.current = domValue
+        setSchool(s => ({ ...s, address: domValue }))
+      }
+    }, 500)
+
     return () => {
-      clearTimeout(timeoutId)
-      clearTimeout(timeoutId2)
+      timeouts.forEach(clearTimeout)
+      clearInterval(intervalId)
       element.removeEventListener('gmp-placeselect', handlePlaceSelect)
       element.removeEventListener('input', handleInput)
       element.remove()
       autocompleteRef.current = null
       setUsePlaceElement(false)
     }
-  }, [mapsApiKey, mapsLoaded])
+  }, [mapsApiKey, mapsLoaded, initial?.address])
 
   const handleVerifyAddress = async () => {
     if (!school.address.trim()) {
@@ -228,21 +256,35 @@ export default function SchoolForm({ initial, onSave, onCancel, mapsApiKey, maps
 
   const handleSave = () => {
     if (!school.name.trim()) { alert('School name is required'); return }
-
-    // Final check for address from the autocomplete element if it exists
-    let finalAddress = school.address
-    if (usePlaceElement && autocompleteRef.current) {
-      finalAddress = autocompleteRef.current.value || finalAddress
+    if (verifyingAutocomplete) {
+      alert('Please wait for the address to finish loading...');
+      return;
     }
 
-    if (!finalAddress.trim()) { alert('Address is required'); return }
+    // We prioritize the DOM value as it's what the user literally sees in the box.
+    // Fall back to our ref, then to state.
+    let finalAddress = currentAddressRef.current || school.address
 
-    const finalSchool = {
+    if (usePlaceElement && autocompleteRef.current) {
+      const el = autocompleteRef.current
+      const internalInput = el.querySelector('input') ?? el.shadowRoot?.querySelector('input')
+      const domValue = (internalInput ? internalInput.value : el.value) || ''
+
+      if (domValue.trim()) {
+        finalAddress = domValue.trim()
+      }
+    }
+
+    if (!finalAddress || !finalAddress.trim()) {
+      alert('Address is required')
+      return
+    }
+
+    onSave({
       ...school,
       address: finalAddress.trim(),
       id: school.id || generateId(school.name),
-    }
-    onSave(finalSchool)
+    })
   }
 
   return (
@@ -268,7 +310,7 @@ export default function SchoolForm({ initial, onSave, onCancel, mapsApiKey, maps
           {!usePlaceElement && (
             <input
               type="text"
-              defaultValue={school.address}
+              value={school.address}
               onChange={e => { setSchool(s => ({ ...s, address: e.target.value })); setAddressVerified(false) }}
               placeholder="Start typing an address…"
               className={addressVerified ? 'input-verified' : ''}
@@ -427,7 +469,9 @@ export default function SchoolForm({ initial, onSave, onCancel, mapsApiKey, maps
 
       <div className="form-actions">
         <button type="button" className="btn btn-secondary" onClick={onCancel}>Cancel</button>
-        <button type="button" className="btn btn-primary" onClick={handleSave}>Save School</button>
+        <button type="button" className="btn btn-primary" onClick={handleSave} disabled={verifyingAutocomplete}>
+          {verifyingAutocomplete ? 'Processing Address…' : 'Save School'}
+        </button>
       </div>
     </div>
   )
