@@ -99,8 +99,19 @@ export default function SchoolForm({ initial, onSave, onCancel, mapsApiKey, maps
     const handlePlaceSelect = async (event) => {
       selectingPlaceRef.current = true
       try {
-        await event.place.fetchFields({ fields: ['formattedAddress'] })
-        const addr = event.place.formattedAddress
+        // Newer PlaceAutocompleteElement (gmp-select) exposes placePrediction;
+        // older builds (gmp-placeselect) exposed a fully-formed place. Support both.
+        let place = event.place
+        if (!place && event.placePrediction) {
+          place = event.placePrediction.toPlace()
+        }
+        if (!place) {
+          setVerifyError('Could not retrieve selected place. Please try again.')
+          setAddressVerified(false)
+          return
+        }
+        await place.fetchFields({ fields: ['formattedAddress'] })
+        const addr = place.formattedAddress
         if (addr) {
           element.value = addr
           setSchool(s => ({ ...s, address: addr }))
@@ -133,12 +144,16 @@ export default function SchoolForm({ initial, onSave, onCancel, mapsApiKey, maps
       }
     }
 
+    // Newer API uses 'gmp-select'; older builds emitted 'gmp-placeselect'.
+    // Register both so the handler runs regardless of the loaded version.
+    element.addEventListener('gmp-select', handlePlaceSelect)
     element.addEventListener('gmp-placeselect', handlePlaceSelect)
     element.addEventListener('input', handleInput)
 
     return () => {
       clearTimeout(timeoutId)
       clearTimeout(timeoutId2)
+      element.removeEventListener('gmp-select', handlePlaceSelect)
       element.removeEventListener('gmp-placeselect', handlePlaceSelect)
       element.removeEventListener('input', handleInput)
       element.remove()
