@@ -60,6 +60,58 @@ export const updateDriveTimes = (req, res) => {
   res.json({ success: true });
 };
 
+export const calculateDriveTimes = async (req, res) => {
+  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+  if (!apiKey) {
+    return res.status(400).json({ error: 'GOOGLE_MAPS_API_KEY is not configured on the server' });
+  }
+
+  const schools = Array.isArray(req.body) ? req.body : [];
+  const valid = schools.filter(s => s && s.id && typeof s.address === 'string' && s.address.trim());
+  if (valid.length < 2) {
+    return res.status(400).json({ error: 'At least two schools with addresses are required' });
+  }
+
+  const addresses = valid.map(s => s.address);
+  const params = new URLSearchParams({
+    origins: addresses.join('|'),
+    destinations: addresses.join('|'),
+    mode: 'driving',
+    units: 'metric',
+    key: apiKey
+  });
+  const url = `https://maps.googleapis.com/maps/api/distancematrix/json?${params.toString()}`;
+
+  let data;
+  try {
+    const response = await fetch(url);
+    data = await response.json();
+  } catch (err) {
+    return res.status(502).json({ error: `Failed to reach Google Maps: ${err.message}` });
+  }
+
+  if (data.status !== 'OK') {
+    return res.status(502).json({ error: `Google Maps error: ${data.error_message || data.status}` });
+  }
+
+  const driveTimes = {};
+  valid.forEach((from, i) => {
+    driveTimes[from.id] = {};
+    const row = data.rows?.[i];
+    valid.forEach((to, j) => {
+      if (from.id === to.id) return;
+      const element = row?.elements?.[j];
+      if (element?.status === 'OK' && element.duration) {
+        driveTimes[from.id][to.id] = Math.round(element.duration.value / 60);
+      } else {
+        driveTimes[from.id][to.id] = 0;
+      }
+    });
+  });
+
+  res.json({ driveTimes });
+};
+
 export const getMeetingTypes = (req, res) => {
   const types = loadMeetingTypes();
   const enabled = types.filter(t => t.enabled).sort((a, b) => a.order - b.order);
