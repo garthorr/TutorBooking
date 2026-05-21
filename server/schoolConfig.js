@@ -46,14 +46,14 @@ export function getDriveTime(fromSchoolId, toSchoolId) {
 
   if (driveTime === undefined) {
     console.warn(`⚠️  No drive time defined between ${fromSchoolId} and ${toSchoolId}, using default 30 minutes`)
-    return Math.round((30 + 5) / 5) * 5 // 35 min total (30 drive + 5 walking), consistent with known pairs
+    return Math.ceil((30 + 5) / 5) * 5 // 35 min total (30 drive + 5 walking), consistent with known pairs
   }
 
   // Add 5 minutes for walking/parking
   const totalTime = driveTime + 5
 
-  // Round to nearest 5 minutes
-  return Math.round(totalTime / 5) * 5
+  // Round up to nearest 5 minutes
+  return Math.ceil(totalTime / 5) * 5
 }
 
 export default schoolConfig

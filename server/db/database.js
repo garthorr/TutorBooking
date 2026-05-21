@@ -39,6 +39,15 @@ if (!columns.includes('logo_url')) {
   db.prepare('ALTER TABLE schools ADD COLUMN logo_url TEXT').run();
 }
 
+// Migration: Add walk_time_buffer to settings if it doesn't exist
+const settingsInfo = db.prepare("PRAGMA table_info(settings)").all();
+const settingsColumns = settingsInfo.map(c => c.name);
+
+if (!settingsColumns.includes('walk_time_buffer')) {
+  console.log('Adding walk_time_buffer column to settings table...');
+  db.prepare('ALTER TABLE settings ADD COLUMN walk_time_buffer INTEGER DEFAULT 5').run();
+}
+
 /**
  * Initialize a default admin user if no users exist
  */

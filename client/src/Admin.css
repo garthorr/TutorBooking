@@ -405,11 +405,6 @@ gmp-placeautocomplete::part(input):focus {
 
 .field-hint.success { color: #059669; }
 .field-hint.error { color: #dc2626; }
-.field-hint.current-address {
-  margin: 0 0 0.4rem;
-  color: #4b5563;
-  font-style: italic;
-}
 
 /* ── Schedule Builder ── */
 .schedule-builder {

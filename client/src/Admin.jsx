@@ -32,6 +32,7 @@ function Admin() {
     businessName: '',
     businessDescription: '',
     customLocationDuration: 60,
+    walkTimeBuffer: 5,
     themeColor: '#4f46e5'
   })
   const [settingsSaving, setSettingsSaving] = useState(false)
@@ -52,6 +53,7 @@ function Admin() {
         businessName: d.businessName || '',
         businessDescription: d.businessDescription || '',
         customLocationDuration: d.customLocationDuration || 60,
+        walkTimeBuffer: d.walkTimeBuffer || 5,
         themeColor: color
       })
       const isPreset = THEME_PRESETS.some(p => p.primary.toLowerCase() === color.toLowerCase())
@@ -594,6 +596,24 @@ function Admin() {
                     <option key={m} value={m}>{m} minutes</option>
                   ))}
                 </select>
+              </div>
+            </div>
+
+            {/* Walk time buffer */}
+            <div className="settings-section">
+              <h2>Drive Time Walk/Parking Buffer</h2>
+              <p className="field-hint">Additional time added to all calculated drive times (for parking, walking, etc.). The total is then rounded up to the nearest 5 minutes.</p>
+              <div className="settings-field settings-field-inline">
+                <label>Buffer (minutes)</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="30"
+                  step="1"
+                  value={settingsForm.walkTimeBuffer}
+                  onChange={e => setSettingsForm(f => ({ ...f, walkTimeBuffer: Number(e.target.value) }))}
+                  style={{ width: '80px' }}
+                />
               </div>
             </div>
 

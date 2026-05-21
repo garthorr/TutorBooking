@@ -66,7 +66,7 @@ export default function SchoolForm({ initial, onSave, onCancel, mapsApiKey, maps
   const [usePlaceElement, setUsePlaceElement] = useState(false)
   const containerRef = useRef(null)
   const autocompleteRef = useRef(null)
-  const selectingPlaceRef = useRef(false)
+  const currentAddressRef = useRef(initial?.address || '')
 
   // Initialise PlaceAutocompleteElement (new Places API, replaces deprecated Autocomplete)
   useEffect(() => {
@@ -104,35 +104,42 @@ export default function SchoolForm({ initial, onSave, onCancel, mapsApiKey, maps
     const timeouts = [0, 100, 500, 1000, 2000, 5000].map(ms => setTimeout(syncInternalValue, ms))
 
     const handlePlaceSelect = async (event) => {
-      selectingPlaceRef.current = true
+      setVerifyingAutocomplete(true)
+      const addr = event.place?.formattedAddress || event.place?.name || element.value
+      if (addr) {
+        currentAddressRef.current = addr
+        setSchool(s => ({ ...s, address: addr }))
+        setAddressVerified(true)
+        setVerifyError('')
+      }
+
       try {
         await event.place.fetchFields({ fields: ['formattedAddress'] })
-        const addr = event.place.formattedAddress
-        if (addr) {
-          element.value = addr
-          setSchool(s => ({ ...s, address: addr }))
+        const formatted = event.place.formattedAddress
+        if (formatted) {
+          element.value = formatted
+          const internal = element.querySelector('input') ?? element.shadowRoot?.querySelector('input')
+          if (internal) internal.value = formatted
+
+          currentAddressRef.current = formatted
+          setSchool(s => ({ ...s, address: formatted }))
           setAddressVerified(true)
-          setVerifyError('')
-          return
         }
-        setVerifyError('Could not retrieve formatted address. Please try again.')
-        setAddressVerified(false)
       } catch (e) {
-        console.warn('fetchFields failed:', e.message)
-        setVerifyError('Could not retrieve formatted address. Please try again.')
-        setAddressVerified(false)
+        console.warn('fetchFields error:', e)
       } finally {
-        // Give the autocomplete element a moment to settle any trailing
-        // input events triggered by the selection before re-enabling typing sync.
-        setTimeout(() => { selectingPlaceRef.current = false }, 150)
+        setVerifyingAutocomplete(false)
       }
     }
 
     const handleInput = (event) => {
-      // Ignore input events fired as a side-effect of selecting a place from
-      // the dropdown; otherwise the partial typed text would overwrite the
-      // formatted address resolved via fetchFields.
-      if (selectingPlaceRef.current) return
+      const internal = element.querySelector('input') ?? element.shadowRoot?.querySelector('input')
+      const val = (event.target.value ?? internal?.value ?? '').trim()
+
+      currentAddressRef.current = val
+      setSchool(s => ({ ...s, address: val }))
+
+      // If it's a real user typing, reset verified status
       if (event.isTrusted) {
         setAddressVerified(false)
       }
@@ -258,12 +265,14 @@ export default function SchoolForm({ initial, onSave, onCancel, mapsApiKey, maps
     // Fall back to our ref, then to state.
     let finalAddress = currentAddressRef.current || school.address
 
-    // State is the source of truth — it holds the formatted address resolved
-    // via fetchFields. Only fall back to the element's raw value if state is
-    // empty (e.g. user typed something but never selected a suggestion).
-    let finalAddress = school.address
-    if (!finalAddress && usePlaceElement && autocompleteRef.current) {
-      finalAddress = autocompleteRef.current.value || ''
+    if (usePlaceElement && autocompleteRef.current) {
+      const el = autocompleteRef.current
+      const internalInput = el.querySelector('input') ?? el.shadowRoot?.querySelector('input')
+      const domValue = (internalInput ? internalInput.value : el.value) || ''
+
+      if (domValue.trim()) {
+        finalAddress = domValue.trim()
+      }
     }
 
     if (!finalAddress || !finalAddress.trim()) {
@@ -292,9 +301,6 @@ export default function SchoolForm({ initial, onSave, onCancel, mapsApiKey, maps
 
       <div className="form-group">
         <label>Address *</label>
-        {usePlaceElement && school.address && (
-          <p className="field-hint current-address">Current: {school.address}</p>
-        )}
         <div className="address-row">
           {/* PlaceAutocompleteElement mounts here when the new Places API is available */}
           <div

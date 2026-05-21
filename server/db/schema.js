@@ -56,6 +56,7 @@ CREATE TABLE IF NOT EXISTS settings (
   user_id INTEGER PRIMARY KEY,
   google_meet_duration INTEGER DEFAULT 60,
   custom_location_duration INTEGER DEFAULT 60,
+  walk_time_buffer INTEGER DEFAULT 5,
   theme_color TEXT DEFAULT '#4f46e5',
   business_name TEXT,
   business_description TEXT,

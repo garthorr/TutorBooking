@@ -20,6 +20,7 @@ class DBService {
       UPDATE settings SET
         google_meet_duration = ?,
         custom_location_duration = ?,
+        walk_time_buffer = ?,
         theme_color = ?,
         business_name = ?,
         business_description = ?
@@ -27,6 +28,7 @@ class DBService {
     `).run(
       settings.googleMeetDuration,
       settings.customLocationDuration,
+      settings.walkTimeBuffer || 5,
       settings.themeColor,
       settings.businessName,
       settings.businessDescription,
