@@ -17,7 +17,7 @@ import {
   updateLogo,
   deleteLogo
 } from '../controllers/adminController.js';
-import { changePassword } from '../controllers/authController.js';
+import { changePassword, listCalendars } from '../controllers/authController.js';
 import { adminAuth } from './authRoutes.js';
 
 const router = express.Router();
@@ -37,6 +37,7 @@ router.put('/drivetimes', adminAuth, updateDriveTimes);
 router.post('/drivetimes/calculate', adminAuth, calculateDriveTimes);
 router.get('/meeting-types/all', adminAuth, getAllMeetingTypes);
 router.put('/meeting-types', adminAuth, updateMeetingTypes);
+router.get('/calendars', adminAuth, listCalendars);
 router.get('/config/calendars', adminAuth, getCalendarConfig);
 router.put('/config/calendars', adminAuth, updateCalendarConfig);
 router.put('/logo', adminAuth, updateLogo);

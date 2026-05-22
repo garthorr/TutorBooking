@@ -137,6 +137,36 @@ export const testCalendarConnection = async (req, res) => {
   }
 };
 
+export const listCalendars = async (req, res) => {
+  if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+    return res.status(500).json({ error: 'OAuth not configured' });
+  }
+  const tokens = loadTokens();
+  if (!tokens) {
+    return res.status(401).json({ error: 'No stored tokens — connect Google Calendar first' });
+  }
+  try {
+    const oauth2Client = getOAuthClient();
+    oauth2Client.setCredentials(tokens);
+    const cal = google.calendar({ version: 'v3', auth: oauth2Client });
+    const allItems = [];
+    let pageToken;
+    do {
+      const { data } = await cal.calendarList.list({ maxResults: 250, pageToken });
+      if (data.items) allItems.push(...data.items);
+      pageToken = data.nextPageToken;
+    } while (pageToken);
+    res.json(allItems.map(c => ({
+      id: c.id,
+      summary: c.summary,
+      backgroundColor: c.backgroundColor,
+      primary: c.primary || false
+    })));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
 export const disconnectGoogleCalendar = (req, res) => {
   const deleted = deleteTokens();
   res.json({
