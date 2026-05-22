@@ -913,6 +913,61 @@ gmp-placeautocomplete::part(input):focus {
   margin-bottom: 0.1rem;
 }
 
+/* ── Date List Builder (Overrides) ── */
+.date-list-builder {
+  margin-top: 0.25rem;
+}
+
+.date-picker-row {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.admin-date-input {
+  padding: 0.4rem 0.65rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  width: 240px;
+}
+
+.date-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.date-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: #e0e7ff;
+  color: #4338ca;
+  padding: 0.2rem 0.6rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  border: 1px solid #c7d2fe;
+}
+
+.date-tag button {
+  background: none;
+  border: none;
+  color: #6366f1;
+  font-size: 1.1rem;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.date-tag button:hover {
+  color: #4338ca;
+}
+
 @media (max-width: 540px) {
   .mt-row-main { flex-wrap: wrap; }
   .mt-duration-select { width: 80px; }

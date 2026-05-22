@@ -116,6 +116,19 @@ function App() {
   // Look up a meeting type by id
   const getMeetingType = (id) => meetingTypes.find(t => t.id === id)
 
+  const isDateInOverrides = (date, overrides) => {
+    if (!overrides || !Array.isArray(overrides)) return false
+    const target = format(date, 'yyyy-MM-dd')
+    return overrides.some(override => {
+      if (typeof override === 'string') {
+        return override === target
+      } else if (override.start && override.end) {
+        return target >= override.start && target <= override.end
+      }
+      return false
+    })
+  }
+
   // Fetch available days for a month
   const fetchAvailableDays = async (month, year, school, meetingType, isCustom) => {
     let schoolId = ''
@@ -123,6 +136,9 @@ function App() {
     let availabilityBlocks = null
 
     const mt = getMeetingType(meetingType)
+    const mtAvailableDates = mt?.availableDates || null
+    const mtUnavailableDates = mt?.unavailableDates || null
+
     if (mt && !mt.requiresSchool) {
       schoolId = ''
       sessionDuration = mt.sessionDuration
@@ -145,7 +161,11 @@ function App() {
       const res = await fetch('/api/availability/days', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ year, month, schoolId, sessionDuration, availabilityBlocks })
+        body: JSON.stringify({
+          year, month, schoolId, sessionDuration, availabilityBlocks,
+          availableDates: mtAvailableDates,
+          unavailableDates: mtUnavailableDates
+        })
       })
       if (res.ok) {
         const data = await res.json()
@@ -186,6 +206,9 @@ function App() {
     let schoolId = ''
 
     const mt = getMeetingType(bookingData.meetingType)
+    const mtAvailableDates = mt?.availableDates || null
+    const mtUnavailableDates = mt?.unavailableDates || null
+
     if (mt && !mt.requiresSchool) {
       availability = (mt.availability || {})[dayOfWeek] || []
       sessionDuration = mt.sessionDuration
@@ -209,7 +232,11 @@ function App() {
       const response = await fetch('/api/availability', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ date: date.toISOString(), schoolId, sessionDuration, availabilityBlocks: availability })
+        body: JSON.stringify({
+          date: date.toISOString(), schoolId, sessionDuration, availabilityBlocks: availability,
+          availableDates: mtAvailableDates,
+          unavailableDates: mtUnavailableDates
+        })
       })
       if (response.ok) {
         const data = await response.json()
@@ -227,13 +254,20 @@ function App() {
   const isDateDisabled = (date) => {
     if (isBefore(startOfDay(date), startOfDay(new Date()))) return true
 
+    const mt = getMeetingType(bookingData.meetingType)
+    if (mt) {
+      if (isDateInOverrides(date, mt.unavailableDates)) return true
+      if (mt.availableDates && mt.availableDates.length > 0) {
+        if (!isDateInOverrides(date, mt.availableDates)) return true
+      }
+    }
+
     if (availableDates.size > 0) {
       return !availableDates.has(format(date, 'yyyy-MM-dd'))
     }
 
     // Fallback while server data loads
     const dayOfWeek = getDay(date)
-    const mt = getMeetingType(bookingData.meetingType)
     let blocks = []
     if (mt && !mt.requiresSchool) {
       blocks = (mt.availability || {})[dayOfWeek] || []

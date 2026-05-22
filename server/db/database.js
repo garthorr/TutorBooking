@@ -39,6 +39,20 @@ if (!columns.includes('logo_url')) {
   db.prepare('ALTER TABLE schools ADD COLUMN logo_url TEXT').run();
 }
 
+// Migration: Add available_dates and unavailable_dates to meeting_types if they don't exist
+const meetingTypesInfo = db.prepare("PRAGMA table_info(meeting_types)").all();
+const mtColumns = meetingTypesInfo.map(c => c.name);
+
+if (!mtColumns.includes('available_dates')) {
+  console.log('Adding available_dates column to meeting_types table...');
+  db.prepare('ALTER TABLE meeting_types ADD COLUMN available_dates TEXT').run();
+}
+
+if (!mtColumns.includes('unavailable_dates')) {
+  console.log('Adding unavailable_dates column to meeting_types table...');
+  db.prepare('ALTER TABLE meeting_types ADD COLUMN unavailable_dates TEXT').run();
+}
+
 /**
  * Initialize a default admin user if no users exist
  */
