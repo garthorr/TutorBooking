@@ -47,8 +47,13 @@ export const getSchools = (req, res) => {
 };
 
 export const updateSchools = (req, res) => {
-  saveSchools(req.body);
-  res.json({ success: true });
+  try {
+    saveSchools(req.body);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Failed to save schools:', err);
+    res.status(500).json({ error: 'Failed to save schools' });
+  }
 };
 
 export const getDriveTimes = (req, res) => {

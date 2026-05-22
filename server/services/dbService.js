@@ -59,10 +59,20 @@ class DBService {
   }
 
   saveSchools(userId, schools) {
+    const newIds = new Set(schools.map(s => s.id));
+    const existingSchoolsStmt = db.prepare('SELECT id FROM schools WHERE user_id = ?');
+    const deleteDTForSchool = db.prepare('DELETE FROM drive_times WHERE user_id = ? AND (from_school_id = ? OR to_school_id = ?)');
     const deleteStmt = db.prepare('DELETE FROM schools WHERE user_id = ?');
     const insertStmt = db.prepare('INSERT INTO schools (id, user_id, name, address, availability, session_duration, logo_url) VALUES (?, ?, ?, ?, ?, ?, ?)');
 
     const transaction = db.transaction((schools) => {
+      // Remove drive times for any schools being deleted, to avoid FK constraint violations
+      const existing = existingSchoolsStmt.all(userId);
+      for (const { id } of existing) {
+        if (!newIds.has(id)) {
+          deleteDTForSchool.run(userId, id, id);
+        }
+      }
       deleteStmt.run(userId);
       for (const school of schools) {
         insertStmt.run(
