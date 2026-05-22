@@ -25,12 +25,12 @@ export function saveDriveTimes(driveTimes) {
   return dbService.saveDriveTimes(ADMIN_ID, driveTimes);
 }
 
-export function getDriveTimeFromStorage(fromSchoolId, toSchoolId) {
+export function getDriveTimeFromStorage(fromSchoolId, toSchoolId, walkTime = 5) {
   if (!fromSchoolId || !toSchoolId || fromSchoolId === toSchoolId) return 0;
   const driveTimes = dbService.getDriveTimes(ADMIN_ID);
   const minutes = driveTimes[fromSchoolId]?.[toSchoolId];
   if (minutes === undefined) {
-    return Math.round((30 + 5) / 5) * 5;
+    return Math.round((30 + walkTime) / 5) * 5;
   }
-  return Math.round((minutes + 5) / 5) * 5;
+  return Math.round((minutes + walkTime) / 5) * 5;
 }

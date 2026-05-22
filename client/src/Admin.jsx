@@ -41,6 +41,7 @@ function Admin() {
     businessName: '',
     businessDescription: '',
     customLocationDuration: 60,
+    walkTime: 5,
     themeColor: '#4f46e5'
   })
   const [settingsSaving, setSettingsSaving] = useState(false)
@@ -61,6 +62,7 @@ function Admin() {
         businessName: d.businessName || '',
         businessDescription: d.businessDescription || '',
         customLocationDuration: d.customLocationDuration || 60,
+        walkTime: d.walkTime ?? 5,
         themeColor: color
       })
       const isPreset = THEME_PRESETS.some(p => p.primary.toLowerCase() === color.toLowerCase())
@@ -601,6 +603,23 @@ function Admin() {
                 >
                   {SESSION_DURATIONS.map(d => (
                     <option key={d} value={d}>{durationLabel(d)}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Walk time */}
+            <div className="settings-section">
+              <h2>Walk / Parking Time</h2>
+              <p className="field-hint">Added to every drive time when checking for scheduling conflicts. Accounts for walking from your car to the classroom.</p>
+              <div className="settings-field settings-field-inline">
+                <label>Walk time</label>
+                <select
+                  value={settingsForm.walkTime}
+                  onChange={e => setSettingsForm(f => ({ ...f, walkTime: Number(e.target.value) }))}
+                >
+                  {[5, 10, 15, 20, 25, 30].map(m => (
+                    <option key={m} value={m}>{m} min</option>
                   ))}
                 </select>
               </div>

@@ -59,7 +59,7 @@ async function fetchEventsForPeriod(timeMin, timeMax) {
   return results.flat();
 }
 
-function hasSchedulingConflict(slotStart, slotEnd, events, schoolId) {
+function hasSchedulingConflict(slotStart, slotEnd, events, schoolId, walkTime) {
   for (const event of events) {
     const eventStart = new Date(event.start.dateTime || event.start.date);
     const eventEnd = new Date(event.end.dateTime || event.end.date);
@@ -67,13 +67,13 @@ function hasSchedulingConflict(slotStart, slotEnd, events, schoolId) {
 
     if (slotStart < eventEnd && slotEnd > eventStart) return true;
 
-    const driveTimeBefore = getDriveTimeFromStorage(eventSchoolId, schoolId);
+    const driveTimeBefore = getDriveTimeFromStorage(eventSchoolId, schoolId, walkTime);
     if (driveTimeBefore > 0) {
       const bufferEnd = new Date(eventEnd.getTime() + driveTimeBefore * 60 * 1000);
       if (slotStart < bufferEnd) return true;
     }
 
-    const driveTimeAfter = getDriveTimeFromStorage(schoolId, eventSchoolId);
+    const driveTimeAfter = getDriveTimeFromStorage(schoolId, eventSchoolId, walkTime);
     if (driveTimeAfter > 0) {
       const bufferStart = new Date(eventStart.getTime() - driveTimeAfter * 60 * 1000);
       if (slotEnd > bufferStart) return true;
@@ -82,7 +82,7 @@ function hasSchedulingConflict(slotStart, slotEnd, events, schoolId) {
   return false;
 }
 
-function getAvailableSlotsForDay(date, availabilityBlocks, sessionDuration, events, schoolId) {
+function getAvailableSlotsForDay(date, availabilityBlocks, sessionDuration, events, schoolId, walkTime) {
   const slots = [];
   const duration = sessionDuration || 60;
   for (const block of availabilityBlocks) {
@@ -93,7 +93,7 @@ function getAvailableSlotsForDay(date, availabilityBlocks, sessionDuration, even
     while (slotStart < blockEnd) {
       const slotEnd = new Date(slotStart.getTime() + duration * 60 * 1000);
       if (slotEnd > blockEnd) break;
-      const isBlocked = hasSchedulingConflict(slotStart, slotEnd, events, schoolId);
+      const isBlocked = hasSchedulingConflict(slotStart, slotEnd, events, schoolId, walkTime);
       if (!isBlocked) slots.push({ time: slotStart.toISOString(), available: true, blockName: block.name || null });
       slotStart = new Date(slotStart.getTime() + duration * 60 * 1000);
     }
@@ -145,7 +145,8 @@ export const getAvailability = async (req, res) => {
     const timeMin = new Date(selectedDate); timeMin.setHours(0, 0, 0, 0);
     const timeMax = new Date(selectedDate); timeMax.setHours(23, 59, 59, 999);
     const events = await fetchEventsForPeriod(timeMin, timeMax);
-    const slots = getAvailableSlotsForDay(selectedDate, blocks, sessionDuration, events, schoolId);
+    const walkTime = dbService.getSettings(1)?.walk_time ?? 5;
+    const slots = getAvailableSlotsForDay(selectedDate, blocks, sessionDuration, events, schoolId, walkTime);
     res.json({ slots });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch availability' });
@@ -166,6 +167,7 @@ export const getAvailableDays = async (req, res) => {
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const availableDates = [];
     const allEvents = await fetchEventsForPeriod(firstDay, lastDay);
+    const walkTime = dbService.getSettings(1)?.walk_time ?? 5;
     for (let d = 1; d <= lastDay.getDate(); d++) {
       const date = new Date(year, month, d);
       if (date < today) continue;
@@ -183,7 +185,7 @@ export const getAvailableDays = async (req, res) => {
         const start = new Date(e.start.dateTime || e.start.date);
         return start.getFullYear() === year && start.getMonth() === month && start.getDate() === d;
       });
-      const slots = getAvailableSlotsForDay(date, blocks, sessionDuration, dayEvents, schoolId);
+      const slots = getAvailableSlotsForDay(date, blocks, sessionDuration, dayEvents, schoolId, walkTime);
       if (slots.length > 0) {
         availableDates.push(`${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`);
       }

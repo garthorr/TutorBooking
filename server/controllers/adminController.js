@@ -10,6 +10,7 @@ export const getConfig = (req, res) => {
   res.json({
     googleMeetDuration: settings.google_meet_duration,
     customLocationDuration: settings.custom_location_duration,
+    walkTime: settings.walk_time ?? 5,
     themeColor: settings.theme_color,
     businessName: settings.business_name,
     businessDescription: settings.business_description
@@ -22,6 +23,7 @@ export const getSettings = (req, res) => {
     ...settings,
     googleMeetDuration: settings.google_meet_duration,
     customLocationDuration: settings.custom_location_duration,
+    walkTime: settings.walk_time ?? 5,
     themeColor: settings.theme_color,
     businessName: settings.business_name,
     businessDescription: settings.business_description,
@@ -34,6 +36,7 @@ export const updateSettings = (req, res) => {
   const updated = {
     googleMeetDuration: req.body.googleMeetDuration || current.google_meet_duration,
     customLocationDuration: req.body.customLocationDuration || current.custom_location_duration,
+    walkTime: req.body.walkTime ?? current.walk_time ?? 5,
     themeColor: req.body.themeColor || current.theme_color,
     businessName: (req.body.businessName || current.business_name || '').trim(),
     businessDescription: (req.body.businessDescription || current.business_description || '').trim()
