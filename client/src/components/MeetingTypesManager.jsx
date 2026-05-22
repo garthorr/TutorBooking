@@ -119,7 +119,7 @@ function ScheduleBuilder({ availability, onChange }) {
 
   const toggleDay = (num) => {
     const updated = { ...avail }
-    if (updated[num]) delete updated[num]
+    if (Array.isArray(updated[num]) && updated[num].length > 0) delete updated[num]
     else updated[num] = [{ start: '09:00', end: '17:00' }]
     onChange(updated)
   }
@@ -145,8 +145,8 @@ function ScheduleBuilder({ availability, onChange }) {
   return (
     <div className="schedule-builder">
       {DAYS.map(({ num, label }) => {
-        const active = !!avail[num]
         const blocks = avail[num] || []
+        const active = blocks.length > 0
         return (
           <div key={num} className={`schedule-day ${active ? 'active' : ''}`}>
             <div className="schedule-day-header">

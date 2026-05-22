@@ -3,13 +3,11 @@ import dbService from './services/dbService.js';
 const ADMIN_ID = 1;
 
 const DEFAULT_WEEKDAY_AVAILABILITY = {
-  0: [],
   1: [{ start: '09:00', end: '17:00' }],
   2: [{ start: '09:00', end: '17:00' }],
   3: [{ start: '09:00', end: '17:00' }],
   4: [{ start: '09:00', end: '17:00' }],
   5: [{ start: '09:00', end: '17:00' }],
-  6: []
 }
 
 export function getDefaultMeetingTypes(googleMeetDuration = 60) {

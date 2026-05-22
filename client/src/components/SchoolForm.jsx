@@ -194,7 +194,7 @@ export default function SchoolForm({ initial, onSave, onCancel, mapsApiKey, maps
   const toggleDay = (dayNum) => {
     setSchool(s => {
       const avail = { ...s.availability }
-      if (avail[dayNum]) {
+      if (Array.isArray(avail[dayNum]) && avail[dayNum].length > 0) {
         delete avail[dayNum]
       } else {
         avail[dayNum] = [{ start: '09:00', end: '17:00' }]
@@ -236,6 +236,7 @@ export default function SchoolForm({ initial, onSave, onCancel, mapsApiKey, maps
 
   const applyCopy = (fromDay) => {
     const sourceBlocks = school.availability[fromDay] || []
+    if (sourceBlocks.length === 0) { setCopyMenuDay(null); setCopyTargets([]); return }
     setSchool(s => {
       const avail = { ...s.availability }
       copyTargets.forEach(d => { avail[d] = sourceBlocks.map(b => ({ ...b })) })
@@ -372,8 +373,8 @@ export default function SchoolForm({ initial, onSave, onCancel, mapsApiKey, maps
         <p className="field-hint">Select which days sessions are available and add time blocks for each day.</p>
         <div className="schedule-builder">
           {DAYS.map(({ num, label }) => {
-            const active = !!school.availability[num]
             const blocks = school.availability[num] || []
+            const active = blocks.length > 0
             return (
               <div key={num} className={`schedule-day ${active ? 'active' : ''}`}>
                 <div className="schedule-day-header">
