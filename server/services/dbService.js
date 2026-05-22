@@ -60,27 +60,39 @@ class DBService {
 
   saveSchools(userId, schools) {
     const newIds = new Set(schools.map(s => s.id));
-    const existingSchoolsStmt = db.prepare('SELECT id FROM schools WHERE user_id = ?');
-    const deleteDTForSchool = db.prepare('DELETE FROM drive_times WHERE user_id = ? AND (from_school_id = ? OR to_school_id = ?)');
-    const deleteStmt = db.prepare('DELETE FROM schools WHERE user_id = ?');
-    const insertStmt = db.prepare('INSERT INTO schools (id, user_id, name, address, availability, session_duration, logo_url) VALUES (?, ?, ?, ?, ?, ?, ?)');
+    const getExistingStmt = db.prepare('SELECT id FROM schools WHERE user_id = ?');
+    const nullifyBookingsStmt = db.prepare('UPDATE bookings SET school_id = NULL WHERE school_id = ?');
+    const deleteDTStmt = db.prepare('DELETE FROM drive_times WHERE user_id = ? AND (from_school_id = ? OR to_school_id = ?)');
+    const deleteSchoolStmt = db.prepare('DELETE FROM schools WHERE id = ? AND user_id = ?');
+    const upsertStmt = db.prepare(`
+      INSERT INTO schools (id, user_id, name, address, availability, session_duration, logo_url)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        name = excluded.name,
+        address = excluded.address,
+        availability = excluded.availability,
+        session_duration = excluded.session_duration,
+        logo_url = excluded.logo_url
+    `);
 
     const transaction = db.transaction((schools) => {
-      // Remove drive times for any schools being deleted, to avoid FK constraint violations
-      const existing = existingSchoolsStmt.all(userId);
+      // Only delete schools that are actually being removed; use upsert for the rest
+      // to avoid breaking FK references from bookings and drive_times.
+      const existing = getExistingStmt.all(userId);
       for (const { id } of existing) {
         if (!newIds.has(id)) {
-          deleteDTForSchool.run(userId, id, id);
+          nullifyBookingsStmt.run(id);
+          deleteDTStmt.run(userId, id, id);
+          deleteSchoolStmt.run(id, userId);
         }
       }
-      deleteStmt.run(userId);
       for (const school of schools) {
-        insertStmt.run(
+        upsertStmt.run(
           school.id,
           userId,
           school.name,
           school.address,
-          JSON.stringify(school.availability),
+          JSON.stringify(school.availability || {}),
           school.sessionDuration || 60,
           school.logoUrl || null
         );

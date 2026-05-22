@@ -47,6 +47,9 @@ export const getSchools = (req, res) => {
 };
 
 export const updateSchools = (req, res) => {
+  if (!Array.isArray(req.body)) {
+    return res.status(400).json({ error: 'Expected an array of schools' });
+  }
   try {
     saveSchools(req.body);
     res.json({ success: true });
