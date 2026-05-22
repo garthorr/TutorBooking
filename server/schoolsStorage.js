@@ -4,12 +4,13 @@ const ADMIN_ID = 1;
 
 export function loadSchools() {
   const schools = dbService.getSchools(ADMIN_ID);
-  return schools.map(s => ({
-    ...s,
-    availability: JSON.parse(s.availability),
-    sessionDuration: s.session_duration,
-    logoUrl: s.logo_url
-  }));
+  return schools.map(s => {
+    const raw = JSON.parse(s.availability) || {};
+    const availability = Object.fromEntries(
+      Object.entries(raw).filter(([, blocks]) => Array.isArray(blocks) && blocks.length > 0)
+    );
+    return { ...s, availability, sessionDuration: s.session_duration, logoUrl: s.logo_url };
+  });
 }
 
 export function saveSchools(schools) {
