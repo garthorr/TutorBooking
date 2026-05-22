@@ -16,6 +16,8 @@ Designed for a scalable tutor/admin workflow:
 - **Meeting types** (built-in + custom)
   - Built-ins: **Phone Call**, **Google Meet**, **School Location**
   - Create/edit/reorder/enable/disable meeting types in Admin
+  - **Custom availability**: Set per-meeting-type weekly schedules
+  - **Date overrides**: Add specific available dates or ranges (whitelist) and unavailable dates (blackout)
 
 - **School/location scheduling**
   - Per-school session length and weekly availability blocks
