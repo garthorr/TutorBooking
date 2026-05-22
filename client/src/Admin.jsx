@@ -5,6 +5,15 @@ import { adminFetch, clearToken } from './auth'
 import { THEME_PRESETS, applyTheme } from './theme'
 import './Admin.css'
 
+const SESSION_DURATIONS = Array.from({ length: 36 }, (_, i) => (i + 1) * 5)
+
+function durationLabel(d) {
+  if (d < 60) return `${d} min`
+  if (d === 60) return '1 hr'
+  if (d % 60 === 0) return `${d / 60} hr`
+  return `${Math.floor(d / 60)} hr ${d % 60} min`
+}
+
 function Admin() {
   const [tab, setTab] = useState('calendar')
   const [status, setStatus] = useState({
@@ -292,7 +301,7 @@ function Admin() {
     <div className="admin-container">
       <div className="admin-card">
         <div className="admin-header">
-          <h1>Admin Panel</h1>
+          <h1>Booking Management</h1>
           <div className="admin-header-actions">
             <a href="/" className="back-link">← Back to Booking Page</a>
             <button className="btn btn-secondary btn-sm" onClick={handleLogout}>Log out</button>
@@ -590,8 +599,8 @@ function Admin() {
                   value={settingsForm.customLocationDuration}
                   onChange={e => setSettingsForm(f => ({ ...f, customLocationDuration: Number(e.target.value) }))}
                 >
-                  {[15, 30, 45, 60, 75, 90, 120].map(m => (
-                    <option key={m} value={m}>{m} minutes</option>
+                  {SESSION_DURATIONS.map(d => (
+                    <option key={d} value={d}>{durationLabel(d)}</option>
                   ))}
                 </select>
               </div>
