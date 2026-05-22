@@ -1,337 +1,228 @@
+/* ============================================================================
+   EDUCATORR DESIGN SYSTEM — Colors & Typography
+   ========================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,400;0,500;0,600;0,700;1,500;1,600&family=Nunito+Sans:ital,wght@0,300;0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap');
+
 :root {
-  --primary-color: #4f46e5;
-  --primary-hover: #4338ca;
-  --primary-light: #eef2ff;
-  --primary-subtle: #c7d2fe;
-  --success-color: #10b981;
-  --border-color: #e5e7eb;
-  --text-primary: #111827;
-  --text-secondary: #6b7280;
-  --bg-light: #f9fafb;
-  --bg-white: #ffffff;
+  /* Navy */
+  --navy-50:  #eef4f9;
+  --navy-100: #d4e1ed;
+  --navy-200: #a7c0d8;
+  --navy-300: #7299b9;
+  --navy-400: #3f6a92;
+  --navy-500: #1f4b73;
+  --navy-600: #143557;
+  --navy-700: #0a2940;
+  --navy-800: #061a2c;
+  --navy-900: #03101e;
+
+  /* Sky */
+  --sky-50:  #f2f9fc;
+  --sky-100: #e2f0f8;
+  --sky-200: #c4dff0;
+  --sky-300: #97cae8;
+  --sky-400: #6cb1d8;
+  --sky-500: #3a8cbc;
+  --sky-600: #266f9a;
+  --sky-700: #1c5378;
+
+  /* Back-compat aliases */
+  --gold-50:  var(--sky-50);
+  --gold-100: var(--sky-100);
+  --gold-200: var(--sky-200);
+  --gold-300: var(--sky-300);
+  --gold-400: var(--sky-400);
+  --gold-500: var(--sky-500);
+  --gold-600: var(--sky-600);
+  --gold-700: var(--sky-700);
+
+  /* Ink */
+  --ink:       #111111;
+  --ink-hover: #000000;
+
+  /* Neutrals */
+  --paper:   #ffffff;
+  --paper-2: #f3f6fa;
+  --paper-3: #e2ebf3;
+  --cream:   #ffffff;
+  --white:   #ffffff;
+
+  /* Cool grays */
+  --gray-50:  #f7f8fa;
+  --gray-100: #eef0f4;
+  --gray-200: #dde2ea;
+  --gray-300: #c2c9d4;
+  --gray-400: #97a0ae;
+  --gray-500: #6c7585;
+  --gray-600: #4d5563;
+  --gray-700: #353c48;
+  --gray-800: #1f242d;
+
+  /* Semantic */
+  --success:    #2f7d4f;
+  --success-bg: #e6f1ea;
+  --warning:    #b78321;
+  --warning-bg: #fbf3df;
+  --danger:     #b3322a;
+  --danger-bg:  #fbe8e6;
+  --info:       var(--navy-500);
+  --info-bg:    var(--navy-50);
+
+  /* Tokens */
+  --bg:           var(--paper);
+  --bg-elevated:  var(--cream);
+  --bg-muted:     var(--paper-2);
+  --surface:      var(--white);
+  --surface-soft: var(--paper-2);
+
+  --fg:         var(--navy-900);
+  --fg-strong:  var(--navy-900);
+  --fg-muted:   var(--gray-600);
+  --fg-subtle:  var(--gray-500);
+  --fg-on-navy: var(--paper);
+  --fg-on-gold: var(--navy-900);
+
+  --primary:       var(--ink);
+  --primary-hover: var(--ink-hover);
+  --primary-press: var(--ink-hover);
+  --primary-tint:  var(--navy-50);
+  --primary-soft:  var(--navy-100);
+
+  --accent:        var(--sky-300);
+  --accent-hover:  var(--sky-500);
+  --accent-tint:   var(--sky-50);
+  --accent-strong: var(--sky-500);
+
+  --border:        var(--gray-200);
+  --border-strong: var(--gray-300);
+  --border-on-navy: rgba(255,255,255,0.16);
+
+  --focus-ring: 0 0 0 3px rgba(31, 71, 111, 0.30);
+
+  /* Typography */
+  --font-display: 'Montserrat', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  --font-sans:    'Nunito Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  --font-ui:      'Montserrat', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  --font-mono:    'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Type scale */
+  --fs-display: 3.5rem;
+  --fs-h1:      2.5rem;
+  --fs-h2:      2rem;
+  --fs-h3:      1.5rem;
+  --fs-h4:      1.25rem;
+  --fs-lead:    1.1875rem;
+  --fs-body:    1rem;
+  --fs-small:   0.875rem;
+  --fs-micro:   0.75rem;
+
+  --lh-tight:   1.12;
+  --lh-snug:    1.25;
+  --lh-base:    1.55;
+  --lh-relaxed: 1.7;
+
+  --tracking-tight:   -0.02em;
+  --tracking-snug:    -0.01em;
+  --tracking-base:     0em;
+  --tracking-wide:     0.06em;
+  --tracking-eyebrow:  0.18em;
+
+  /* Spacing */
+  --space-1:  0.25rem;
+  --space-2:  0.5rem;
+  --space-3:  0.75rem;
+  --space-4:  1rem;
+  --space-5:  1.5rem;
+  --space-6:  2rem;
+  --space-7:  2.5rem;
+  --space-8:  3rem;
+  --space-9:  4rem;
+  --space-10: 6rem;
+
+  /* Radii */
+  --radius-xs:   4px;
+  --radius-sm:   6px;
+  --radius-md:   10px;
+  --radius-lg:   14px;
+  --radius-xl:   20px;
+  --radius-pill: 999px;
+
+  /* Shadows */
+  --shadow-xs: 0 1px 2px rgba(10, 27, 46, 0.06);
+  --shadow-sm: 0 2px 6px rgba(10, 27, 46, 0.07), 0 1px 2px rgba(10, 27, 46, 0.04);
+  --shadow-md: 0 6px 18px rgba(10, 27, 46, 0.08), 0 2px 6px rgba(10, 27, 46, 0.05);
+  --shadow-lg: 0 16px 40px rgba(10, 27, 46, 0.12), 0 6px 14px rgba(10, 27, 46, 0.06);
+
+  /* Motion */
+  --ease-out:    cubic-bezier(0.22, 0.61, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-fast:    120ms;
+  --dur-base:    200ms;
+  --dur-slow:    360ms;
+
+  /* Layout */
+  --max-content: 1180px;
+  --max-text:    68ch;
+
+  /* ── Back-compat for Admin/Login pages ──────────────────────────────── */
+  --primary-color:  var(--navy-600);
+  --primary-hover:  var(--navy-700);
+  --primary-light:  var(--sky-50);
+  --primary-subtle: var(--sky-100);
+  --success-color:  var(--success);
+  --border-color:   var(--border);
+  --text-primary:   var(--fg);
+  --text-secondary: var(--fg-muted);
+  --bg-light:       var(--paper-2);
+  --bg-white:       var(--white);
 }
 
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
-
+html { color-scheme: light; }
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  line-height: var(--lh-base);
+  color: var(--fg);
+  background: var(--bg);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: var(--bg-light);
-  color: var(--text-primary);
-  line-height: 1.6;
+  text-rendering: optimizeLegibility;
 }
+*, *::before, *::after { box-sizing: border-box; }
 
-.container {
-  max-width: 900px;
-  margin: 0 auto;
-  padding: 2rem 1rem;
-}
-
-.booking-card {
-  background: var(--bg-white);
-  border-radius: 12px;
-  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
-  padding: 2rem;
-  margin-bottom: 2rem;
-}
-
-.header {
-  text-align: center;
-  margin-bottom: 3rem;
-}
-
-.header h1 {
-  font-size: 2rem;
-  font-weight: 700;
-  margin-bottom: 0.5rem;
-  color: var(--text-primary);
-}
-
-.header p {
-  color: var(--text-secondary);
-  font-size: 1rem;
-}
-
-.step-indicator {
-  display: flex;
-  justify-content: center;
-  margin-bottom: 2rem;
-  gap: 0.5rem;
-}
-
-.step {
-  width: 40px;
-  height: 4px;
-  background-color: var(--border-color);
-  border-radius: 2px;
-  transition: background-color 0.3s;
-}
-
-.step.active {
-  background-color: var(--primary-color);
-}
-
-.step.completed {
-  background-color: var(--success-color);
-}
-
-.form-section {
-  margin-bottom: 2rem;
-}
-
-.form-section h2 {
-  font-size: 1.25rem;
+h1, h2, h3, h4 {
+  font-family: var(--font-display);
+  color: var(--fg-strong);
+  line-height: var(--lh-tight);
+  letter-spacing: var(--tracking-tight);
   font-weight: 600;
-  margin-bottom: 1rem;
-  color: var(--text-primary);
+}
+h1 { font-size: var(--fs-h1); font-weight: 600; }
+h2 { font-size: var(--fs-h2); font-weight: 500; }
+h3 { font-size: var(--fs-h3); letter-spacing: var(--tracking-snug); font-weight: 500; }
+h4 { font-size: var(--fs-h4); font-weight: 600; letter-spacing: 0; }
+
+p {
+  font-size: var(--fs-body);
+  line-height: var(--lh-relaxed);
+  color: var(--fg);
+  max-width: var(--max-text);
 }
 
-.form-group {
-  margin-bottom: 1.5rem;
-}
-
-.form-group label {
-  display: block;
-  margin-bottom: 0.5rem;
-  font-weight: 500;
-  color: var(--text-primary);
-}
-
-.form-group input,
-.form-group textarea,
-.form-group select {
-  width: 100%;
-  padding: 0.75rem;
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  font-size: 1rem;
-  transition: border-color 0.2s;
-}
-
-.form-group input:focus,
-.form-group textarea:focus,
-.form-group select:focus {
-  outline: none;
-  border-color: var(--primary-color);
-}
-
-.time-slots {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-  gap: 0.75rem;
-}
-
-.time-slot {
-  padding: 0.75rem;
-  border: 2px solid var(--border-color);
-  border-radius: 6px;
-  background: var(--bg-white);
-  cursor: pointer;
-  transition: all 0.2s;
-  text-align: center;
-  font-weight: 500;
-}
-
-.time-slot:hover {
-  border-color: var(--primary-color);
-  background-color: var(--primary-light);
-}
-
-.time-slot.selected {
-  border-color: var(--primary-color);
-  background-color: var(--primary-color);
-  color: white;
-}
-
-.time-slot.disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-  background-color: var(--bg-light);
-}
-
-.time-slot.disabled:hover {
-  border-color: var(--border-color);
-  background-color: var(--bg-light);
-}
-
-.meeting-options {
-  display: grid;
-  gap: 1rem;
-}
-
-.meeting-option {
-  padding: 1.25rem;
-  border: 2px solid var(--border-color);
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.2s;
-  display: flex;
-  align-items: flex-start;
-  gap: 1rem;
-}
-
-.meeting-option:hover {
-  border-color: var(--primary-color);
-  background-color: var(--primary-light);
-}
-
-.meeting-option.selected {
-  border-color: var(--primary-color);
-  background-color: var(--primary-light);
-}
-
-.meeting-option-icon {
-  font-size: 1.5rem;
-  flex-shrink: 0;
-}
-
-.meeting-option-content h3 {
-  font-size: 1.1rem;
-  margin-bottom: 0.25rem;
-}
-
-.meeting-option-content p {
-  color: var(--text-secondary);
-  font-size: 0.9rem;
-}
-
-.location-select {
-  margin-top: 1rem;
-}
-
-.button-group {
-  display: flex;
-  gap: 1rem;
-  margin-top: 2rem;
-}
-
-.btn {
-  padding: 0.75rem 1.5rem;
-  border: none;
-  border-radius: 6px;
-  font-size: 1rem;
+.eyebrow {
+  font-family: var(--font-sans);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-eyebrow);
+  font-size: 0.75rem;
   font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
+  color: var(--sky-600);
 }
 
-.btn-primary {
-  background-color: var(--primary-color);
-  color: white;
-  flex: 1;
-}
+a { color: var(--primary); text-decoration: underline; text-underline-offset: 3px; }
+a:hover { color: var(--primary-hover); }
 
-.btn-primary:hover:not(:disabled) {
-  background-color: var(--primary-hover);
-}
+hr { border: 0; border-top: 1px solid var(--border); margin: var(--space-6) 0; }
 
-.btn-primary:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.btn-secondary {
-  background-color: transparent;
-  color: var(--text-secondary);
-  border: 1px solid var(--border-color);
-}
-
-.btn-secondary:hover {
-  background-color: var(--bg-light);
-}
-
-.success-message {
-  text-align: center;
-  padding: 3rem 1rem;
-}
-
-.success-icon {
-  font-size: 4rem;
-  color: var(--success-color);
-  margin-bottom: 1rem;
-}
-
-.success-message h2 {
-  color: var(--success-color);
-  margin-bottom: 1rem;
-}
-
-.booking-summary {
-  background-color: var(--bg-light);
-  padding: 1.5rem;
-  border-radius: 8px;
-  margin: 2rem 0;
-}
-
-.summary-item {
-  display: flex;
-  justify-content: space-between;
-  padding: 0.75rem 0;
-  border-bottom: 1px solid var(--border-color);
-}
-
-.summary-item:last-child {
-  border-bottom: none;
-}
-
-.summary-label {
-  font-weight: 600;
-  color: var(--text-secondary);
-}
-
-.summary-value {
-  color: var(--text-primary);
-}
-
-/* React DatePicker Custom Styles */
-.react-datepicker-wrapper {
-  width: 100%;
-}
-
-.react-datepicker {
-  font-family: inherit;
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-}
-
-.react-datepicker__header {
-  background-color: var(--bg-white);
-  border-bottom: 1px solid var(--border-color);
-  padding-top: 1rem;
-}
-
-.react-datepicker__day--selected,
-.react-datepicker__day--keyboard-selected {
-  background-color: var(--primary-color);
-}
-
-.react-datepicker__day--selected:hover,
-.react-datepicker__day--keyboard-selected:hover {
-  background-color: var(--primary-hover);
-}
-
-.react-datepicker__day:hover {
-  background-color: var(--primary-light);
-}
-
-.react-datepicker__day--disabled {
-  color: #ccc;
-  cursor: not-allowed;
-}
-
-@media (max-width: 768px) {
-  .time-slots {
-    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
-  }
-
-  .button-group {
-    flex-direction: column;
-  }
-}
+::selection { background: var(--sky-200); color: var(--navy-900); }
