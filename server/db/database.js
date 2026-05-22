@@ -39,6 +39,14 @@ if (!columns.includes('logo_url')) {
   db.prepare('ALTER TABLE schools ADD COLUMN logo_url TEXT').run();
 }
 
+// Migration: Add walk_time to settings if it doesn't exist
+const settingsInfo = db.prepare("PRAGMA table_info(settings)").all();
+const settingsColumns = settingsInfo.map(c => c.name);
+if (!settingsColumns.includes('walk_time')) {
+  console.log('Adding walk_time column to settings table...');
+  db.prepare('ALTER TABLE settings ADD COLUMN walk_time INTEGER DEFAULT 5').run();
+}
+
 // Migration: Add available_dates and unavailable_dates to meeting_types if they don't exist
 const meetingTypesInfo = db.prepare("PRAGMA table_info(meeting_types)").all();
 const mtColumns = meetingTypesInfo.map(c => c.name);

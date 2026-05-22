@@ -225,7 +225,7 @@ export default function SchoolsManager({ mapsApiKey, mapsLoaded }) {
             </button>
           </div>
           <p className="field-hint">
-            Actual driving time in minutes between each pair of schools — the system adds 5 min for parking/walking and rounds to the nearest 5.
+            Actual driving time in minutes between each pair of schools — the system adds a configurable walk/parking buffer (set in Settings) and rounds to the nearest 5.
             Use <strong>Calculate from Addresses</strong> to auto-fill using Google Maps (requires Maps API key), then save.
           </p>
           <div className="drive-times-table-wrap">
