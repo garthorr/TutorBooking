@@ -151,6 +151,8 @@ class DBService {
       order: r.sort_order,
       sessionDuration: r.session_duration,
       availability: r.availability ? JSON.parse(r.availability) : null,
+      availableDates: r.available_dates ? JSON.parse(r.available_dates) : null,
+      unavailableDates: r.unavailable_dates ? JSON.parse(r.unavailable_dates) : null,
       isBuiltin: Boolean(r.is_builtin),
       requiresSchool: Boolean(r.requires_school)
     }));
@@ -161,8 +163,8 @@ class DBService {
     const insertStmt = db.prepare(`
       INSERT INTO meeting_types (
         id, user_id, label, description, icon, enabled, sort_order,
-        session_duration, availability, is_builtin, requires_school
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        session_duration, availability, available_dates, unavailable_dates, is_builtin, requires_school
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const transaction = db.transaction((types) => {
@@ -170,7 +172,11 @@ class DBService {
       for (const t of types) {
         insertStmt.run(
           t.id, userId, t.label, t.description, t.icon, t.enabled ? 1 : 0, t.order || 0,
-          t.sessionDuration, JSON.stringify(t.availability), t.isBuiltin ? 1 : 0, t.requiresSchool ? 1 : 0
+          t.sessionDuration,
+          JSON.stringify(t.availability),
+          JSON.stringify(t.availableDates || null),
+          JSON.stringify(t.unavailableDates || null),
+          t.isBuiltin ? 1 : 0, t.requiresSchool ? 1 : 0
         );
       }
     });

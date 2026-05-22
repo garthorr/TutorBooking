@@ -47,6 +47,8 @@ CREATE TABLE IF NOT EXISTS meeting_types (
   sort_order INTEGER DEFAULT 0,
   session_duration INTEGER,
   availability TEXT, -- JSON string
+  available_dates TEXT, -- JSON string (array of dates/ranges)
+  unavailable_dates TEXT, -- JSON string (array of dates/ranges)
   is_builtin INTEGER DEFAULT 0,
   requires_school INTEGER DEFAULT 0,
   FOREIGN KEY (user_id) REFERENCES users (id)

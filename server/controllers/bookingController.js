@@ -101,10 +101,40 @@ function getAvailableSlotsForDay(date, availabilityBlocks, sessionDuration, even
   return slots;
 }
 
+function isDateInOverrides(date, overrides) {
+  if (!overrides || !Array.isArray(overrides)) return false;
+  // date is either a Date object or an ISO string.
+  // We want to compare YYYY-MM-DD.
+  const d = new Date(date);
+  const target = d.toLocaleDateString('en-CA', { timeZone: TIMEZONE }); // YYYY-MM-DD
+
+  return overrides.some(override => {
+    if (typeof override === 'string') {
+      return override === target;
+    } else if (override.start && override.end) {
+      return target >= override.start && target <= override.end;
+    }
+    return false;
+  });
+}
+
 export const getAvailability = async (req, res) => {
   try {
-    const { date, schoolId, sessionDuration, availabilityBlocks } = req.body;
+    const { date, schoolId, sessionDuration, availabilityBlocks, availableDates, unavailableDates } = req.body;
     const selectedDate = new Date(date);
+
+    // Check unavailable dates override
+    if (isDateInOverrides(selectedDate, unavailableDates)) {
+      return res.json({ slots: [] });
+    }
+
+    // Check available dates override (if present, must be in it)
+    if (availableDates && availableDates.length > 0) {
+      if (!isDateInOverrides(selectedDate, availableDates)) {
+        return res.json({ slots: [] });
+      }
+    }
+
     const dayOfWeek = selectedDate.getDay();
     let blocks = availabilityBlocks;
     if (!blocks) {
@@ -124,7 +154,7 @@ export const getAvailability = async (req, res) => {
 
 export const getAvailableDays = async (req, res) => {
   try {
-    const { year, month, schoolId, sessionDuration, availabilityBlocks } = req.body;
+    const { year, month, schoolId, sessionDuration, availabilityBlocks, availableDates: mtAvailableDates, unavailableDates: mtUnavailableDates } = req.body;
     let availability = availabilityBlocks;
     if (!availability) {
       const schools = loadSchools();
@@ -139,6 +169,13 @@ export const getAvailableDays = async (req, res) => {
     for (let d = 1; d <= lastDay.getDate(); d++) {
       const date = new Date(year, month, d);
       if (date < today) continue;
+
+      // Check overrides
+      if (isDateInOverrides(date, mtUnavailableDates)) continue;
+      if (mtAvailableDates && mtAvailableDates.length > 0) {
+        if (!isDateInOverrides(date, mtAvailableDates)) continue;
+      }
+
       const dayOfWeek = date.getDay();
       const blocks = availability[dayOfWeek] || [];
       if (blocks.length === 0) continue;

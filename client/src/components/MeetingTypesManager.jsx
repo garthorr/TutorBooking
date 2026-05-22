@@ -1,4 +1,7 @@
 import { useState, useEffect } from 'react'
+import DatePicker from 'react-datepicker'
+import 'react-datepicker/dist/react-datepicker.css'
+import { format } from 'date-fns'
 import { adminFetch } from '../auth'
 
 const DAYS = [
@@ -42,9 +45,73 @@ function emptyType() {
       5: [{ start: '09:00', end: '17:00' }],
       6: []
     },
+    availableDates: [],
+    unavailableDates: [],
     isBuiltin: false,
     requiresSchool: false
   }
+}
+
+function DateListBuilder({ dates, onChange }) {
+  const [startDate, setStartDate] = useState(null)
+  const [endDate, setEndDate] = useState(null)
+
+  const handleAdd = () => {
+    if (!startDate) return
+    const newEntry = endDate && startDate.getTime() !== endDate.getTime()
+      ? { start: format(startDate, 'yyyy-MM-dd'), end: format(endDate, 'yyyy-MM-dd') }
+      : format(startDate, 'yyyy-MM-dd')
+
+    onChange([...(dates || []), newEntry])
+    setStartDate(null)
+    setEndDate(null)
+  }
+
+  const removeDate = (idx) => {
+    onChange(dates.filter((_, i) => i !== idx))
+  }
+
+  const renderTag = (entry, idx) => {
+    let label = ''
+    if (typeof entry === 'string') {
+      label = format(new Date(entry), 'MMM d, yyyy')
+    } else {
+      label = `${format(new Date(entry.start), 'MMM d')} - ${format(new Date(entry.end), 'MMM d, yyyy')}`
+    }
+
+    return (
+      <span key={idx} className="date-tag">
+        {label}
+        <button type="button" onClick={() => removeDate(idx)}>&times;</button>
+      </span>
+    )
+  }
+
+  return (
+    <div className="date-list-builder">
+      <div className="date-picker-row">
+        <DatePicker
+          selected={startDate}
+          onChange={(update) => {
+            const [start, end] = update
+            setStartDate(start)
+            setEndDate(end)
+          }}
+          startDate={startDate}
+          endDate={endDate}
+          selectsRange
+          placeholderText="Pick a date or range"
+          className="admin-date-input"
+        />
+        <button type="button" className="btn btn-secondary btn-sm" onClick={handleAdd} disabled={!startDate}>
+          Add
+        </button>
+      </div>
+      <div className="date-tags">
+        {(dates || []).map(renderTag)}
+      </div>
+    </div>
+  )
 }
 
 function ScheduleBuilder({ availability, onChange }) {
@@ -241,12 +308,10 @@ export default function MeetingTypesManager() {
               </label>
 
               <div className="mt-actions">
-                {!t.requiresSchool && (
-                  <button className="btn btn-secondary btn-sm"
-                    onClick={() => setExpandedId(expandedId === t.id ? null : t.id)}>
-                    {expandedId === t.id ? 'Close' : 'Details'}
-                  </button>
-                )}
+                <button className="btn btn-secondary btn-sm"
+                  onClick={() => setExpandedId(expandedId === t.id ? null : t.id)}>
+                  {expandedId === t.id ? 'Close' : 'Details'}
+                </button>
                 {!t.isBuiltin && (
                   <button className="btn btn-danger btn-sm" onClick={() => deleteType(t.id)}>
                     Delete
@@ -264,11 +329,25 @@ export default function MeetingTypesManager() {
                     onChange={e => updateField(t.id, { description: e.target.value })}
                     placeholder="Shown to students on the booking page" />
                 </div>
+                {!t.requiresSchool && (
+                  <div className="mt-detail-field">
+                    <label>Availability (Weekly Schedule)</label>
+                    <p className="field-hint">When this meeting type can be booked.</p>
+                    <ScheduleBuilder availability={t.availability}
+                      onChange={avail => updateField(t.id, { availability: avail })} />
+                  </div>
+                )}
                 <div className="mt-detail-field">
-                  <label>Availability</label>
-                  <p className="field-hint">When this meeting type can be booked.</p>
-                  <ScheduleBuilder availability={t.availability}
-                    onChange={avail => updateField(t.id, { availability: avail })} />
+                  <label>Specific Available Dates (Overrides Schedule)</label>
+                  <p className="field-hint">If set, these are the ONLY dates this meeting type can be booked.</p>
+                  <DateListBuilder dates={t.availableDates}
+                    onChange={dates => updateField(t.id, { availableDates: dates })} />
+                </div>
+                <div className="mt-detail-field">
+                  <label>Specific Unavailable Dates (Blackout)</label>
+                  <p className="field-hint">Dates that will be blocked even if they are in the regular schedule.</p>
+                  <DateListBuilder dates={t.unavailableDates}
+                    onChange={dates => updateField(t.id, { unavailableDates: dates })} />
                 </div>
               </div>
             )}
@@ -308,6 +387,16 @@ export default function MeetingTypesManager() {
             <label>Availability</label>
             <ScheduleBuilder availability={newType.availability}
               onChange={avail => setNewType(n => ({ ...n, availability: avail }))} />
+          </div>
+          <div className="mt-detail-field">
+            <label>Specific Available Dates</label>
+            <DateListBuilder dates={newType.availableDates}
+              onChange={dates => setNewType(n => ({ ...n, availableDates: dates }))} />
+          </div>
+          <div className="mt-detail-field">
+            <label>Specific Unavailable Dates</label>
+            <DateListBuilder dates={newType.unavailableDates}
+              onChange={dates => setNewType(n => ({ ...n, unavailableDates: dates }))} />
           </div>
           <div className="form-actions">
             <button type="button" className="btn btn-secondary"
