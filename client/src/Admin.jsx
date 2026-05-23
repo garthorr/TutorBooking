@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import SchoolsManager from './components/SchoolsManager'
 import MeetingTypesManager from './components/MeetingTypesManager'
+import EmbedBuilder from './components/EmbedBuilder'
 import { adminFetch, clearToken } from './auth'
 import { THEME_PRESETS, applyTheme } from './theme'
 import './Admin.css'
@@ -337,6 +338,12 @@ function Admin() {
             onClick={() => setTab('settings')}
           >
             Settings
+          </button>
+          <button
+            className={`admin-tab ${tab === 'embed' ? 'active' : ''}`}
+            onClick={() => setTab('embed')}
+          >
+            Embed
           </button>
         </div>
 
@@ -717,6 +724,13 @@ function Admin() {
               </form>
             </div>
 
+          </div>
+        )}
+
+        {/* Embed Tab */}
+        {tab === 'embed' && (
+          <div className="tab-content">
+            <EmbedBuilder />
           </div>
         )}
       </div>
