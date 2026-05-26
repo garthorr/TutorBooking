@@ -14,7 +14,7 @@ services:
     env_file:
       - ./server/.env
     volumes:
-      - token-data:/app/data
+      - ./token-data:/app/data
     networks:
       - booking-network
     mem_limit: 400m
