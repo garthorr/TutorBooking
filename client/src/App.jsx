@@ -404,7 +404,7 @@ function App() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          date: date.toISOString(), schoolId, sessionDuration, availabilityBlocks: availability,
+          date: format(date, 'yyyy-MM-dd'), schoolId, sessionDuration, availabilityBlocks: availability,
           availableDates: mtAvailableDates,
           unavailableDates: mtUnavailableDates
         })
@@ -511,6 +511,8 @@ function App() {
       const mt = getMeetingType(bookingData.meetingType)
       const finalBookingData = {
         ...bookingData,
+        date: format(bookingData.date, 'yyyy-MM-dd'),
+        time: bookingData.time.toISOString(),
         location: isCustomLocation
           ? bookingData.customLocation
           : selectedSchool

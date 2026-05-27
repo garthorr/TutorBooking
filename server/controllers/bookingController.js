@@ -61,8 +61,21 @@ async function fetchEventsForPeriod(timeMin, timeMax) {
 
 function hasSchedulingConflict(slotStart, slotEnd, events, schoolId, walkTime) {
   for (const event of events) {
-    const eventStart = new Date(event.start.dateTime || event.start.date);
-    const eventEnd = new Date(event.end.dateTime || event.end.date);
+    let eventStart, eventEnd;
+    if (event.start.date) {
+      // All-day event: start.date and end.date are YYYY-MM-DD
+      // Google all-day events: end.date is exclusive
+      eventStart = new Date(`${event.start.date}T00:00:00`);
+      const startInTZ = new Date(eventStart.toLocaleString('en-US', { timeZone: TIMEZONE }));
+      eventStart = new Date(eventStart.getTime() + (eventStart.getTime() - startInTZ.getTime()));
+
+      eventEnd = new Date(`${event.end.date}T00:00:00`);
+      const endInTZ = new Date(eventEnd.toLocaleString('en-US', { timeZone: TIMEZONE }));
+      eventEnd = new Date(eventEnd.getTime() + (eventEnd.getTime() - endInTZ.getTime()));
+    } else {
+      eventStart = new Date(event.start.dateTime);
+      eventEnd = new Date(event.end.dateTime);
+    }
     const eventSchoolId = event.extendedProperties?.private?.schoolId;
 
     if (slotStart < eventEnd && slotEnd > eventStart) return true;
@@ -133,21 +146,21 @@ function dayOfWeekFromStr(dateStr) {
 export const getAvailability = async (req, res) => {
   try {
     const { date, schoolId, sessionDuration, availabilityBlocks, availableDates, unavailableDates } = req.body;
-    const selectedDate = new Date(date);
+    // date is expected to be YYYY-MM-DD
+    const tzDateStr = date;
 
     // Check unavailable dates override
-    if (isDateInOverrides(selectedDate, unavailableDates)) {
+    if (isDateInOverrides(tzDateStr, unavailableDates)) {
       return res.json({ slots: [] });
     }
 
     // Check available dates override (if present, must be in it)
     if (availableDates && availableDates.length > 0) {
-      if (!isDateInOverrides(selectedDate, availableDates)) {
+      if (!isDateInOverrides(tzDateStr, availableDates)) {
         return res.json({ slots: [] });
       }
     }
 
-    const tzDateStr = selectedDate.toLocaleDateString('en-CA', { timeZone: TIMEZONE });
     const dayOfWeek = dayOfWeekFromStr(tzDateStr);
     let blocks = availabilityBlocks;
     if (!blocks) {
@@ -161,7 +174,7 @@ export const getAvailability = async (req, res) => {
     const timeMax = tzDate(noonUTC, 23, 59);
     const events = await fetchEventsForPeriod(timeMin, timeMax);
     const walkTime = dbService.getSettings(1)?.walk_time ?? 5;
-    const slots = getAvailableSlotsForDay(selectedDate, blocks, sessionDuration, events, schoolId, walkTime);
+    const slots = getAvailableSlotsForDay(noonUTC, blocks, sessionDuration, events, schoolId, walkTime);
     res.json({ slots });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch availability' });
@@ -177,11 +190,17 @@ export const getAvailableDays = async (req, res) => {
       const school = schools.find(s => s.id === schoolId);
       availability = school?.availability || {};
     }
-    const firstDay = new Date(year, month, 1);
-    const lastDay = new Date(year, month + 1, 0);
+    // Fetch events for a slightly larger window to account for timezone differences
+    const firstDay = new Date(Date.UTC(year, month, 1));
+    const lastDay = new Date(Date.UTC(year, month + 1, 0, 23, 59, 59));
+
+    // Buffer of 24 hours on each side
+    const timeMin = new Date(firstDay.getTime() - 24 * 60 * 60 * 1000);
+    const timeMax = new Date(lastDay.getTime() + 24 * 60 * 60 * 1000);
+
     const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: TIMEZONE });
     const availableDates = [];
-    const allEvents = await fetchEventsForPeriod(firstDay, lastDay);
+    const allEvents = await fetchEventsForPeriod(timeMin, timeMax);
     const walkTime = dbService.getSettings(1)?.walk_time ?? 5;
     for (let d = 1; d <= lastDay.getDate(); d++) {
       const dateStr = toDateStr(year, month, d);
