@@ -111,11 +111,13 @@ function getAvailableSlotsForDay(date, availabilityBlocks, sessionDuration, even
 
 function isDateInOverrides(date, overrides) {
   if (!overrides || !Array.isArray(overrides)) return false;
-  // date is either a Date object (parsed from ISO string) or a YYYY-MM-DD string.
-  // Convert to YYYY-MM-DD in TIMEZONE.
-  const target = typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)
-    ? date
-    : new Date(date).toLocaleDateString('en-CA', { timeZone: TIMEZONE });
+  // date is either a Date object or a YYYY-MM-DD string.
+  let target;
+  if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    target = date;
+  } else {
+    target = new Date(date).toLocaleDateString('en-CA', { timeZone: TIMEZONE });
+  }
 
   return overrides.some(override => {
     if (typeof override === 'string') {
@@ -208,13 +210,25 @@ export const getAvailableDays = async (req, res) => {
       }
 
       const dayOfWeek = dayOfWeekFromStr(dateStr);
-      const blocks = availability[dayOfWeek] || [];
+      let blocks = availability[dayOfWeek] || [];
+
+      // If this date is explicitly ALLOWED but has no weekly blocks,
+      // and we have mtAvailableDates, it might be blocking.
+      // However, usually overrides should define blocks too if they want specific times.
+      // But let's check if blocks is empty.
       if (blocks.length === 0) continue;
 
       // Use noon UTC so tzDate always resolves to the correct TIMEZONE calendar day
       const date = new Date(dateStr + 'T12:00:00.000Z');
-      // Pass allEvents instead of filtering by day to avoid boundary issues with all-day events
-      const slots = getAvailableSlotsForDay(date, blocks, sessionDuration, allEvents, schoolId, walkTime);
+      // Filter events for this day to improve performance, while being careful with all-day events
+      const dayEvents = allEvents.filter(e => {
+        if (e.start.date) {
+          return dateStr >= e.start.date && dateStr < e.end.date;
+        }
+        const start = new Date(e.start.dateTime);
+        return start.toLocaleDateString('en-CA', { timeZone: TIMEZONE }) === dateStr;
+      });
+      const slots = getAvailableSlotsForDay(date, blocks, sessionDuration, dayEvents, schoolId, walkTime);
       if (slots.length > 0) {
         availableDates.push(dateStr);
       }
