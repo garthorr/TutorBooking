@@ -334,7 +334,6 @@ function App() {
       return
     }
 
-    setAvailableDates(null)
     setLoadingDays(true)
     try {
       const res = await fetch('/api/availability/days', {
