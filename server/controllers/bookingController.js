@@ -103,10 +103,11 @@ function getAvailableSlotsForDay(date, availabilityBlocks, sessionDuration, even
 
 function isDateInOverrides(date, overrides) {
   if (!overrides || !Array.isArray(overrides)) return false;
-  // date is either a Date object or an ISO string.
-  // We want to compare YYYY-MM-DD.
-  const d = new Date(date);
-  const target = d.toLocaleDateString('en-CA', { timeZone: TIMEZONE }); // YYYY-MM-DD
+  // date is either a Date object (parsed from ISO string) or a YYYY-MM-DD string.
+  // Convert to YYYY-MM-DD in TIMEZONE.
+  const target = typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)
+    ? date
+    : new Date(date).toLocaleDateString('en-CA', { timeZone: TIMEZONE });
 
   return overrides.some(override => {
     if (typeof override === 'string') {
@@ -116,6 +117,17 @@ function isDateInOverrides(date, overrides) {
     }
     return false;
   });
+}
+
+// Returns YYYY-MM-DD string for a given year/month(0-indexed)/day in TIMEZONE.
+function toDateStr(year, month, day) {
+  return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+// Returns 0-6 day-of-week from a YYYY-MM-DD string (Sunday=0).
+function dayOfWeekFromStr(dateStr) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(y, m - 1, d).getDay();
 }
 
 export const getAvailability = async (req, res) => {
@@ -135,15 +147,18 @@ export const getAvailability = async (req, res) => {
       }
     }
 
-    const dayOfWeek = selectedDate.getDay();
+    const tzDateStr = selectedDate.toLocaleDateString('en-CA', { timeZone: TIMEZONE });
+    const dayOfWeek = dayOfWeekFromStr(tzDateStr);
     let blocks = availabilityBlocks;
     if (!blocks) {
       const schools = loadSchools();
       const school = schools.find(s => s.id === schoolId);
       blocks = school?.availability?.[dayOfWeek] || [];
     }
-    const timeMin = new Date(selectedDate); timeMin.setHours(0, 0, 0, 0);
-    const timeMax = new Date(selectedDate); timeMax.setHours(23, 59, 59, 999);
+    // Fetch events for the full TIMEZONE calendar day
+    const noonUTC = new Date(tzDateStr + 'T12:00:00.000Z');
+    const timeMin = tzDate(noonUTC, 0, 0);
+    const timeMax = tzDate(noonUTC, 23, 59);
     const events = await fetchEventsForPeriod(timeMin, timeMax);
     const walkTime = dbService.getSettings(1)?.walk_time ?? 5;
     const slots = getAvailableSlotsForDay(selectedDate, blocks, sessionDuration, events, schoolId, walkTime);
@@ -164,30 +179,32 @@ export const getAvailableDays = async (req, res) => {
     }
     const firstDay = new Date(year, month, 1);
     const lastDay = new Date(year, month + 1, 0);
-    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: TIMEZONE });
     const availableDates = [];
     const allEvents = await fetchEventsForPeriod(firstDay, lastDay);
     const walkTime = dbService.getSettings(1)?.walk_time ?? 5;
     for (let d = 1; d <= lastDay.getDate(); d++) {
-      const date = new Date(year, month, d);
-      if (date < today) continue;
+      const dateStr = toDateStr(year, month, d);
+      if (dateStr < todayStr) continue;
 
-      // Check overrides
-      if (isDateInOverrides(date, mtUnavailableDates)) continue;
+      // Check overrides using string comparison to avoid server-timezone issues
+      if (isDateInOverrides(dateStr, mtUnavailableDates)) continue;
       if (mtAvailableDates && mtAvailableDates.length > 0) {
-        if (!isDateInOverrides(date, mtAvailableDates)) continue;
+        if (!isDateInOverrides(dateStr, mtAvailableDates)) continue;
       }
 
-      const dayOfWeek = date.getDay();
+      const dayOfWeek = dayOfWeekFromStr(dateStr);
       const blocks = availability[dayOfWeek] || [];
       if (blocks.length === 0) continue;
+      // Use noon UTC so tzDate always resolves to the correct TIMEZONE calendar day
+      const date = new Date(dateStr + 'T12:00:00.000Z');
       const dayEvents = allEvents.filter(e => {
         const start = new Date(e.start.dateTime || e.start.date);
-        return start.getFullYear() === year && start.getMonth() === month && start.getDate() === d;
+        return start.toLocaleDateString('en-CA', { timeZone: TIMEZONE }) === dateStr;
       });
       const slots = getAvailableSlotsForDay(date, blocks, sessionDuration, dayEvents, schoolId, walkTime);
       if (slots.length > 0) {
-        availableDates.push(`${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`);
+        availableDates.push(dateStr);
       }
     }
     res.json({ availableDates });
