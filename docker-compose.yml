@@ -14,7 +14,7 @@ services:
     env_file:
       - ./server/.env
     volumes:
-      - token-data:/app/data
+      - ./token-data:/app/data
     networks:
       - booking-network
     mem_limit: 400m
@@ -32,8 +32,6 @@ services:
       dockerfile: Dockerfile
     container_name: tutor-booking-client
     restart: unless-stopped
-    ports:
-      - "5500:80"
     depends_on:
       - server
     networks:
@@ -42,18 +40,13 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=traefik"
-      # HTTP router (redirects to HTTPS)
-      - "traefik.http.routers.tutorbooking-http.rule=Host(`tutorbooking.oracle.tastymath.com`)"
-      - "traefik.http.routers.tutorbooking-http.entrypoints=web"
-      - "traefik.http.routers.tutorbooking-http.middlewares=redirect-to-https"
-      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
-      - "traefik.http.middlewares.redirect-to-https.redirectscheme.permanent=true"
-      # HTTPS router
-      - "traefik.http.routers.tutorbooking.rule=Host(`tutorbooking.oracle.tastymath.com`)"
+      - "traefik.http.routers.tutorbooking.rule=Host(`tutorbooking.contabo.tastymath.com`)"
       - "traefik.http.routers.tutorbooking.entrypoints=websecure"
       - "traefik.http.routers.tutorbooking.tls=true"
-      - "traefik.http.routers.tutorbooking.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.tutorbooking.tls.certresolver=le"
+      - "traefik.http.routers.tutorbooking.service=tutorbooking"
       - "traefik.http.services.tutorbooking.loadbalancer.server.port=80"
+      - "traefik.http.services.tutorbooking.loadbalancer.server.scheme=http"
     mem_limit: 150m
     mem_reservation: 100m
     healthcheck:
@@ -68,6 +61,3 @@ networks:
     driver: bridge
   traefik:
     external: true
-
-volumes:
-  token-data:
