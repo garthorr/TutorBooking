@@ -22,6 +22,7 @@ function formatSchedule(availability) {
 export default function SchoolsManager({ mapsApiKey, mapsLoaded }) {
   const [schools, setSchools] = useState([])
   const [driveTimes, setDriveTimes] = useState({})
+  const [walkTime, setWalkTime] = useState(5)
   const [editing, setEditing] = useState(null)  // null | 'new' | school object
   const [saving, setSaving] = useState(false)
   const [calculating, setCalculating] = useState(false)
@@ -33,14 +34,17 @@ export default function SchoolsManager({ mapsApiKey, mapsLoaded }) {
 
   const loadData = async () => {
     try {
-      const [schoolsRes, dtRes] = await Promise.all([
-        fetch('/api/schools'),        // public endpoint
-        adminFetch('/api/drivetimes') // admin only
+      const [schoolsRes, dtRes, settingsRes] = await Promise.all([
+        fetch('/api/schools'),
+        adminFetch('/api/drivetimes'),
+        adminFetch('/api/settings')
       ])
       const schoolsData = await schoolsRes.json()
       const dtData = await dtRes.json()
+      const settingsData = await settingsRes.json()
       if (Array.isArray(schoolsData)) setSchools(schoolsData)
       if (typeof dtData === 'object') setDriveTimes(dtData)
+      if (settingsData.walkTime != null) setWalkTime(settingsData.walkTime)
     } catch (err) {
       showMessage('Failed to load configuration', 'error')
     }
@@ -126,8 +130,31 @@ export default function SchoolsManager({ mapsApiKey, mapsLoaded }) {
     }))
   }
 
-  const handleSaveDriveTimes = () => {
-    saveDriveTimes(driveTimes)
+  const handleSaveDriveTimes = async () => {
+    setSaving(true)
+    try {
+      const [dtRes, settingsRes] = await Promise.all([
+        adminFetch('/api/drivetimes', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(driveTimes),
+        }),
+        adminFetch('/api/settings', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ walkTime }),
+        })
+      ])
+      if (dtRes.ok && settingsRes.ok) {
+        showMessage('Drive times saved', 'success')
+      } else {
+        showMessage('Failed to save drive times', 'error')
+      }
+    } catch {
+      showMessage('Failed to save drive times', 'error')
+    } finally {
+      setSaving(false)
+    }
   }
 
   const handleCalculateDriveTimes = async () => {
@@ -225,9 +252,20 @@ export default function SchoolsManager({ mapsApiKey, mapsLoaded }) {
             </button>
           </div>
           <p className="field-hint">
-            Actual driving time in minutes between each pair of schools — the system adds a configurable walk/parking buffer (set in Settings) and rounds to the nearest 5.
+            Actual driving time in minutes between each pair of schools. The walk/parking buffer below is added to every drive time when checking for scheduling conflicts, then rounded to the nearest 5.
             Use <strong>Calculate from Addresses</strong> to auto-fill using Google Maps (requires Maps API key), then save.
           </p>
+          <div className="settings-field settings-field-inline" style={{ marginBottom: '1rem' }}>
+            <label>Walk / Parking Buffer</label>
+            <select
+              value={walkTime}
+              onChange={e => setWalkTime(Number(e.target.value))}
+            >
+              {[5, 10, 15, 20, 25, 30].map(m => (
+                <option key={m} value={m}>{m} min</option>
+              ))}
+            </select>
+          </div>
           <div className="drive-times-table-wrap">
             <table className="drive-times-table">
               <thead>
