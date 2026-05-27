@@ -72,11 +72,12 @@ function DateListBuilder({ dates, onChange }) {
   }
 
   const renderTag = (entry, idx) => {
+    const parseLocal = (str) => { const [y, m, d] = str.split('-').map(Number); return new Date(y, m - 1, d) }
     let label = ''
     if (typeof entry === 'string') {
-      label = format(new Date(entry), 'MMM d, yyyy')
+      label = format(parseLocal(entry), 'MMM d, yyyy')
     } else {
-      label = `${format(new Date(entry.start), 'MMM d')} - ${format(new Date(entry.end), 'MMM d, yyyy')}`
+      label = `${format(parseLocal(entry.start), 'MMM d')} - ${format(parseLocal(entry.end), 'MMM d, yyyy')}`
     }
 
     return (
