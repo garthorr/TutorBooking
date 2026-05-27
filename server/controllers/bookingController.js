@@ -70,13 +70,13 @@ function hasSchedulingConflict(slotStart, slotEnd, events, schoolId, walkTime) {
     const driveTimeBefore = getDriveTimeFromStorage(eventSchoolId, schoolId, walkTime);
     if (driveTimeBefore > 0) {
       const bufferEnd = new Date(eventEnd.getTime() + driveTimeBefore * 60 * 1000);
-      if (slotStart < bufferEnd) return true;
+      if (slotStart >= eventEnd && slotStart < bufferEnd) return true;
     }
 
     const driveTimeAfter = getDriveTimeFromStorage(schoolId, eventSchoolId, walkTime);
     if (driveTimeAfter > 0) {
       const bufferStart = new Date(eventStart.getTime() - driveTimeAfter * 60 * 1000);
-      if (slotEnd > bufferStart) return true;
+      if (slotEnd <= eventStart && slotEnd > bufferStart) return true;
     }
   }
   return false;
