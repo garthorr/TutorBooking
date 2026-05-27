@@ -95,7 +95,7 @@ function getAvailableSlotsForDay(date, availabilityBlocks, sessionDuration, even
       if (slotEnd > blockEnd) break;
       const isBlocked = hasSchedulingConflict(slotStart, slotEnd, events, schoolId, walkTime);
       if (!isBlocked) slots.push({ time: slotStart.toISOString(), available: true, blockName: block.name || null });
-      slotStart = new Date(slotStart.getTime() + duration * 60 * 1000);
+      slotStart = new Date(slotStart.getTime() + 5 * 60 * 1000);
     }
   }
   return slots;

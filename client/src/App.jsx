@@ -288,7 +288,7 @@ function App() {
     notes: ''
   })
   const [availableSlots, setAvailableSlots] = useState([])
-  const [availableDates, setAvailableDates] = useState(new Set())
+  const [availableDates, setAvailableDates] = useState(null)
   const [loadingDays, setLoadingDays] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isBooked, setIsBooked] = useState(false)
@@ -330,10 +330,11 @@ function App() {
       sessionDuration = school.sessionDuration
       availabilityBlocks = school.availability
     } else {
-      setAvailableDates(new Set())
+      setAvailableDates(null)
       return
     }
 
+    setAvailableDates(null)
     setLoadingDays(true)
     try {
       const res = await fetch('/api/availability/days', {
@@ -362,7 +363,7 @@ function App() {
       const now = new Date()
       fetchAvailableDays(now.getMonth(), now.getFullYear(), selectedSchool, bookingData.meetingType, isCustomLocation)
     } else {
-      setAvailableDates(new Set())
+      setAvailableDates(null)
     }
   }, [selectedSchool, isCustomLocation, bookingData.meetingType, meetingTypes])
 
@@ -432,7 +433,7 @@ function App() {
       }
     }
 
-    if (availableDates.size > 0) return !availableDates.has(format(date, 'yyyy-MM-dd'))
+    if (availableDates !== null) return !availableDates.has(format(date, 'yyyy-MM-dd'))
 
     const dayOfWeek = getDay(date)
     let blocks = []
