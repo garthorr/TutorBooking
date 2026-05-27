@@ -64,14 +64,9 @@ function hasSchedulingConflict(slotStart, slotEnd, events, schoolId, walkTime) {
     let eventStart, eventEnd;
     if (event.start.date) {
       // All-day event: start.date and end.date are YYYY-MM-DD
-      // Google all-day events: end.date is exclusive
-      eventStart = new Date(`${event.start.date}T00:00:00`);
-      const startInTZ = new Date(eventStart.toLocaleString('en-US', { timeZone: TIMEZONE }));
-      eventStart = new Date(eventStart.getTime() + (eventStart.getTime() - startInTZ.getTime()));
-
-      eventEnd = new Date(`${event.end.date}T00:00:00`);
-      const endInTZ = new Date(eventEnd.toLocaleString('en-US', { timeZone: TIMEZONE }));
-      eventEnd = new Date(eventEnd.getTime() + (eventEnd.getTime() - endInTZ.getTime()));
+      // Use noon UTC to ensure tzDate correctly identifies the calendar day in TIMEZONE
+      eventStart = tzDate(new Date(event.start.date + 'T12:00:00.000Z'), 0, 0);
+      eventEnd = tzDate(new Date(event.end.date + 'T12:00:00.000Z'), 0, 0);
     } else {
       eventStart = new Date(event.start.dateTime);
       eventEnd = new Date(event.end.dateTime);
@@ -190,23 +185,23 @@ export const getAvailableDays = async (req, res) => {
       const school = schools.find(s => s.id === schoolId);
       availability = school?.availability || {};
     }
-    // Fetch events for a slightly larger window to account for timezone differences
-    const firstDay = new Date(Date.UTC(year, month, 1));
-    const lastDay = new Date(Date.UTC(year, month + 1, 0, 23, 59, 59));
 
-    // Buffer of 24 hours on each side
-    const timeMin = new Date(firstDay.getTime() - 24 * 60 * 60 * 1000);
-    const timeMax = new Date(lastDay.getTime() + 24 * 60 * 60 * 1000);
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+    // Fetch events for a slightly larger window to account for timezone differences
+    const timeMin = new Date(Date.UTC(year, month, 1, 0, 0, 0));
+    timeMin.setHours(timeMin.getHours() - 24);
+    const timeMax = new Date(Date.UTC(year, month, daysInMonth, 23, 59, 59));
+    timeMax.setHours(timeMax.getHours() + 24);
 
     const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: TIMEZONE });
     const availableDates = [];
     const allEvents = await fetchEventsForPeriod(timeMin, timeMax);
     const walkTime = dbService.getSettings(1)?.walk_time ?? 5;
-    for (let d = 1; d <= lastDay.getDate(); d++) {
+    for (let d = 1; d <= daysInMonth; d++) {
       const dateStr = toDateStr(year, month, d);
       if (dateStr < todayStr) continue;
 
-      // Check overrides using string comparison to avoid server-timezone issues
       if (isDateInOverrides(dateStr, mtUnavailableDates)) continue;
       if (mtAvailableDates && mtAvailableDates.length > 0) {
         if (!isDateInOverrides(dateStr, mtAvailableDates)) continue;
@@ -215,13 +210,11 @@ export const getAvailableDays = async (req, res) => {
       const dayOfWeek = dayOfWeekFromStr(dateStr);
       const blocks = availability[dayOfWeek] || [];
       if (blocks.length === 0) continue;
+
       // Use noon UTC so tzDate always resolves to the correct TIMEZONE calendar day
       const date = new Date(dateStr + 'T12:00:00.000Z');
-      const dayEvents = allEvents.filter(e => {
-        const start = new Date(e.start.dateTime || e.start.date);
-        return start.toLocaleDateString('en-CA', { timeZone: TIMEZONE }) === dateStr;
-      });
-      const slots = getAvailableSlotsForDay(date, blocks, sessionDuration, dayEvents, schoolId, walkTime);
+      // Pass allEvents instead of filtering by day to avoid boundary issues with all-day events
+      const slots = getAvailableSlotsForDay(date, blocks, sessionDuration, allEvents, schoolId, walkTime);
       if (slots.length > 0) {
         availableDates.push(dateStr);
       }
