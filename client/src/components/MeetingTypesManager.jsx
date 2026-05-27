@@ -116,6 +116,8 @@ function DateListBuilder({ dates, onChange }) {
 
 function ScheduleBuilder({ availability, onChange }) {
   const avail = availability || {}
+  const [copyMenuDay, setCopyMenuDay] = useState(null)
+  const [copyTargets, setCopyTargets] = useState([])
 
   const toggleDay = (num) => {
     const updated = { ...avail }
@@ -142,6 +144,21 @@ function ScheduleBuilder({ availability, onChange }) {
     onChange(updated)
   }
 
+  const openCopyMenu = (dayNum) => {
+    setCopyMenuDay(dayNum)
+    setCopyTargets([])
+  }
+
+  const applyCopy = (fromDay) => {
+    const sourceBlocks = avail[fromDay] || []
+    if (sourceBlocks.length === 0) { setCopyMenuDay(null); setCopyTargets([]); return }
+    const updated = { ...avail }
+    copyTargets.forEach(d => { updated[d] = sourceBlocks.map(b => ({ ...b })) })
+    onChange(updated)
+    setCopyMenuDay(null)
+    setCopyTargets([])
+  }
+
   return (
     <div className="schedule-builder">
       {DAYS.map(({ num, label }) => {
@@ -155,11 +172,51 @@ function ScheduleBuilder({ availability, onChange }) {
                 <span>{label}</span>
               </label>
               {active && (
-                <button type="button" className="add-block-btn" onClick={() => addBlock(num)}>
-                  + Add Block
-                </button>
+                <div className="day-header-actions">
+                  <button type="button" className="add-block-btn" onClick={() => addBlock(num)}>
+                    + Add Block
+                  </button>
+                  <button
+                    type="button"
+                    className="copy-day-btn"
+                    onClick={() => copyMenuDay === num ? setCopyMenuDay(null) : openCopyMenu(num)}
+                    title="Copy schedule to another day"
+                  >
+                    Copy to…
+                  </button>
+                </div>
               )}
             </div>
+
+            {active && copyMenuDay === num && (
+              <div className="copy-menu">
+                <span className="copy-menu-label">Copy to:</span>
+                {DAYS.filter(d => d.num !== num).map(d => (
+                  <label key={d.num} className="copy-menu-day">
+                    <input
+                      type="checkbox"
+                      checked={copyTargets.includes(d.num)}
+                      onChange={() => setCopyTargets(prev =>
+                        prev.includes(d.num) ? prev.filter(x => x !== d.num) : [...prev, d.num]
+                      )}
+                    />
+                    {d.label}
+                  </label>
+                ))}
+                <button
+                  type="button"
+                  className="btn btn-primary copy-apply-btn"
+                  disabled={copyTargets.length === 0}
+                  onClick={() => applyCopy(num)}
+                >
+                  Apply
+                </button>
+                <button type="button" className="btn btn-secondary copy-apply-btn" onClick={() => setCopyMenuDay(null)}>
+                  Cancel
+                </button>
+              </div>
+            )}
+
             {active && (
               <div className="time-blocks">
                 {blocks.map((block, idx) => (
