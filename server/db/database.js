@@ -61,6 +61,20 @@ if (!mtColumns.includes('unavailable_dates')) {
   db.prepare('ALTER TABLE meeting_types ADD COLUMN unavailable_dates TEXT').run();
 }
 
+// Migration: Add status and manage_token to bookings if they don't exist
+const bookingsInfo = db.prepare("PRAGMA table_info(bookings)").all();
+const bookingColumns = bookingsInfo.map(c => c.name);
+
+if (!bookingColumns.includes('status')) {
+  console.log('Adding status column to bookings table...');
+  db.prepare("ALTER TABLE bookings ADD COLUMN status TEXT DEFAULT 'confirmed'").run();
+}
+
+if (!bookingColumns.includes('manage_token')) {
+  console.log('Adding manage_token column to bookings table...');
+  db.prepare('ALTER TABLE bookings ADD COLUMN manage_token TEXT').run();
+}
+
 /**
  * Initialize a default admin user if no users exist
  */

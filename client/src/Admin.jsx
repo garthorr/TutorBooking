@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import SchoolsManager from './components/SchoolsManager'
 import MeetingTypesManager from './components/MeetingTypesManager'
+import BookingsManager from './components/BookingsManager'
 import EmbedBuilder from './components/EmbedBuilder'
 import { adminFetch, clearToken } from './auth'
 import { THEME_PRESETS, applyTheme } from './theme'
@@ -16,7 +17,7 @@ function durationLabel(d) {
 }
 
 function Admin() {
-  const [tab, setTab] = useState('calendar')
+  const [tab, setTab] = useState('bookings')
   const [status, setStatus] = useState({
     connected: false,
     hasStoredTokens: false,
@@ -314,6 +315,12 @@ function Admin() {
         {/* Tabs */}
         <div className="admin-tabs">
           <button
+            className={`admin-tab ${tab === 'bookings' ? 'active' : ''}`}
+            onClick={() => setTab('bookings')}
+          >
+            Bookings
+          </button>
+          <button
             className={`admin-tab ${tab === 'calendar' ? 'active' : ''}`}
             onClick={() => setTab('calendar')}
           >
@@ -522,6 +529,13 @@ function Admin() {
                 )}
               </div>
             )}
+          </div>
+        )}
+
+        {/* Bookings Tab */}
+        {tab === 'bookings' && (
+          <div className="tab-content">
+            <BookingsManager />
           </div>
         )}
 

@@ -292,6 +292,7 @@ function App() {
   const [loadingDays, setLoadingDays] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isBooked, setIsBooked] = useState(false)
+  const [manageToken, setManageToken] = useState(null)
   const [isCustomLocation, setIsCustomLocation] = useState(false)
   const [selectedSchool, setSelectedSchool] = useState(null)
   const [logoUrl, setLogoUrl] = useState(null)
@@ -525,6 +526,8 @@ function App() {
         body: JSON.stringify(finalBookingData)
       })
       if (response.ok) {
+        const data = await response.json().catch(() => ({}))
+        if (data?.booking?.manageToken) setManageToken(data.booking.manageToken)
         setIsBooked(true)
       } else {
         alert('Failed to book appointment. Please try again.')
@@ -589,6 +592,12 @@ function App() {
                 A confirmation email has been sent to {bookingData.email}
                 {bookingData.meetingType === 'google-meet' && ' with the Google Meet link'}.
               </p>
+              {manageToken && (
+                <p className="confirmation-note">
+                  Need to make a change?{' '}
+                  <a href={`/manage/${manageToken}`}>Reschedule or cancel your session</a>.
+                </p>
+              )}
             </div>
           </div>
         </div>

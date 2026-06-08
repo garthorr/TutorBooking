@@ -41,18 +41,39 @@ class DBService {
     return db.prepare('SELECT * FROM bookings WHERE user_id = ? ORDER BY date DESC, time DESC').all(userId);
   }
 
+  getBookingById(userId, id) {
+    return db.prepare('SELECT * FROM bookings WHERE user_id = ? AND id = ?').get(userId, id);
+  }
+
+  getBookingByToken(token) {
+    if (!token) return undefined;
+    return db.prepare('SELECT * FROM bookings WHERE manage_token = ?').get(token);
+  }
+
   addBooking(userId, b) {
     return db.prepare(`
       INSERT INTO bookings (
         id, user_id, date, time, meeting_type, location, school_id,
         name, email, phone, notes, session_duration, calendar_event_id,
-        meet_link, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        meet_link, status, manage_token, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
-      b.id, userId, b.date, b.time, b.meetingType, b.location, b.schoolId,
-      b.name, b.email, b.phone, b.notes, b.sessionDuration || 60,
-      b.calendarEventId, b.meetLink, b.createdAt || new Date().toISOString()
+      b.id, userId, b.date, b.time, b.meetingType, b.location,
+      // Non-school bookings (phone / Google Meet / "other location") have no
+      // schools row — store NULL rather than '' to satisfy the FK constraint.
+      b.schoolId && b.schoolId !== '__CUSTOM__' ? b.schoolId : null,
+      b.name, b.email, b.phone ?? null, b.notes ?? null, b.sessionDuration || 60,
+      b.calendarEventId ?? null, b.meetLink ?? null, b.status || 'confirmed', b.manageToken || null,
+      b.createdAt || new Date().toISOString()
     );
+  }
+
+  updateBookingStatus(userId, id, status) {
+    return db.prepare('UPDATE bookings SET status = ? WHERE user_id = ? AND id = ?').run(status, userId, id);
+  }
+
+  updateBookingSchedule(userId, id, { date, time }) {
+    return db.prepare('UPDATE bookings SET date = ?, time = ? WHERE user_id = ? AND id = ?').run(date, time, userId, id);
   }
 
   // Schools

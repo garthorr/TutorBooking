@@ -32,6 +32,8 @@ CREATE TABLE IF NOT EXISTS bookings (
   session_duration INTEGER NOT NULL,
   calendar_event_id TEXT,
   meet_link TEXT,
+  status TEXT DEFAULT 'confirmed',
+  manage_token TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users (id),
   FOREIGN KEY (school_id) REFERENCES schools (id)
