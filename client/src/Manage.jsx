@@ -1,14 +1,23 @@
 import { useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
-import { format, parseISO, isValid } from 'date-fns'
 import Scheduler from './components/Scheduler'
 import { applyTheme } from './theme'
 import './App.css'
 
+function detectTimezone() {
+  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || undefined }
+  catch { return undefined }
+}
+
 function fmt(b) {
-  const dt = b?.time ? parseISO(b.time) : null
-  if (dt && isValid(dt)) return format(dt, 'EEEE, MMMM d, yyyy · h:mm a')
-  return b?.date || ''
+  if (!b?.time) return b?.date || ''
+  const dt = new Date(b.time)
+  if (isNaN(dt.getTime())) return b.date || ''
+  return new Intl.DateTimeFormat('en-US', {
+    weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
+    hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
+    timeZone: b.timezone || detectTimezone()
+  }).format(dt)
 }
 
 export default function Manage() {
@@ -109,7 +118,7 @@ export default function Manage() {
                 <>
                   <h2>Pick a new time</h2>
                   <p className="field-hint">Currently scheduled for {fmt(booking)}.</p>
-                  <Scheduler params={params} onPick={handleReschedulePick} busy={busy} />
+                  <Scheduler params={params} onPick={handleReschedulePick} busy={busy} timezone={booking.timezone} />
                   <div className="button-group">
                     <button className="btn btn-ghost" onClick={() => setMode('view')} disabled={busy}>Back</button>
                   </div>

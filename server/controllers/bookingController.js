@@ -257,11 +257,12 @@ export const getAvailableDays = async (req, res) => {
 
 export const createBooking = async (req, res) => {
   try {
-    const { date, time, meetingType, location, schoolId, name, email, phone, notes, sessionDuration } = req.body;
+    const { date, time, meetingType, location, schoolId, name, email, phone, notes, sessionDuration, timezone } = req.body;
     const booking = {
       id: Date.now().toString(),
       date, time, meetingType, location, schoolId, name, email, phone, notes,
       sessionDuration: sessionDuration || 60,
+      timezone: timezone || null,
       status: 'confirmed',
       manageToken: crypto.randomBytes(16).toString('hex'),
       createdAt: new Date().toISOString()
@@ -441,7 +442,8 @@ function toPublicBooking(b) {
     sessionDuration: b.session_duration,
     status: b.status,
     meetLink: b.meet_link,
-    manageToken: b.manage_token
+    manageToken: b.manage_token,
+    timezone: b.client_timezone
   };
 }
 

@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS bookings (
   manage_token TEXT,
   reminder_24h_sent INTEGER DEFAULT 0,
   reminder_1h_sent INTEGER DEFAULT 0,
+  client_timezone TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users (id),
   FOREIGN KEY (school_id) REFERENCES schools (id)

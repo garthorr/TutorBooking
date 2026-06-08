@@ -43,22 +43,24 @@ function manageUrl(token) {
   return `${base}/manage/${token}`;
 }
 
-function formatWhen(timeISO) {
+function formatWhen(timeISO, tz) {
   const d = new Date(timeISO);
   if (isNaN(d.getTime())) return timeISO;
   return new Intl.DateTimeFormat('en-US', {
     weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
     hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
-    timeZone: TIMEZONE
+    timeZone: tz || TIMEZONE
   }).format(d);
 }
 
 // Normalize either a camelCase (freshly created) or snake_case (DB row) booking.
+// Times are shown in the timezone the client booked in, when known.
 function normalize(booking) {
   return {
     email: booking.email,
     name: booking.name,
     timeISO: booking.time,
+    timezone: booking.timezone ?? booking.client_timezone ?? null,
     location: booking.location,
     sessionDuration: booking.sessionDuration ?? booking.session_duration,
     manageToken: booking.manageToken ?? booking.manage_token,
@@ -76,7 +78,7 @@ function layout(heading, bodyHtml) {
 
 function detailsHtml(b) {
   const rows = [
-    ['When', formatWhen(b.timeISO)],
+    ['When', formatWhen(b.timeISO, b.timezone)],
     ['Length', b.sessionDuration ? `${b.sessionDuration} minutes` : null],
     ['Location', b.location],
     ['Video link', b.meetLink ? `<a href="${b.meetLink}">${b.meetLink}</a>` : null]
@@ -105,14 +107,14 @@ async function send(to, subject, html) {
 
 export async function sendConfirmation(booking) {
   const b = normalize(booking);
-  await send(b.email, `Booking confirmed — ${formatWhen(b.timeISO)}`,
+  await send(b.email, `Booking confirmed — ${formatWhen(b.timeISO, b.timezone)}`,
     layout(`You're booked, ${b.name}!`,
       `<p>Your session is confirmed. Details below:</p>${detailsHtml(b)}${manageHtml(b.manageToken)}`));
 }
 
 export async function sendReschedule(booking) {
   const b = normalize(booking);
-  await send(b.email, `Booking rescheduled — ${formatWhen(b.timeISO)}`,
+  await send(b.email, `Booking rescheduled — ${formatWhen(b.timeISO, b.timezone)}`,
     layout('Your session was rescheduled',
       `<p>Hi ${b.name}, your session has been moved. Here are the new details:</p>${detailsHtml(b)}${manageHtml(b.manageToken)}`));
 }
@@ -121,7 +123,7 @@ export async function sendCancellation(booking) {
   const b = normalize(booking);
   await send(b.email, 'Booking cancelled',
     layout('Your session was cancelled',
-      `<p>Hi ${b.name}, your session for <strong>${formatWhen(b.timeISO)}</strong> has been cancelled. ` +
+      `<p>Hi ${b.name}, your session for <strong>${formatWhen(b.timeISO, b.timezone)}</strong> has been cancelled. ` +
       `If this was a mistake, you can book again any time.</p>`));
 }
 

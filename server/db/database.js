@@ -85,6 +85,11 @@ if (!bookingColumns.includes('reminder_1h_sent')) {
   db.prepare('ALTER TABLE bookings ADD COLUMN reminder_1h_sent INTEGER DEFAULT 0').run();
 }
 
+if (!bookingColumns.includes('client_timezone')) {
+  console.log('Adding client_timezone column to bookings table...');
+  db.prepare('ALTER TABLE bookings ADD COLUMN client_timezone TEXT').run();
+}
+
 /**
  * Initialize a default admin user if no users exist
  */

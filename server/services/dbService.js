@@ -55,8 +55,9 @@ class DBService {
       INSERT INTO bookings (
         id, user_id, date, time, meeting_type, location, school_id,
         name, email, phone, notes, session_duration, calendar_event_id,
-        meet_link, status, manage_token, reminder_24h_sent, reminder_1h_sent, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        meet_link, status, manage_token, reminder_24h_sent, reminder_1h_sent,
+        client_timezone, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       b.id, userId, b.date, b.time, b.meetingType, b.location,
       // Non-school bookings (phone / Google Meet / "other location") have no
@@ -65,6 +66,7 @@ class DBService {
       b.name, b.email, b.phone ?? null, b.notes ?? null, b.sessionDuration || 60,
       b.calendarEventId ?? null, b.meetLink ?? null, b.status || 'confirmed', b.manageToken || null,
       b.reminder24hSent ? 1 : 0, b.reminder1hSent ? 1 : 0,
+      b.timezone || null,
       b.createdAt || new Date().toISOString()
     );
   }

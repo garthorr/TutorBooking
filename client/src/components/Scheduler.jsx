@@ -24,6 +24,18 @@ const ChevR = (p) => (
   </svg>
 )
 
+function detectTimezone() {
+  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Chicago' }
+  catch { return 'America/Chicago' }
+}
+const fmtTime = (date, tz) => new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', timeZone: tz }).format(date)
+const fmtTzAbbr = (date, tz) => {
+  try {
+    const part = new Intl.DateTimeFormat('en-US', { timeZoneName: 'short', timeZone: tz }).formatToParts(date).find(p => p.type === 'timeZoneName')
+    return part?.value || tz
+  } catch { return tz }
+}
+
 function isDateInOverrides(date, overrides) {
   if (!overrides || !Array.isArray(overrides)) return false
   const target = format(date, 'yyyy-MM-dd')
@@ -34,7 +46,8 @@ function isDateInOverrides(date, overrides) {
   })
 }
 
-export default function Scheduler({ params, onPick, maxAdvanceDays = 90, busy = false }) {
+export default function Scheduler({ params, onPick, maxAdvanceDays = 90, busy = false, timezone }) {
+  const tz = timezone || detectTimezone()
   const today = new Date()
   const [view, setView] = useState({ year: today.getFullYear(), month: today.getMonth() })
   const [availableDates, setAvailableDates] = useState(null)
@@ -191,7 +204,7 @@ export default function Scheduler({ params, onPick, maxAdvanceDays = 90, busy = 
           <div className="time-slots-empty">No open times on this date. Please pick another.</div>
         ) : (
           <>
-            <div className="time-slots-head">{format(selectedDate, 'EEE, MMM d')} · America/Chicago</div>
+            <div className="time-slots-head">{format(selectedDate, 'EEE, MMM d')} · {fmtTzAbbr(selectedDate, tz)}</div>
             <div className="time-slots">
               {slots.map((time, i) => (
                 <button
@@ -200,7 +213,7 @@ export default function Scheduler({ params, onPick, maxAdvanceDays = 90, busy = 
                   className={'time-slot' + (selectedTime && selectedTime.getTime() === time.getTime() ? ' selected' : '')}
                   onClick={() => setSelectedTime(time)}
                 >
-                  <span className="slot-time">{format(time, 'h:mm a')}</span>
+                  <span className="slot-time">{fmtTime(time, tz)}</span>
                 </button>
               ))}
             </div>
