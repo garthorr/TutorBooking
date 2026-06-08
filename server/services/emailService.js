@@ -33,6 +33,12 @@ function getTransporter() {
   return transporter;
 }
 
+// Escape any user-controlled value before interpolating it into email HTML.
+function esc(value) {
+  return String(value ?? '').replace(/[&<>"']/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
 function businessName() {
   return dbService.getSettings(1)?.business_name || 'Tutoring';
 }
@@ -70,18 +76,18 @@ function normalize(booking) {
 
 function layout(heading, bodyHtml) {
   return `<div style="font-family:Arial,Helvetica,sans-serif;max-width:520px;margin:0 auto;color:#0f172a">
-  <h2 style="color:#0f172a">${heading}</h2>
+  <h2 style="color:#0f172a">${esc(heading)}</h2>
   ${bodyHtml}
-  <p style="color:#64748b;font-size:13px;margin-top:24px">${businessName()}</p>
+  <p style="color:#64748b;font-size:13px;margin-top:24px">${esc(businessName())}</p>
 </div>`;
 }
 
 function detailsHtml(b) {
   const rows = [
-    ['When', formatWhen(b.timeISO, b.timezone)],
-    ['Length', b.sessionDuration ? `${b.sessionDuration} minutes` : null],
-    ['Location', b.location],
-    ['Video link', b.meetLink ? `<a href="${b.meetLink}">${b.meetLink}</a>` : null]
+    ['When', esc(formatWhen(b.timeISO, b.timezone))],
+    ['Length', b.sessionDuration ? `${esc(b.sessionDuration)} minutes` : null],
+    ['Location', esc(b.location)],
+    ['Video link', b.meetLink ? `<a href="${esc(b.meetLink)}">${esc(b.meetLink)}</a>` : null]
   ].filter(([, v]) => v);
   return `<table style="border-collapse:collapse;width:100%">${rows.map(([k, v]) =>
     `<tr><td style="padding:6px 12px 6px 0;color:#64748b">${k}</td><td style="padding:6px 0">${v}</td></tr>`
@@ -116,14 +122,14 @@ export async function sendReschedule(booking) {
   const b = normalize(booking);
   await send(b.email, `Booking rescheduled — ${formatWhen(b.timeISO, b.timezone)}`,
     layout('Your session was rescheduled',
-      `<p>Hi ${b.name}, your session has been moved. Here are the new details:</p>${detailsHtml(b)}${manageHtml(b.manageToken)}`));
+      `<p>Hi ${esc(b.name)}, your session has been moved. Here are the new details:</p>${detailsHtml(b)}${manageHtml(b.manageToken)}`));
 }
 
 export async function sendCancellation(booking) {
   const b = normalize(booking);
   await send(b.email, 'Booking cancelled',
     layout('Your session was cancelled',
-      `<p>Hi ${b.name}, your session for <strong>${formatWhen(b.timeISO, b.timezone)}</strong> has been cancelled. ` +
+      `<p>Hi ${esc(b.name)}, your session for <strong>${esc(formatWhen(b.timeISO, b.timezone))}</strong> has been cancelled. ` +
       `If this was a mistake, you can book again any time.</p>`));
 }
 
@@ -131,5 +137,5 @@ export async function sendReminder(booking, label) {
   const b = normalize(booking);
   await send(b.email, `Reminder: your session is ${label}`,
     layout(`Your session is ${label}`,
-      `<p>Hi ${b.name}, this is a reminder about your upcoming session:</p>${detailsHtml(b)}${manageHtml(b.manageToken)}`));
+      `<p>Hi ${esc(b.name)}, this is a reminder about your upcoming session:</p>${detailsHtml(b)}${manageHtml(b.manageToken)}`));
 }

@@ -24,7 +24,7 @@ class PasswordStore {
   }
 
   async hashPassword(password) {
-    return await bcrypt.hash(password, 10);
+    return await bcrypt.hash(password, 12);
   }
 
   async changePassword(currentPassword, newPassword) {
