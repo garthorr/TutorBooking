@@ -10,9 +10,19 @@ import {
   disconnectGoogleCalendar
 } from '../controllers/authController.js';
 import jwt from 'jsonwebtoken';
+import { rateLimit } from 'express-rate-limit';
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-in-production';
+
+// Throttle admin login to slow online password brute-forcing.
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: { error: 'Too many login attempts. Please try again in 15 minutes.' },
+  standardHeaders: true,
+  legacyHeaders: false
+});
 
 // Admin auth middleware
 function adminAuth(req, res, next) {
@@ -26,7 +36,7 @@ function adminAuth(req, res, next) {
   }
 }
 
-router.post('/admin/login', login);
+router.post('/admin/login', loginLimiter, login);
 router.post('/admin/change-password', adminAuth, changePassword);
 router.get('/admin/verify', adminAuth, verifyAdmin);
 

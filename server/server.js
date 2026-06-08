@@ -9,8 +9,12 @@ import authRoutes from './routes/authRoutes.js';
 import bookingRoutes from './routes/bookingRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
 import { startReminderJob } from './jobs/reminderJob.js';
+import { checkSecrets, warnIfDefaultPassword } from './securityCheck.js';
 
 dotenv.config();
+
+// Fail fast on insecure secrets before anything else starts.
+checkSecrets();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -27,6 +31,7 @@ app.use((req, res, next) => {
 // Initialize Database
 initializeDefaultUser().then(() => {
   console.log('✓ Database initialized');
+  warnIfDefaultPassword();
   startReminderJob();
 }).catch(err => {
   console.error('✗ Database initialization failed:', err);
@@ -90,7 +95,14 @@ app.use(helmet({
     }
   }
 }));
-app.use(express.json({ limit: '4mb' }));
+// Keep request bodies small on public endpoints; only the logo upload (base64
+// data URL) needs the larger limit.
+const standardJson = express.json({ limit: '64kb' });
+const largeJson = express.json({ limit: '4mb' });
+app.use((req, res, next) => {
+  if (req.method === 'PUT' && req.path === '/api/logo') return largeJson(req, res, next);
+  return standardJson(req, res, next);
+});
 
 // Routes
 app.use('/auth', authRoutes);

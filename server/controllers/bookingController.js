@@ -255,9 +255,25 @@ export const getAvailableDays = async (req, res) => {
   }
 };
 
+// Basic validation/limits for the public booking endpoint.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+function validateBookingInput(b) {
+  if (!b.name || !b.email || !b.time || !b.meetingType) return 'Missing required booking fields';
+  if (typeof b.email !== 'string' || b.email.length > 200 || !EMAIL_RE.test(b.email)) return 'Invalid email address';
+  if (String(b.name).length > 100) return 'Name is too long';
+  if (b.phone && String(b.phone).length > 40) return 'Phone number is too long';
+  if (b.notes && String(b.notes).length > 2000) return 'Notes are too long';
+  if (b.location && String(b.location).length > 300) return 'Location is too long';
+  if (b.timezone && String(b.timezone).length > 64) return 'Invalid timezone';
+  if (isNaN(new Date(b.time).getTime())) return 'Invalid time';
+  return null;
+}
+
 export const createBooking = async (req, res) => {
   try {
     const { date, time, meetingType, location, schoolId, name, email, phone, notes, sessionDuration, timezone } = req.body;
+    const validationError = validateBookingInput(req.body);
+    if (validationError) return res.status(400).json({ error: validationError });
     const booking = {
       id: Date.now().toString(),
       date, time, meetingType, location, schoolId, name, email, phone, notes,
