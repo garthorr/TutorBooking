@@ -75,6 +75,16 @@ if (!bookingColumns.includes('manage_token')) {
   db.prepare('ALTER TABLE bookings ADD COLUMN manage_token TEXT').run();
 }
 
+if (!bookingColumns.includes('reminder_24h_sent')) {
+  console.log('Adding reminder_24h_sent column to bookings table...');
+  db.prepare('ALTER TABLE bookings ADD COLUMN reminder_24h_sent INTEGER DEFAULT 0').run();
+}
+
+if (!bookingColumns.includes('reminder_1h_sent')) {
+  console.log('Adding reminder_1h_sent column to bookings table...');
+  db.prepare('ALTER TABLE bookings ADD COLUMN reminder_1h_sent INTEGER DEFAULT 0').run();
+}
+
 /**
  * Initialize a default admin user if no users exist
  */

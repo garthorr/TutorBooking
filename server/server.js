@@ -8,6 +8,7 @@ import { initializeDefaultUser } from './db/database.js';
 import authRoutes from './routes/authRoutes.js';
 import bookingRoutes from './routes/bookingRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
+import { startReminderJob } from './jobs/reminderJob.js';
 
 dotenv.config();
 
@@ -26,6 +27,7 @@ app.use((req, res, next) => {
 // Initialize Database
 initializeDefaultUser().then(() => {
   console.log('✓ Database initialized');
+  startReminderJob();
 }).catch(err => {
   console.error('✗ Database initialization failed:', err);
 });

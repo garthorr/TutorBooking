@@ -6,6 +6,10 @@ import { loadSchools, getDriveTimeFromStorage } from '../schoolsStorage.js';
 import { loadCalendarConfig } from '../calendarStorage.js';
 import { loadMeetingTypes } from '../meetingTypesStorage.js';
 import { addBooking as addBookingToDisk, loadBookings } from '../bookingsStorage.js';
+import { sendConfirmation, sendReschedule, sendCancellation } from '../services/emailService.js';
+
+const HOUR_MS = 60 * 60 * 1000;
+const DAY_MS = 24 * HOUR_MS;
 
 const TIMEZONE = process.env.TIMEZONE || 'America/Chicago';
 const ADMIN_ID = 1;
@@ -291,7 +295,13 @@ export const createBooking = async (req, res) => {
       booking.calendarEventId = calendarEvent.data.id;
       booking.meetLink = calendarEvent.data.hangoutLink || null;
     }
+    // Suppress reminders that would otherwise fire immediately for a booking
+    // made inside the reminder window.
+    const msUntil = new Date(booking.time).getTime() - Date.now();
+    booking.reminder24hSent = msUntil <= DAY_MS;
+    booking.reminder1hSent = msUntil <= HOUR_MS;
     addBookingToDisk([], booking);
+    sendConfirmation(booking);
     res.status(201).json({ success: true, booking });
   } catch (error) {
     res.status(500).json({ error: 'Failed to create booking' });
@@ -438,6 +448,7 @@ function toPublicBooking(b) {
 async function performCancel(booking) {
   await deleteCalendarEvent(booking.calendar_event_id);
   dbService.updateBookingStatus(booking.user_id, booking.id, 'cancelled');
+  sendCancellation(booking);
 }
 
 async function performReschedule(booking, time) {
@@ -446,7 +457,9 @@ async function performReschedule(booking, time) {
   await patchCalendarEvent(booking.calendar_event_id, time, booking.session_duration);
   const date = new Date(time).toLocaleDateString('en-CA', { timeZone: TIMEZONE });
   dbService.updateBookingSchedule(booking.user_id, booking.id, { date, time });
-  return { booking: dbService.getBookingById(booking.user_id, booking.id) };
+  const updated = dbService.getBookingById(booking.user_id, booking.id);
+  sendReschedule(updated);
+  return { booking: updated };
 }
 
 // Admin: fetch a single booking plus the rules needed to reschedule it.
