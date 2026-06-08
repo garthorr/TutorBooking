@@ -17,6 +17,7 @@
     "express-rate-limit": "^8.2.1",
     "googleapis": "^130.0.0",
     "helmet": "^7.1.0",
-    "jsonwebtoken": "^9.0.3"
+    "jsonwebtoken": "^9.0.3",
+    "nodemailer": "^6.9.16"
   }
 }

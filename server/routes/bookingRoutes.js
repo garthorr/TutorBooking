@@ -3,7 +3,13 @@ import {
   getAvailability,
   getAvailableDays,
   createBooking,
-  getBookings
+  getBookings,
+  getBooking,
+  cancelBooking,
+  rescheduleBooking,
+  getManagedBooking,
+  cancelManagedBooking,
+  rescheduleManagedBooking
 } from '../controllers/bookingController.js';
 import { adminAuth } from './authRoutes.js';
 import { rateLimit } from 'express-rate-limit';
@@ -30,5 +36,13 @@ router.post('/availability', availabilityLimiter, getAvailability);
 router.post('/availability/days', availabilityLimiter, getAvailableDays);
 router.post('/bookings', bookingLimiter, createBooking);
 router.get('/bookings', adminAuth, getBookings);
+router.get('/bookings/:id', adminAuth, getBooking);
+router.patch('/bookings/:id', adminAuth, rescheduleBooking);
+router.delete('/bookings/:id', adminAuth, cancelBooking);
+
+// Public, token-scoped self-service management (no login required)
+router.get('/manage/:token', availabilityLimiter, getManagedBooking);
+router.post('/manage/:token/cancel', bookingLimiter, cancelManagedBooking);
+router.post('/manage/:token/reschedule', bookingLimiter, rescheduleManagedBooking);
 
 export default router;

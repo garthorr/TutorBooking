@@ -1,12 +1,28 @@
 import { google } from 'googleapis';
+import crypto from 'crypto';
 import dbService from '../services/dbService.js';
 import { loadTokens, saveTokens } from '../tokenStorage.js';
 import { loadSchools, getDriveTimeFromStorage } from '../schoolsStorage.js';
 import { loadCalendarConfig } from '../calendarStorage.js';
 import { loadMeetingTypes } from '../meetingTypesStorage.js';
 import { addBooking as addBookingToDisk, loadBookings } from '../bookingsStorage.js';
+import { sendConfirmation, sendReschedule, sendCancellation } from '../services/emailService.js';
+
+const HOUR_MS = 60 * 60 * 1000;
+const DAY_MS = 24 * HOUR_MS;
 
 const TIMEZONE = process.env.TIMEZONE || 'America/Chicago';
+const ADMIN_ID = 1;
+
+// Fallback weekly availability for "Other location" bookings, which have no
+// stored per-location schedule. Mirrors the client default (Mon–Fri 9–5).
+const CUSTOM_LOCATION_AVAILABILITY = {
+  1: [{ start: '09:00', end: '17:00' }],
+  2: [{ start: '09:00', end: '17:00' }],
+  3: [{ start: '09:00', end: '17:00' }],
+  4: [{ start: '09:00', end: '17:00' }],
+  5: [{ start: '09:00', end: '17:00' }]
+};
 
 function tzDate(baseDate, hours, minutes) {
   const dateStr = baseDate.toLocaleDateString('en-CA', { timeZone: TIMEZONE });
@@ -241,11 +257,14 @@ export const getAvailableDays = async (req, res) => {
 
 export const createBooking = async (req, res) => {
   try {
-    const { date, time, meetingType, location, schoolId, name, email, phone, notes, sessionDuration } = req.body;
+    const { date, time, meetingType, location, schoolId, name, email, phone, notes, sessionDuration, timezone } = req.body;
     const booking = {
       id: Date.now().toString(),
       date, time, meetingType, location, schoolId, name, email, phone, notes,
       sessionDuration: sessionDuration || 60,
+      timezone: timezone || null,
+      status: 'confirmed',
+      manageToken: crypto.randomBytes(16).toString('hex'),
       createdAt: new Date().toISOString()
     };
     if (!calendar) calendar = initializeGoogleCalendar();
@@ -277,7 +296,13 @@ export const createBooking = async (req, res) => {
       booking.calendarEventId = calendarEvent.data.id;
       booking.meetLink = calendarEvent.data.hangoutLink || null;
     }
+    // Suppress reminders that would otherwise fire immediately for a booking
+    // made inside the reminder window.
+    const msUntil = new Date(booking.time).getTime() - Date.now();
+    booking.reminder24hSent = msUntil <= DAY_MS;
+    booking.reminder1hSent = msUntil <= HOUR_MS;
     addBookingToDisk([], booking);
+    sendConfirmation(booking);
     res.status(201).json({ success: true, booking });
   } catch (error) {
     res.status(500).json({ error: 'Failed to create booking' });
@@ -286,4 +311,221 @@ export const createBooking = async (req, res) => {
 
 export const getBookings = (req, res) => {
   res.json({ bookings: loadBookings() });
+};
+
+/* ── Cancel & reschedule ──────────────────────────────────────────────────── */
+
+// Resolve the availability rules (weekly blocks + date overrides) that govern a
+// given booking, based on its meeting type / school. Used both to drive the
+// reschedule UI and to validate a requested new time server-side.
+function getRescheduleConfig(booking) {
+  const sessionDuration = booking.session_duration || 60;
+  const mt = loadMeetingTypes().find(t => t.id === booking.meeting_type);
+
+  if (mt && !mt.requiresSchool) {
+    return {
+      schoolId: '',
+      sessionDuration,
+      weeklyAvailability: mt.availability || {},
+      availableDates: mt.availableDates || null,
+      unavailableDates: mt.unavailableDates || null
+    };
+  }
+
+  if (booking.school_id && booking.school_id !== '__CUSTOM__') {
+    const school = loadSchools().find(s => s.id === booking.school_id);
+    return {
+      schoolId: booking.school_id,
+      sessionDuration,
+      weeklyAvailability: school?.availability || {},
+      availableDates: null,
+      unavailableDates: null
+    };
+  }
+
+  // "Other location" booking — no stored schedule, use the shared default.
+  return {
+    schoolId: booking.school_id || 'custom',
+    sessionDuration,
+    weeklyAvailability: CUSTOM_LOCATION_AVAILABILITY,
+    availableDates: null,
+    unavailableDates: null
+  };
+}
+
+// Shape the reschedule config for the client, matching the payload the public
+// /api/availability + /api/availability/days endpoints already expect.
+function rescheduleParams(booking) {
+  const cfg = getRescheduleConfig(booking);
+  return {
+    schoolId: cfg.schoolId,
+    sessionDuration: cfg.sessionDuration,
+    availabilityBlocks: cfg.weeklyAvailability,
+    availableDates: cfg.availableDates,
+    unavailableDates: cfg.unavailableDates
+  };
+}
+
+// Validate that a requested new start time is a real, conflict-free slot for the
+// booking, reusing the same availability + drive-time logic as initial booking.
+async function isSlotAvailableForReschedule(booking, newStartISO) {
+  const cfg = getRescheduleConfig(booking);
+  const newStart = new Date(newStartISO);
+  if (isNaN(newStart.getTime())) return false;
+
+  const dateStr = newStart.toLocaleDateString('en-CA', { timeZone: TIMEZONE });
+  const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: TIMEZONE });
+  if (dateStr < todayStr) return false;
+
+  if (isDateInOverrides(dateStr, cfg.unavailableDates)) return false;
+  if (cfg.availableDates && cfg.availableDates.length > 0 && !isDateInOverrides(dateStr, cfg.availableDates)) return false;
+
+  const dayOfWeek = dayOfWeekFromStr(dateStr);
+  const blocks = cfg.weeklyAvailability?.[dayOfWeek] || [];
+  if (blocks.length === 0) return false;
+
+  const noonUTC = new Date(dateStr + 'T12:00:00.000Z');
+  const timeMin = tzDate(noonUTC, 0, 0);
+  const timeMax = tzDate(noonUTC, 23, 59);
+  let events = await fetchEventsForPeriod(timeMin, timeMax);
+  // Exclude the booking's own calendar event so it doesn't conflict with itself.
+  if (booking.calendar_event_id) events = events.filter(e => e.id !== booking.calendar_event_id);
+
+  const walkTime = dbService.getSettings(ADMIN_ID)?.walk_time ?? 5;
+  const slots = getAvailableSlotsForDay(noonUTC, blocks, cfg.sessionDuration, events, cfg.schoolId, walkTime);
+  return slots.some(s => new Date(s.time).getTime() === newStart.getTime());
+}
+
+async function deleteCalendarEvent(eventId) {
+  if (!eventId) return;
+  if (!calendar) calendar = initializeGoogleCalendar();
+  if (!calendar) return;
+  const { bookingCalendar } = loadCalendarConfig();
+  try {
+    await calendar.events.delete({ calendarId: bookingCalendar || 'primary', eventId, sendUpdates: 'all' });
+  } catch (error) {
+    // Event may have already been removed from Google Calendar — ignore.
+  }
+}
+
+async function patchCalendarEvent(eventId, newStartISO, durationMin) {
+  if (!eventId) return;
+  if (!calendar) calendar = initializeGoogleCalendar();
+  if (!calendar) return;
+  const { bookingCalendar } = loadCalendarConfig();
+  const start = new Date(newStartISO);
+  const end = new Date(start.getTime() + (durationMin || 60) * 60 * 1000);
+  try {
+    await calendar.events.patch({
+      calendarId: bookingCalendar || 'primary',
+      eventId,
+      resource: {
+        start: { dateTime: start.toISOString(), timeZone: TIMEZONE },
+        end: { dateTime: end.toISOString(), timeZone: TIMEZONE }
+      },
+      sendUpdates: 'all'
+    });
+  } catch (error) {
+    // Best-effort — the local record is still updated below.
+  }
+}
+
+// A minimal, client-safe view of a booking for the public manage page.
+function toPublicBooking(b) {
+  return {
+    id: b.id,
+    date: b.date,
+    time: b.time,
+    meetingType: b.meeting_type,
+    location: b.location,
+    name: b.name,
+    sessionDuration: b.session_duration,
+    status: b.status,
+    meetLink: b.meet_link,
+    manageToken: b.manage_token,
+    timezone: b.client_timezone
+  };
+}
+
+async function performCancel(booking) {
+  await deleteCalendarEvent(booking.calendar_event_id);
+  dbService.updateBookingStatus(booking.user_id, booking.id, 'cancelled');
+  sendCancellation(booking);
+}
+
+async function performReschedule(booking, time) {
+  const ok = await isSlotAvailableForReschedule(booking, time);
+  if (!ok) return { error: 'That time is no longer available. Please pick another.', code: 409 };
+  await patchCalendarEvent(booking.calendar_event_id, time, booking.session_duration);
+  const date = new Date(time).toLocaleDateString('en-CA', { timeZone: TIMEZONE });
+  dbService.updateBookingSchedule(booking.user_id, booking.id, { date, time });
+  const updated = dbService.getBookingById(booking.user_id, booking.id);
+  sendReschedule(updated);
+  return { booking: updated };
+}
+
+// Admin: fetch a single booking plus the rules needed to reschedule it.
+export const getBooking = (req, res) => {
+  const booking = dbService.getBookingById(ADMIN_ID, req.params.id);
+  if (!booking) return res.status(404).json({ error: 'Booking not found' });
+  res.json({ booking, reschedule: rescheduleParams(booking) });
+};
+
+// Admin: cancel a booking by id.
+export const cancelBooking = async (req, res) => {
+  try {
+    const booking = dbService.getBookingById(ADMIN_ID, req.params.id);
+    if (!booking) return res.status(404).json({ error: 'Booking not found' });
+    await performCancel(booking);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to cancel booking' });
+  }
+};
+
+// Admin: reschedule a booking by id.
+export const rescheduleBooking = async (req, res) => {
+  try {
+    const booking = dbService.getBookingById(ADMIN_ID, req.params.id);
+    if (!booking) return res.status(404).json({ error: 'Booking not found' });
+    if (booking.status === 'cancelled') return res.status(400).json({ error: 'Cannot reschedule a cancelled booking' });
+    const result = await performReschedule(booking, req.body.time);
+    if (result.error) return res.status(result.code || 400).json({ error: result.error });
+    res.json({ success: true, booking: result.booking });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to reschedule booking' });
+  }
+};
+
+// Public (token-scoped): fetch a booking and its reschedule rules.
+export const getManagedBooking = (req, res) => {
+  const booking = dbService.getBookingByToken(req.params.token);
+  if (!booking) return res.status(404).json({ error: 'Booking not found' });
+  res.json({ booking: toPublicBooking(booking), reschedule: rescheduleParams(booking) });
+};
+
+// Public (token-scoped): cancel a booking.
+export const cancelManagedBooking = async (req, res) => {
+  try {
+    const booking = dbService.getBookingByToken(req.params.token);
+    if (!booking) return res.status(404).json({ error: 'Booking not found' });
+    if (booking.status !== 'cancelled') await performCancel(booking);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to cancel booking' });
+  }
+};
+
+// Public (token-scoped): reschedule a booking.
+export const rescheduleManagedBooking = async (req, res) => {
+  try {
+    const booking = dbService.getBookingByToken(req.params.token);
+    if (!booking) return res.status(404).json({ error: 'Booking not found' });
+    if (booking.status === 'cancelled') return res.status(400).json({ error: 'Cannot reschedule a cancelled booking' });
+    const result = await performReschedule(booking, req.body.time);
+    if (result.error) return res.status(result.code || 400).json({ error: result.error });
+    res.json({ success: true, booking: toPublicBooking(result.booking) });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to reschedule booking' });
+  }
 };

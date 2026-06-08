@@ -1108,3 +1108,69 @@ gmp-placeautocomplete::part(input):focus {
   padding: var(--space-4);
   border: 1px solid var(--border);
 }
+
+/* ── Bookings manager ─────────────────────────────────────────────────────── */
+.bookings-toolbar {
+  display: flex; align-items: center; gap: var(--space-3);
+  flex-wrap: wrap;
+  margin: var(--space-4) 0;
+}
+.bookings-filters { display: flex; gap: var(--space-2); }
+.bookings-search {
+  flex: 1; min-width: 180px;
+  padding: 8px 12px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  font: inherit;
+}
+.bookings-table { display: flex; flex-direction: column; gap: 0; }
+.bookings-row {
+  display: grid;
+  grid-template-columns: 1.6fr 1.4fr 0.8fr 1.4fr 0.8fr 1.4fr;
+  gap: var(--space-3);
+  align-items: center;
+  padding: var(--space-3) var(--space-2);
+  border-bottom: 1px solid var(--border);
+  font-size: 0.875rem;
+}
+.bookings-row-head {
+  font-weight: 600; color: var(--gray-600);
+  font-family: var(--font-display);
+  font-size: 0.8125rem; text-transform: uppercase; letter-spacing: 0.03em;
+}
+.bookings-row.cancelled { opacity: 0.6; }
+.booking-name { display: block; font-weight: 600; color: var(--navy-900); }
+.booking-email { display: block; font-size: 0.8125rem; color: var(--gray-500); }
+.booking-status {
+  display: inline-block; padding: 2px 10px; border-radius: 999px;
+  font-size: 0.75rem; font-weight: 600; text-transform: capitalize;
+}
+.status-confirmed { background: var(--success-bg, #ecfdf5); color: var(--success, #059669); }
+.status-cancelled { background: #fef2f2; color: #dc2626; }
+.bookings-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+
+@media (max-width: 720px) {
+  .bookings-row { grid-template-columns: 1fr; gap: var(--space-1); padding: var(--space-4) var(--space-2); }
+  .bookings-row-head { display: none; }
+  .bookings-row span[data-label]::before {
+    content: attr(data-label) ": ";
+    font-weight: 600; color: var(--gray-500); font-size: 0.75rem;
+  }
+}
+
+/* ── Reschedule modal ─────────────────────────────────────────────────────── */
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 50;
+  background: rgba(15, 23, 42, 0.45);
+  display: grid; place-items: center;
+  padding: var(--space-4);
+}
+.modal-card {
+  background: var(--white);
+  border-radius: var(--radius-md);
+  padding: var(--space-6);
+  max-width: 720px; width: 100%;
+  max-height: 90vh; overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+}
+.modal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-2); }
+.modal-head h3 { margin: 0; font-family: var(--font-display); color: var(--navy-900); }

@@ -41,18 +41,54 @@ class DBService {
     return db.prepare('SELECT * FROM bookings WHERE user_id = ? ORDER BY date DESC, time DESC').all(userId);
   }
 
+  getBookingById(userId, id) {
+    return db.prepare('SELECT * FROM bookings WHERE user_id = ? AND id = ?').get(userId, id);
+  }
+
+  getBookingByToken(token) {
+    if (!token) return undefined;
+    return db.prepare('SELECT * FROM bookings WHERE manage_token = ?').get(token);
+  }
+
   addBooking(userId, b) {
     return db.prepare(`
       INSERT INTO bookings (
         id, user_id, date, time, meeting_type, location, school_id,
         name, email, phone, notes, session_duration, calendar_event_id,
-        meet_link, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        meet_link, status, manage_token, reminder_24h_sent, reminder_1h_sent,
+        client_timezone, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
-      b.id, userId, b.date, b.time, b.meetingType, b.location, b.schoolId,
-      b.name, b.email, b.phone, b.notes, b.sessionDuration || 60,
-      b.calendarEventId, b.meetLink, b.createdAt || new Date().toISOString()
+      b.id, userId, b.date, b.time, b.meetingType, b.location,
+      // Non-school bookings (phone / Google Meet / "other location") have no
+      // schools row — store NULL rather than '' to satisfy the FK constraint.
+      b.schoolId && b.schoolId !== '__CUSTOM__' ? b.schoolId : null,
+      b.name, b.email, b.phone ?? null, b.notes ?? null, b.sessionDuration || 60,
+      b.calendarEventId ?? null, b.meetLink ?? null, b.status || 'confirmed', b.manageToken || null,
+      b.reminder24hSent ? 1 : 0, b.reminder1hSent ? 1 : 0,
+      b.timezone || null,
+      b.createdAt || new Date().toISOString()
     );
+  }
+
+  updateBookingStatus(userId, id, status) {
+    return db.prepare('UPDATE bookings SET status = ? WHERE user_id = ? AND id = ?').run(status, userId, id);
+  }
+
+  updateBookingSchedule(userId, id, { date, time }) {
+    // Reset reminder flags so reminders fire again for the new time.
+    return db.prepare('UPDATE bookings SET date = ?, time = ?, reminder_24h_sent = 0, reminder_1h_sent = 0 WHERE user_id = ? AND id = ?')
+      .run(date, time, userId, id);
+  }
+
+  // Confirmed bookings starting after `afterISO`, used by the reminder job.
+  getUpcomingConfirmed(afterISO) {
+    return db.prepare("SELECT * FROM bookings WHERE status = 'confirmed' AND time > ? ORDER BY time ASC").all(afterISO);
+  }
+
+  markReminderSent(id, which) {
+    const column = which === '1h' ? 'reminder_1h_sent' : 'reminder_24h_sent';
+    return db.prepare(`UPDATE bookings SET ${column} = 1 WHERE id = ?`).run(id);
   }
 
   // Schools

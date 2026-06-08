@@ -4,6 +4,35 @@ import './App.css'
 import config from './config'
 import { applyTheme } from './theme'
 
+/* ── Timezone helpers ───────────────────────────────────────────────────────
+   Slot times come back from the API as absolute ISO instants, so we format
+   them in whichever timezone the visitor selects (defaulting to their own). */
+function detectTimezone() {
+  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Chicago' }
+  catch { return 'America/Chicago' }
+}
+const TIMEZONE_OPTIONS = (() => {
+  const fallback = [
+    'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles',
+    'America/Phoenix', 'America/Anchorage', 'Pacific/Honolulu',
+    'Europe/London', 'Europe/Paris', 'Asia/Tokyo', 'Australia/Sydney', 'UTC'
+  ]
+  let list = fallback
+  try {
+    if (typeof Intl.supportedValuesOf === 'function') list = Intl.supportedValuesOf('timeZone')
+  } catch { /* use fallback */ }
+  const detected = detectTimezone()
+  return list.includes(detected) ? list : [detected, ...list]
+})()
+const fmtTime = (date, tz) => new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', timeZone: tz }).format(date)
+const fmtDateLong = (date, tz) => new Intl.DateTimeFormat('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', timeZone: tz }).format(date)
+const fmtTzAbbr = (date, tz) => {
+  try {
+    const part = new Intl.DateTimeFormat('en-US', { timeZoneName: 'short', timeZone: tz }).formatToParts(date).find(p => p.type === 'timeZoneName')
+    return part?.value || tz
+  } catch { return tz }
+}
+
 /* ── Lucide-style outline icons ─────────────────────────────────────────── */
 const Icon = {
   Calendar: (p) => (
@@ -292,9 +321,11 @@ function App() {
   const [loadingDays, setLoadingDays] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isBooked, setIsBooked] = useState(false)
+  const [manageToken, setManageToken] = useState(null)
   const [isCustomLocation, setIsCustomLocation] = useState(false)
   const [selectedSchool, setSelectedSchool] = useState(null)
   const [logoUrl, setLogoUrl] = useState(null)
+  const [timezone, setTimezone] = useState(detectTimezone)
 
   const getMeetingType = (id) => meetingTypes.find(t => t.id === id)
 
@@ -513,6 +544,7 @@ function App() {
         ...bookingData,
         date: format(bookingData.date, 'yyyy-MM-dd'),
         time: bookingData.time.toISOString(),
+        timezone,
         location: isCustomLocation
           ? bookingData.customLocation
           : selectedSchool
@@ -525,6 +557,8 @@ function App() {
         body: JSON.stringify(finalBookingData)
       })
       if (response.ok) {
+        const data = await response.json().catch(() => ({}))
+        if (data?.booking?.manageToken) setManageToken(data.booking.manageToken)
         setIsBooked(true)
       } else {
         alert('Failed to book appointment. Please try again.')
@@ -576,7 +610,7 @@ function App() {
               </p>
               <div className="booking-summary">
                 <SummaryItem label="Date & time"
-                  value={`${format(bookingData.date, 'MMMM d, yyyy')} at ${format(bookingData.time, 'h:mm a')}`} />
+                  value={`${fmtDateLong(bookingData.time, timezone)} at ${fmtTime(bookingData.time, timezone)} (${fmtTzAbbr(bookingData.time, timezone)})`} />
                 <SummaryItem label="Session length" value={getSessionDurationDisplay()} />
                 <SummaryItem label="Meeting type" value={selectedMeetingType?.label || bookingData.meetingType} />
                 {selectedMeetingType?.requiresSchool && (
@@ -589,6 +623,12 @@ function App() {
                 A confirmation email has been sent to {bookingData.email}
                 {bookingData.meetingType === 'google-meet' && ' with the Google Meet link'}.
               </p>
+              {manageToken && (
+                <p className="confirmation-note">
+                  Need to make a change?{' '}
+                  <a href={`/manage/${manageToken}`}>Reschedule or cancel your session</a>.
+                </p>
+              )}
             </div>
           </div>
         </div>
@@ -636,6 +676,8 @@ function App() {
               handleNext={handleNext}
               canProceedFromStep1={canProceedFromStep1}
               advanceBookingDays={config.booking.advanceBookingDays}
+              timezone={timezone}
+              setTimezone={setTimezone}
             />
           )}
 
@@ -649,6 +691,7 @@ function App() {
               handleSubmit={handleSubmit}
               canSubmit={canSubmit}
               isSubmitting={isSubmitting}
+              timezone={timezone}
             />
           )}
         </div>
@@ -763,7 +806,7 @@ function Step2({
   bookingData, selectedSchool, isCustomLocation, selectedMeetingType,
   availableSlots, loadingDays, handleDateSelect, handleTimeSelect,
   isDateDisabled, handleMonthChange, handleBack, handleNext,
-  canProceedFromStep1, advanceBookingDays
+  canProceedFromStep1, advanceBookingDays, timezone, setTimezone
 }) {
   return (
     <div className="form-section">
@@ -815,6 +858,19 @@ function Step2({
 
         <div className="form-group time-slots-wrap" style={{ margin: 0 }}>
           <label>Available time slots</label>
+          <div className="tz-select-row">
+            <span className="tz-select-label">Times shown in</span>
+            <select
+              className="tz-select"
+              value={timezone}
+              onChange={e => setTimezone(e.target.value)}
+              aria-label="Time zone"
+            >
+              {TIMEZONE_OPTIONS.map(tz => (
+                <option key={tz} value={tz}>{tz.replace(/_/g, ' ')}</option>
+              ))}
+            </select>
+          </div>
           {!bookingData.date ? (
             <div className="time-slots-empty">Select a date to see available times.</div>
           ) : availableSlots.length === 0 ? (
@@ -822,7 +878,7 @@ function Step2({
           ) : (
             <>
               <div className="time-slots-head">
-                {format(bookingData.date, "EEE, MMM d")} · America/Chicago
+                {format(bookingData.date, "EEE, MMM d")} · {fmtTzAbbr(bookingData.date, timezone)}
               </div>
               <div className="time-slots">
                 {availableSlots.map((slot, i) => (
@@ -833,7 +889,7 @@ function Step2({
                     onClick={() => slot.available && handleTimeSelect(slot.time)}
                     disabled={!slot.available}
                   >
-                    <span className="slot-time">{format(slot.time, 'h:mm a')}</span>
+                    <span className="slot-time">{fmtTime(slot.time, timezone)}</span>
                     {slot.blockName && <span className="slot-block-name">{slot.blockName}</span>}
                   </button>
                 ))}
@@ -858,7 +914,7 @@ function Step2({
 /* ── Step 3: Your info ──────────────────────────────────────────────────── */
 function Step3({
   bookingData, getFinalLocation, getSessionDurationDisplay,
-  handleInputChange, handleBack, handleSubmit, canSubmit, isSubmitting
+  handleInputChange, handleBack, handleSubmit, canSubmit, isSubmitting, timezone
 }) {
   return (
     <div className="form-section">
@@ -866,7 +922,7 @@ function Step3({
 
       <div className="booking-summary">
         <SummaryItem label="Date & time"
-          value={`${format(bookingData.date, 'MMMM d, yyyy')} at ${format(bookingData.time, 'h:mm a')}`} />
+          value={`${fmtDateLong(bookingData.time, timezone)} at ${fmtTime(bookingData.time, timezone)} (${fmtTzAbbr(bookingData.time, timezone)})`} />
         <SummaryItem label="Session length" value={getSessionDurationDisplay()} />
         <SummaryItem label="Location" value={getFinalLocation()} />
       </div>
