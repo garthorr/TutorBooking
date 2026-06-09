@@ -5,3 +5,10 @@ node_modules/
 dist/
 build/
 *.log
+
+# SQLite database and runtime data (created on first run; never commit)
+server/data/
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm

@@ -9,6 +9,7 @@ import authRoutes from './routes/authRoutes.js';
 import bookingRoutes from './routes/bookingRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
 import { startReminderJob } from './jobs/reminderJob.js';
+import { startCalendarSyncJob } from './services/calendarSync.js';
 import { checkSecrets, warnIfDefaultPassword } from './securityCheck.js';
 
 dotenv.config();
@@ -33,6 +34,7 @@ initializeDefaultUser().then(() => {
   console.log('✓ Database initialized');
   warnIfDefaultPassword();
   startReminderJob();
+  startCalendarSyncJob();
 }).catch(err => {
   console.error('✗ Database initialization failed:', err);
 });
@@ -83,15 +85,20 @@ app.use(cors({
   credentials: true
 }));
 
+// CAPTCHA widgets (Cloudflare Turnstile / hCaptcha) load a script and render in
+// an iframe, so their domains must be allowed in the CSP.
+const CAPTCHA_HOSTS = ['https://challenges.cloudflare.com', 'https://hcaptcha.com', 'https://*.hcaptcha.com'];
+
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "https://maps.googleapis.com", "https://maps.gstatic.com"],
-      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://fonts.gstatic.com"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "https://maps.googleapis.com", "https://maps.gstatic.com", ...CAPTCHA_HOSTS],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://fonts.gstatic.com", ...CAPTCHA_HOSTS],
       fontSrc: ["'self'", "https://fonts.gstatic.com"],
       imgSrc: ["'self'", 'data:', 'https:', "https://*.googleapis.com", "https://*.gstatic.com"],
-      connectSrc: ["'self'", "https://maps.googleapis.com", "https://*.googleapis.com"]
+      connectSrc: ["'self'", "https://maps.googleapis.com", "https://*.googleapis.com", ...CAPTCHA_HOSTS],
+      frameSrc: ["'self'", ...CAPTCHA_HOSTS]
     }
   }
 }));

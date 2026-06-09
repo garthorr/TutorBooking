@@ -2,6 +2,7 @@ import dbService from '../services/dbService.js';
 import { loadSchools, saveSchools, loadDriveTimes, saveDriveTimes } from '../schoolsStorage.js';
 import { loadMeetingTypes, saveMeetingTypes } from '../meetingTypesStorage.js';
 import { loadCalendarConfig, saveCalendarConfig } from '../calendarStorage.js';
+import { getCaptchaConfig } from '../services/captchaService.js';
 
 const ADMIN_ID = 1;
 
@@ -13,7 +14,9 @@ export const getConfig = (req, res) => {
     walkTime: settings.walk_time ?? 5,
     themeColor: settings.theme_color,
     businessName: settings.business_name,
-    businessDescription: settings.business_description
+    businessDescription: settings.business_description,
+    // Lets the public booking form know whether/how to render a CAPTCHA widget.
+    captcha: getCaptchaConfig()
   });
 };
 
