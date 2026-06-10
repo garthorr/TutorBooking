@@ -2,6 +2,7 @@ import jwt from 'jsonwebtoken';
 import passwordStore from '../passwordStore.js';
 import { google } from 'googleapis';
 import { saveTokens, deleteTokens, getTokenInfo, loadTokens } from '../tokenStorage.js';
+import { resetCalendar } from '../services/googleClient.js';
 import { randomBytes } from 'crypto';
 
 const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
@@ -99,6 +100,7 @@ export const googleOAuthCallback = async (req, res) => {
     const oauth2Client = getOAuthClient();
     const { tokens } = await oauth2Client.getToken(code);
     if (saveTokens(tokens)) {
+      resetCalendar(); // pick up the freshly connected account
       res.redirect('/admin?success=true');
     } else {
       res.redirect('/admin?error=save_failed');
@@ -169,6 +171,7 @@ export const listCalendars = async (req, res) => {
 
 export const disconnectGoogleCalendar = (req, res) => {
   const deleted = deleteTokens();
+  resetCalendar(); // drop the cached client so it stops using revoked tokens
   res.json({
     success: deleted,
     message: deleted ? 'Google Calendar disconnected' : 'Error disconnecting'

@@ -31,6 +31,33 @@ Designed for a scalable tutor/admin workflow:
   - Student chooses meeting type, location (if needed), date/time, and contact info
   - Event is created in the selected booking calendar with proper timezone
   - Google Meet links generated automatically for online meetings
+  - **Timezone-aware**: visitors pick/auto-detect their timezone and all slots,
+    summaries, and emails are shown in it
+
+- **Admin dashboard** (`/admin`)
+  - View, search, cancel, and reschedule upcoming and past bookings
+  - Cancel/reschedule push the change to Google Calendar and notify the student
+
+- **Self-service manage links**
+  - Every booking gets a private, token-scoped manage page (`/manage/:token`)
+  - Students can reschedule or cancel themselves — no login required
+  - The link is included in confirmation/reschedule/reminder emails
+
+- **Email notifications** (optional, via SMTP)
+  - Confirmation, reschedule, and cancellation emails
+  - Automatic 24-hour and 1-hour appointment reminders
+  - Entirely no-op until SMTP is configured, so the app works without it
+    (relying on Google Calendar invites)
+
+- **Two-way Google Calendar sync**
+  - App-initiated cancel/reschedule push to Google
+  - A background job (5-min interval) reconciles the other direction: events
+    deleted or moved directly in Google Calendar are reflected back into the
+    app's database (and the student is notified by email)
+
+- **Abuse protection on the public booking endpoint**
+  - Rate limiting plus optional CAPTCHA (Cloudflare Turnstile or hCaptcha)
+  - CAPTCHA is disabled until configured, so local development is unaffected
 
 - **White-label branding**
   - Custom business name and description
@@ -70,6 +97,11 @@ This application implements multiple layers of security:
 - Email validation with regex
 - Meeting type validation ensures only enabled types are bookable
 - React auto-escapes all output (XSS protection)
+
+### Public booking abuse protection
+- Per-IP rate limiting on the booking endpoint (12 / 15 min)
+- Optional CAPTCHA (Cloudflare Turnstile or hCaptcha) verified server-side
+  before any calendar event or email is created (see `CAPTCHA_*` env vars)
 
 ### Network Security
 - **CORS**: Whitelist-based origin validation (configure `CORS_ORIGINS` in production)
@@ -194,6 +226,21 @@ Optional:
 - `TRUST_PROXY` (set to `2` when behind Traefik)
 - `CORS_ORIGINS` (comma-separated list for production)
 
+**Email / reminders** (optional — all email features are disabled unless `SMTP_HOST` is set):
+- `SMTP_HOST` - SMTP server hostname
+- `SMTP_PORT` - SMTP port (default `587`)
+- `SMTP_SECURE` - `true` for port 465, `false` for STARTTLS on 587 (default `false`)
+- `SMTP_USER`, `SMTP_PASS` - SMTP credentials
+- `EMAIL_FROM` - from address, e.g. `Tutoring <no-reply@example.com>` (falls back to `SMTP_USER`)
+- `PUBLIC_BASE_URL` - public site URL, used to build manage links in emails, e.g. `https://booking.example.com`
+
+**CAPTCHA on the public booking form** (optional — disabled unless both keys are set):
+- `CAPTCHA_PROVIDER` - `turnstile` (default) or `hcaptcha`
+- `CAPTCHA_SITE_KEY` - public site key (served to the browser)
+- `CAPTCHA_SECRET_KEY` - private secret (used server-side to verify tokens)
+
+See `.env.example` for a copy-paste template of all variables.
+
 ---
 
 ## Admin password setup
@@ -225,6 +272,25 @@ Docker Compose volumes for persistent data:
 **Application data** (`token-data` volume → `/app/data` inside server container):
 - `database.sqlite`: All schools, drive times, config, and bookings.
 - Logo and settings are also stored within the database.
+
+The database is created automatically on first run and is **not** committed to
+the repository (it is gitignored, see `server/data/`). A fresh start seeds a
+default `admin` user — change its password immediately via `/admin`.
+
+---
+
+## Testing
+
+A small test suite (Node's built-in `node:test`, no extra dependencies) covers
+the availability/scheduling logic and the two-way sync + CAPTCHA helpers:
+
+```bash
+cd server
+npm test
+```
+
+The availability and reschedule logic lives in `server/services/availability.js`
+as pure functions so it can be tested without a database or network.
 
 ---
 

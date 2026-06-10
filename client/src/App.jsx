@@ -3,6 +3,7 @@ import { format, addDays, isBefore, startOfDay, getDay } from 'date-fns'
 import './App.css'
 import config from './config'
 import { applyTheme } from './theme'
+import Captcha from './components/Captcha'
 
 /* ── Timezone helpers ───────────────────────────────────────────────────────
    Slot times come back from the API as absolute ISO instants, so we format
@@ -300,6 +301,7 @@ function App() {
           businessDescription: data.businessDescription || config.businessDescription,
           customLocationDuration: data.customLocationDuration || config.locationOptions.customLocationSessionDuration
         })
+        if (data.captcha?.enabled) setCaptcha(data.captcha)
       })
       .catch(() => {})
   }, [])
@@ -326,6 +328,8 @@ function App() {
   const [selectedSchool, setSelectedSchool] = useState(null)
   const [logoUrl, setLogoUrl] = useState(null)
   const [timezone, setTimezone] = useState(detectTimezone)
+  const [captcha, setCaptcha] = useState({ enabled: false })
+  const [captchaToken, setCaptchaToken] = useState('')
 
   const getMeetingType = (id) => meetingTypes.find(t => t.id === id)
 
@@ -545,6 +549,7 @@ function App() {
         date: format(bookingData.date, 'yyyy-MM-dd'),
         time: bookingData.time.toISOString(),
         timezone,
+        captchaToken,
         location: isCustomLocation
           ? bookingData.customLocation
           : selectedSchool
@@ -577,7 +582,7 @@ function App() {
     !selectedMeetingType?.requiresSchool ||
     (bookingData.schoolId && (bookingData.schoolId !== CUSTOM_LOCATION_VALUE || bookingData.customLocation.trim()))
   )
-  const canSubmit = bookingData.name && bookingData.email
+  const canSubmit = bookingData.name && bookingData.email && (!captcha.enabled || captchaToken)
 
   const getFinalLocation = () => {
     const mt = getMeetingType(bookingData.meetingType)
@@ -692,6 +697,8 @@ function App() {
               canSubmit={canSubmit}
               isSubmitting={isSubmitting}
               timezone={timezone}
+              captcha={captcha}
+              onCaptchaToken={setCaptchaToken}
             />
           )}
         </div>
@@ -914,7 +921,8 @@ function Step2({
 /* ── Step 3: Your info ──────────────────────────────────────────────────── */
 function Step3({
   bookingData, getFinalLocation, getSessionDurationDisplay,
-  handleInputChange, handleBack, handleSubmit, canSubmit, isSubmitting, timezone
+  handleInputChange, handleBack, handleSubmit, canSubmit, isSubmitting, timezone,
+  captcha, onCaptchaToken
 }) {
   return (
     <div className="form-section">
@@ -948,6 +956,12 @@ function Step3({
         <textarea name="notes" value={bookingData.notes} onChange={handleInputChange} rows="4"
           placeholder="Topics you're working on, recent test scores, accommodations…" />
       </div>
+
+      {captcha?.enabled && (
+        <div className="form-group">
+          <Captcha provider={captcha.provider} siteKey={captcha.siteKey} onToken={onCaptchaToken} />
+        </div>
+      )}
 
       <div className="button-group">
         <button className="btn btn-ghost" onClick={handleBack}>
