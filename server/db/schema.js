@@ -100,4 +100,11 @@ CREATE TABLE IF NOT EXISTS logo (
   data_url TEXT NOT NULL,
   FOREIGN KEY (user_id) REFERENCES users (id)
 );
+
+-- Indexes for the app's hot-path lookups. Without these, each query below is a
+-- full table scan of bookings, which grows linearly with booking volume.
+CREATE INDEX IF NOT EXISTS idx_bookings_manage_token ON bookings (manage_token);
+CREATE INDEX IF NOT EXISTS idx_bookings_status_time ON bookings (status, time);
+CREATE INDEX IF NOT EXISTS idx_bookings_user_id ON bookings (user_id);
+CREATE INDEX IF NOT EXISTS idx_bookings_calendar_event_id ON bookings (calendar_event_id);
 `;

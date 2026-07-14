@@ -12,7 +12,8 @@ import {
   toDateStr,
   dayOfWeekFromStr,
   isDateInOverrides,
-  getAvailableSlotsForDay
+  getAvailableSlotsForDay,
+  hasSchedulingConflict
 } from '../services/availability.js';
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -174,6 +175,24 @@ export const createBooking = async (req, res) => {
     const captchaOk = await verifyCaptcha(captchaToken, req.ip);
     if (!captchaOk) return res.status(400).json({ error: 'CAPTCHA verification failed. Please try again.' });
 
+    // Validate the requested slot server-side. The client only ever offers real,
+    // conflict-free future slots, but the public endpoint must not trust that:
+    // reject past times and double-bookings using the same conflict logic that
+    // drives slot generation (and the reschedule path).
+    const startDateTime = new Date(time);
+    if (startDateTime.getTime() <= Date.now()) {
+      return res.status(400).json({ error: 'That time is in the past. Please pick another.' });
+    }
+    const duration = sessionDuration || 60;
+    const slotEnd = new Date(startDateTime.getTime() + duration * 60 * 1000);
+    const slotDateStr = startDateTime.toLocaleDateString('en-CA', { timeZone: TIMEZONE });
+    const noonUTC = new Date(slotDateStr + 'T12:00:00.000Z');
+    const dayEvents = await fetchEventsForPeriod(tzDate(noonUTC, 0, 0), tzDate(noonUTC, 23, 59));
+    const walkTime = dbService.getSettings(ADMIN_ID)?.walk_time ?? 5;
+    if (hasSchedulingConflict(startDateTime, slotEnd, dayEvents, schoolId, walkTime, getDriveTimeFromStorage)) {
+      return res.status(409).json({ error: 'That time is no longer available. Please pick another.' });
+    }
+
     const booking = {
       id: Date.now().toString(),
       date, time, meetingType, location, schoolId, name, email, phone, notes,
@@ -185,9 +204,7 @@ export const createBooking = async (req, res) => {
     };
     const calendar = getCalendar();
     if (calendar) {
-      const startDateTime = new Date(time);
-      const durationMs = (sessionDuration || 60) * 60 * 1000;
-      const endDateTime = new Date(startDateTime.getTime() + durationMs);
+      const endDateTime = slotEnd;
       const schools = loadSchools();
       const event = {
         summary: `${name} — Tutoring`,

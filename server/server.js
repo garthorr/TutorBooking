@@ -72,13 +72,23 @@ const ALLOWED_ORIGINS = (process.env.CORS_ORIGINS || '')
 
 const corsOrigins = ALLOWED_ORIGINS.length > 0 ? ALLOWED_ORIGINS : DEFAULT_CORS_ORIGINS;
 
+// Only bare localhost / 127.0.0.1 (any port) count as local dev origins. Match
+// the parsed hostname rather than a string prefix — a prefix check would also
+// accept attacker-controlled origins like http://localhost.evil.com.
+function isLocalhostOrigin(origin) {
+  try {
+    const { protocol, hostname } = new URL(origin);
+    return protocol === 'http:' && (hostname === 'localhost' || hostname === '127.0.0.1');
+  } catch {
+    return false;
+  }
+}
+
 app.use(cors({
   origin(origin, callback) {
     if (!origin) return callback(null, true);
     if (corsOrigins.includes(origin)) return callback(null, true);
-    if (origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1')) {
-      return callback(null, true);
-    }
+    if (isLocalhostOrigin(origin)) return callback(null, true);
     console.warn(`[CORS] Blocked origin: ${origin}`);
     return callback(new Error('CORS origin not allowed'));
   },
