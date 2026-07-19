@@ -9,6 +9,7 @@ import {
   updateDriveTimes,
   calculateDriveTimes,
   getMeetingTypes,
+  getMeetingTypeById,
   getAllMeetingTypes,
   updateMeetingTypes,
   getCalendarConfig,
@@ -36,6 +37,9 @@ router.get('/drivetimes', adminAuth, getDriveTimes);
 router.put('/drivetimes', adminAuth, updateDriveTimes);
 router.post('/drivetimes/calculate', adminAuth, calculateDriveTimes);
 router.get('/meeting-types/all', adminAuth, getAllMeetingTypes);
+// Public single-type lookup; registered after /meeting-types/all so the
+// literal segment wins over the :id parameter.
+router.get('/meeting-types/:id', getMeetingTypeById);
 router.put('/meeting-types', adminAuth, updateMeetingTypes);
 router.get('/calendars', adminAuth, listCalendars);
 router.get('/config/calendars', adminAuth, getCalendarConfig);

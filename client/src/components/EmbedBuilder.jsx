@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { adminFetch } from '../auth'
 
 const WIDTH_OPTIONS = [
   { value: '100%',  label: '100% — full width' },
@@ -54,9 +55,14 @@ export default function EmbedBuilder() {
   const [typeId, setTypeId] = useState('')
 
   useEffect(() => {
-    fetch('/api/meeting-types')
+    // Admin endpoint so secret types are offered too (the public list hides them).
+    adminFetch('/api/meeting-types/all')
       .then(r => r.ok ? r.json() : null)
-      .then(data => { if (Array.isArray(data)) setMeetingTypes(data) })
+      .then(data => {
+        if (Array.isArray(data)) {
+          setMeetingTypes(data.filter(t => t.enabled).sort((a, b) => a.order - b.order))
+        }
+      })
       .catch(() => {})
   }, [])
 
@@ -127,7 +133,7 @@ export default function EmbedBuilder() {
             <select value={typeId} onChange={e => setTypeId(e.target.value)}>
               <option value="">All meeting types</option>
               {meetingTypes.map(t => (
-                <option key={t.id} value={t.id}>{t.label} only</option>
+                <option key={t.id} value={t.id}>{t.label} only{t.secret ? ' (secret)' : ''}</option>
               ))}
             </select>
           </div>

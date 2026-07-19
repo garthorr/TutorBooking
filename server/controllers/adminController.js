@@ -135,8 +135,18 @@ export const calculateDriveTimes = async (req, res) => {
 
 export const getMeetingTypes = (req, res) => {
   const types = loadMeetingTypes();
-  const enabled = types.filter(t => t.enabled).sort((a, b) => a.order - b.order);
-  res.json(enabled);
+  // Secret types are bookable via their direct link only — they never appear
+  // in the public listing that drives the main booking page.
+  const listed = types.filter(t => t.enabled && !t.secret).sort((a, b) => a.order - b.order);
+  res.json(listed);
+};
+
+// Public: resolve a single enabled meeting type by id, including secret ones,
+// so direct /book/:typeId links work for types hidden from the main page.
+export const getMeetingTypeById = (req, res) => {
+  const type = loadMeetingTypes().find(t => t.id === req.params.id && t.enabled);
+  if (!type) return res.status(404).json({ error: 'Meeting type not found' });
+  res.json(type);
 };
 
 export const getAllMeetingTypes = (req, res) => {

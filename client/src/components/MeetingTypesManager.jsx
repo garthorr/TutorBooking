@@ -49,7 +49,8 @@ function emptyType() {
     availableDates: [],
     unavailableDates: [],
     isBuiltin: false,
-    requiresSchool: false
+    requiresSchool: false,
+    secret: false
   }
 }
 
@@ -364,6 +365,12 @@ export default function MeetingTypesManager() {
                 onChange={e => updateField(t.id, { label: e.target.value })}
                 placeholder="Name" />
 
+              {t.secret && (
+                <span className="mt-secret-badge" title="Hidden from the main booking page — bookable only via its direct link">
+                  secret
+                </span>
+              )}
+
               {!t.requiresSchool ? (
                 <select className="mt-duration-select" value={t.sessionDuration}
                   onChange={e => updateField(t.id, { sessionDuration: Number(e.target.value) })}
@@ -411,6 +418,14 @@ export default function MeetingTypesManager() {
                   <input type="text" value={t.description}
                     onChange={e => updateField(t.id, { description: e.target.value })}
                     placeholder="Shown to students on the booking page" />
+                </div>
+                <div className="mt-detail-field">
+                  <label className="mt-secret-toggle">
+                    <input type="checkbox" checked={!!t.secret}
+                      onChange={e => updateField(t.id, { secret: e.target.checked })} />
+                    <span>Secret — hide from the main booking page. Students can only book it
+                      through its direct link (use &ldquo;Copy Link&rdquo;).</span>
+                  </label>
                 </div>
                 {!t.requiresSchool && (
                   <div className="mt-detail-field">
@@ -465,6 +480,14 @@ export default function MeetingTypesManager() {
             <input type="text" value={newType.description}
               onChange={e => setNewType(n => ({ ...n, description: e.target.value }))}
               placeholder="Shown to students on the booking page (optional)" />
+          </div>
+          <div className="mt-detail-field">
+            <label className="mt-secret-toggle">
+              <input type="checkbox" checked={!!newType.secret}
+                onChange={e => setNewType(n => ({ ...n, secret: e.target.checked }))} />
+              <span>Secret — hide from the main booking page. Students can only book it
+                through its direct link.</span>
+            </label>
           </div>
           <div className="mt-detail-field">
             <label>Availability</label>
