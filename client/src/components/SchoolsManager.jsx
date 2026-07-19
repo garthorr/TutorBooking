@@ -69,7 +69,10 @@ export default function SchoolsManager({ mapsApiKey, mapsLoaded }) {
         return true
       }
       const data = await res.json().catch(() => null)
-      showMessage(data?.error || 'Failed to save schools', 'error')
+      const fallback = res.status === 413
+        ? 'Save too large — a school logo image is too big. Use smaller logo images.'
+        : `Failed to save schools (HTTP ${res.status})`
+      showMessage(data?.error || fallback, 'error')
       return false
     } catch {
       showMessage('Failed to save schools', 'error')
