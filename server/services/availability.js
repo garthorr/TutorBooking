@@ -19,6 +19,46 @@ export function tzDate(baseDate, hours, minutes) {
   return new Date(naive.getTime() + (naive.getTime() - naiveInTZ.getTime()));
 }
 
+// Normalizes a time string to canonical 24-hour "HH:MM" (e.g. "9:00" → "09:00").
+// Returns null if the value is not a valid 24-hour time.
+export function normalizeTime(value) {
+  const m = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec(typeof value === 'string' ? value.trim() : '');
+  if (!m) return null;
+  return `${m[1].padStart(2, '0')}:${m[2]}`;
+}
+
+// Validates and normalizes a weekly availability object ({ dayNum: [{start, end, …}] }).
+// Returns { value } with times normalized and empty days dropped, or { error }.
+export function normalizeAvailability(availability, label = 'availability') {
+  if (availability == null) return { value: availability };
+  if (typeof availability !== 'object' || Array.isArray(availability)) {
+    return { error: `${label}: must be an object keyed by day of week` };
+  }
+  const out = {};
+  for (const [day, blocks] of Object.entries(availability)) {
+    if (!/^[0-6]$/.test(String(day))) {
+      return { error: `${label}: invalid day "${day}" (expected 0-6)` };
+    }
+    if (!Array.isArray(blocks)) {
+      return { error: `${label}: day ${day} must be an array of time blocks` };
+    }
+    const normalized = [];
+    for (const block of blocks) {
+      const start = normalizeTime(block?.start);
+      const end = normalizeTime(block?.end);
+      if (!start || !end) {
+        return { error: `${label}: day ${day} has an invalid time (expected 24-hour HH:MM, got "${block?.start}"–"${block?.end}")` };
+      }
+      if (end <= start) {
+        return { error: `${label}: day ${day} block ${start}–${end} ends before it starts` };
+      }
+      normalized.push({ ...block, start, end });
+    }
+    if (normalized.length > 0) out[day] = normalized;
+  }
+  return { value: out };
+}
+
 // Returns YYYY-MM-DD string for a given year/month(0-indexed)/day.
 export function toDateStr(year, month, day) {
   return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;

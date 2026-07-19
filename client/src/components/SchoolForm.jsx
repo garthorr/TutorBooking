@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import TimeInput from './TimeInput'
 
 const DAYS = [
   { num: 0, label: 'Sunday' },
@@ -31,17 +32,20 @@ function generateId(name) {
 function TimeBlock({ block, onChange, onRemove }) {
   return (
     <div className="time-block-row">
-      <input
-        type="time"
+      <TimeInput
         value={block.start}
-        onChange={e => onChange({ ...block, start: e.target.value })}
+        onChange={start => onChange({ ...block, start })}
       />
       <span className="time-block-to">to</span>
-      <input
-        type="time"
+      <TimeInput
         value={block.end}
-        onChange={e => onChange({ ...block, end: e.target.value })}
+        onChange={end => onChange({ ...block, end })}
       />
+      {block.end <= block.start && (
+        <span className="time-block-warning" title="End time must be after start time">
+          end before start
+        </span>
+      )}
       <input
         type="text"
         className="block-name-input"

@@ -3,6 +3,7 @@ import { loadSchools, saveSchools, loadDriveTimes, saveDriveTimes } from '../sch
 import { loadMeetingTypes, saveMeetingTypes } from '../meetingTypesStorage.js';
 import { loadCalendarConfig, saveCalendarConfig } from '../calendarStorage.js';
 import { getCaptchaConfig } from '../services/captchaService.js';
+import { normalizeAvailability } from '../services/availability.js';
 
 const ADMIN_ID = 1;
 
@@ -56,8 +57,14 @@ export const updateSchools = (req, res) => {
   if (!Array.isArray(req.body)) {
     return res.status(400).json({ error: 'Expected an array of schools' });
   }
+  const schools = [];
+  for (const school of req.body) {
+    const result = normalizeAvailability(school?.availability, `school "${school?.name || school?.id || '?'}"`);
+    if (result.error) return res.status(400).json({ error: result.error });
+    schools.push({ ...school, availability: result.value });
+  }
   try {
-    saveSchools(req.body);
+    saveSchools(schools);
     res.json({ success: true });
   } catch (err) {
     console.error('Failed to save schools:', err);
@@ -137,7 +144,16 @@ export const getAllMeetingTypes = (req, res) => {
 };
 
 export const updateMeetingTypes = (req, res) => {
-  saveMeetingTypes(req.body);
+  if (!Array.isArray(req.body)) {
+    return res.status(400).json({ error: 'Expected an array of meeting types' });
+  }
+  const types = [];
+  for (const type of req.body) {
+    const result = normalizeAvailability(type?.availability, `meeting type "${type?.label || type?.id || '?'}"`);
+    if (result.error) return res.status(400).json({ error: result.error });
+    types.push({ ...type, availability: result.value });
+  }
+  saveMeetingTypes(types);
   res.json({ success: true });
 };
 
