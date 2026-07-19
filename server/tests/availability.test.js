@@ -109,11 +109,18 @@ test('normalizeAvailability passes through null/undefined (meeting types without
   assert.strictEqual(normalizeAvailability(undefined).value, undefined);
 });
 
-test('normalizeAvailability rejects bad days, bad times, and inverted blocks', () => {
+test('normalizeAvailability rejects bad days and bad times', () => {
   assert.ok(normalizeAvailability({ 7: [{ start: '09:00', end: '17:00' }] }).error);
   assert.ok(normalizeAvailability({ 1: [{ start: '9am', end: '17:00' }] }).error);
-  assert.ok(normalizeAvailability({ 1: [{ start: '17:00', end: '09:00' }] }).error);
-  assert.ok(normalizeAvailability({ 1: [{ start: '09:00', end: '09:00' }] }).error);
   assert.ok(normalizeAvailability([{ start: '09:00', end: '17:00' }]).error);
   assert.ok(normalizeAvailability({ 1: { start: '09:00', end: '17:00' } }).error);
+});
+
+test('normalizeAvailability tolerates inverted/empty ranges (legacy data)', () => {
+  // These produce no slots downstream but must not block saving.
+  assert.deepStrictEqual(
+    normalizeAvailability({ 1: [{ start: '17:00', end: '09:00' }] }).value,
+    { 1: [{ start: '17:00', end: '09:00' }] }
+  );
+  assert.strictEqual(normalizeAvailability({ 1: [{ start: '09:00', end: '09:00' }] }).error, undefined);
 });
