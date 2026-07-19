@@ -10,7 +10,9 @@ import {
   dayOfWeekFromStr,
   isDateInOverrides,
   hasSchedulingConflict,
-  getAvailableSlotsForDay
+  getAvailableSlotsForDay,
+  normalizeTime,
+  normalizeAvailability
 } from '../services/availability.js';
 
 const DAY = new Date('2026-06-10T12:00:00.000Z'); // a Wednesday in UTC
@@ -73,4 +75,45 @@ test('hasSchedulingConflict respects an injected drive-time buffer after an even
 test('getAvailableSlotsForDay returns nothing when a slot cannot fit the block', () => {
   const slots = getAvailableSlotsForDay(DAY, [{ start: '09:00', end: '09:20' }], 30, [], 'school-1', 5);
   assert.strictEqual(slots.length, 0);
+});
+
+test('normalizeTime accepts 24-hour HH:MM and pads single-digit hours', () => {
+  assert.strictEqual(normalizeTime('09:00'), '09:00');
+  assert.strictEqual(normalizeTime('9:00'), '09:00');
+  assert.strictEqual(normalizeTime('17:30'), '17:30');
+  assert.strictEqual(normalizeTime('23:59'), '23:59');
+  assert.strictEqual(normalizeTime('0:05'), '00:05');
+});
+
+test('normalizeTime rejects invalid values', () => {
+  assert.strictEqual(normalizeTime('24:00'), null);
+  assert.strictEqual(normalizeTime('12:60'), null);
+  assert.strictEqual(normalizeTime('5:00 PM'), null);
+  assert.strictEqual(normalizeTime('noon'), null);
+  assert.strictEqual(normalizeTime(''), null);
+  assert.strictEqual(normalizeTime(null), null);
+  assert.strictEqual(normalizeTime(900), null);
+});
+
+test('normalizeAvailability normalizes times, keeps extra block fields, drops empty days', () => {
+  const { value, error } = normalizeAvailability({
+    1: [{ start: '9:00', end: '17:00', name: 'A2a' }],
+    2: []
+  });
+  assert.strictEqual(error, undefined);
+  assert.deepStrictEqual(value, { 1: [{ start: '09:00', end: '17:00', name: 'A2a' }] });
+});
+
+test('normalizeAvailability passes through null/undefined (meeting types without a schedule)', () => {
+  assert.strictEqual(normalizeAvailability(null).value, null);
+  assert.strictEqual(normalizeAvailability(undefined).value, undefined);
+});
+
+test('normalizeAvailability rejects bad days, bad times, and inverted blocks', () => {
+  assert.ok(normalizeAvailability({ 7: [{ start: '09:00', end: '17:00' }] }).error);
+  assert.ok(normalizeAvailability({ 1: [{ start: '9am', end: '17:00' }] }).error);
+  assert.ok(normalizeAvailability({ 1: [{ start: '17:00', end: '09:00' }] }).error);
+  assert.ok(normalizeAvailability({ 1: [{ start: '09:00', end: '09:00' }] }).error);
+  assert.ok(normalizeAvailability([{ start: '09:00', end: '17:00' }]).error);
+  assert.ok(normalizeAvailability({ 1: { start: '09:00', end: '17:00' } }).error);
 });

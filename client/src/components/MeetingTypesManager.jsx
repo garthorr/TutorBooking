@@ -3,6 +3,7 @@ import DatePicker from 'react-datepicker'
 import 'react-datepicker/dist/react-datepicker.css'
 import { format } from 'date-fns'
 import { adminFetch } from '../auth'
+import TimeInput from './TimeInput'
 
 const DAYS = [
   { num: 0, label: 'Sunday' },
@@ -222,11 +223,16 @@ function ScheduleBuilder({ availability, onChange }) {
               <div className="time-blocks">
                 {blocks.map((block, idx) => (
                   <div key={idx} className="time-block-row">
-                    <input type="time" value={block.start}
-                      onChange={e => updateBlock(num, idx, { ...block, start: e.target.value })} />
+                    <TimeInput value={block.start}
+                      onChange={start => updateBlock(num, idx, { ...block, start })} />
                     <span className="time-block-to">to</span>
-                    <input type="time" value={block.end}
-                      onChange={e => updateBlock(num, idx, { ...block, end: e.target.value })} />
+                    <TimeInput value={block.end}
+                      onChange={end => updateBlock(num, idx, { ...block, end })} />
+                    {block.end <= block.start && (
+                      <span className="time-block-warning" title="End time must be after start time">
+                        end before start
+                      </span>
+                    )}
                     <button type="button" className="remove-block-btn"
                       onClick={() => removeBlock(num, idx)}>×</button>
                   </div>
@@ -273,7 +279,10 @@ export default function MeetingTypesManager() {
         body: JSON.stringify(updated)
       })
       if (res.ok) { setTypes(updated); showMessage('Saved', 'success') }
-      else showMessage('Failed to save', 'error')
+      else {
+        const data = await res.json().catch(() => null)
+        showMessage(data?.error || 'Failed to save', 'error')
+      }
     } catch {
       showMessage('Failed to save', 'error')
     } finally {

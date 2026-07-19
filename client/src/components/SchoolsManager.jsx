@@ -67,7 +67,8 @@ export default function SchoolsManager({ mapsApiKey, mapsLoaded }) {
         setSchools(updated)
         showMessage('Schools saved', 'success')
       } else {
-        showMessage('Failed to save schools', 'error')
+        const data = await res.json().catch(() => null)
+        showMessage(data?.error || 'Failed to save schools', 'error')
       }
     } catch {
       showMessage('Failed to save schools', 'error')
