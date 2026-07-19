@@ -253,6 +253,14 @@ export default function MeetingTypesManager() {
   const [expandedId, setExpandedId] = useState(null)
   const [addingNew, setAddingNew] = useState(false)
   const [newType, setNewType] = useState(emptyType())
+  const [copiedId, setCopiedId] = useState(null)
+
+  const copyShareLink = (id) => {
+    navigator.clipboard.writeText(`${window.location.origin}/book/${id}`).then(() => {
+      setCopiedId(id)
+      setTimeout(() => setCopiedId(c => (c === id ? null : c)), 2000)
+    })
+  }
 
   useEffect(() => { loadTypes() }, [])
 
@@ -375,6 +383,14 @@ export default function MeetingTypesManager() {
               </label>
 
               <div className="mt-actions">
+                <button className="btn btn-secondary btn-sm"
+                  disabled={!t.enabled}
+                  title={t.enabled
+                    ? 'Copy a direct booking link that shows only this meeting type'
+                    : 'Enable this meeting type to share its booking link'}
+                  onClick={() => copyShareLink(t.id)}>
+                  {copiedId === t.id ? '✓ Copied' : 'Copy Link'}
+                </button>
                 <button className="btn btn-secondary btn-sm"
                   onClick={() => setExpandedId(expandedId === t.id ? null : t.id)}>
                   {expandedId === t.id ? 'Close' : 'Details'}

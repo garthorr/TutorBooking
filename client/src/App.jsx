@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
+import { useParams } from 'react-router-dom'
 import { format, addDays, isBefore, startOfDay, getDay } from 'date-fns'
 import './App.css'
 import config from './config'
@@ -95,11 +96,10 @@ function MeetingIcon({ id, style }) {
 }
 
 /* ── Step indicator ─────────────────────────────────────────────────────── */
-function StepIndicator({ step }) {
-  const STEPS = ['Meeting', 'Date & time', 'Your info']
+function StepIndicator({ steps = ['Meeting', 'Date & time', 'Your info'], step }) {
   return (
     <div className="step-indicator" aria-label="Booking progress">
-      {STEPS.map((s, i) => {
+      {steps.map((s, i) => {
         const idx = i + 1
         const state = idx < step ? 'done' : idx === step ? 'current' : 'todo'
         return (
@@ -110,7 +110,7 @@ function StepIndicator({ step }) {
               </div>
               <div className="step-name">{s}</div>
             </div>
-            {idx < STEPS.length && <div className={`step-line ${state === 'done' ? 'done' : ''}`} />}
+            {idx < steps.length && <div className={`step-line ${state === 'done' ? 'done' : ''}`} />}
           </React.Fragment>
         )
       })}
@@ -194,7 +194,7 @@ function SummaryItem({ label, value }) {
 }
 
 /* ── Hero header ────────────────────────────────────────────────────────── */
-function Header({ logoUrl, businessName, tagline }) {
+function Header({ logoUrl, businessName, tagline, eyebrow = 'Schedule a session' }) {
   return (
     <div className="booking-hero">
       <div className="booking-hero-inner">
@@ -204,7 +204,7 @@ function Header({ logoUrl, businessName, tagline }) {
             : <Icon.School style={{ width: 28, height: 28, color: 'var(--navy-700)' }} />
           }
         </div>
-        <div className="eyebrow">Schedule a session</div>
+        <div className="eyebrow">{eyebrow}</div>
         <h1>Educat<em>Orr</em></h1>
         <p>{tagline}</p>
         <div className="hero-credentials">
@@ -266,6 +266,14 @@ function App() {
   const [step, setStep] = useState(1)
   const [schools, setSchools] = useState([])
   const [meetingTypes, setMeetingTypes] = useState(DEFAULT_MEETING_TYPES)
+  const [typesLoaded, setTypesLoaded] = useState(false)
+  // Single-type mode: /book/:typeId (or /?type=...) locks the page to one
+  // meeting type — the chooser step is skipped and other types stay hidden.
+  const { typeId: routeTypeId } = useParams()
+  const requestedTypeId = routeTypeId
+    || new URLSearchParams(window.location.search).get('type')
+    || null
+  const [lockedTypeId, setLockedTypeId] = useState(null)
   const [siteConfig, setSiteConfig] = useState({
     businessName: config.businessName,
     businessDescription: config.businessDescription,
@@ -290,6 +298,7 @@ function App() {
       .then(r => r.ok ? r.json() : null)
       .then(data => { if (Array.isArray(data) && data.length > 0) setMeetingTypes(data) })
       .catch(() => {})
+      .finally(() => setTypesLoaded(true))
 
     fetch('/api/config')
       .then(r => r.ok ? r.json() : null)
@@ -506,6 +515,31 @@ function App() {
     if (!mt?.requiresSchool) setStep(s => s + 1)
   }
 
+  // Apply the single-type lock once the real meeting types have loaded.
+  // An unknown or disabled type id falls back to the normal full page.
+  const lockAppliedRef = useRef(false)
+  useEffect(() => {
+    if (!requestedTypeId || !typesLoaded || lockAppliedRef.current) return
+    lockAppliedRef.current = true
+    const mt = meetingTypes.find(t => t.id === requestedTypeId && t.enabled !== false)
+    if (!mt) return
+    setLockedTypeId(mt.id)
+    handleMeetingTypeSelect(mt.id)
+  }, [typesLoaded])
+
+  const lockedType = getMeetingType(lockedTypeId) || null
+  // In single-type mode for types without a location step, the wizard starts
+  // at the date picker — internal step numbering stays 1-3, only the
+  // indicator and Back button adjust.
+  const lockedSkipsChooser = Boolean(lockedType && !lockedType.requiresSchool)
+  const stepLabels = lockedSkipsChooser
+    ? ['Date & time', 'Your info']
+    : lockedType
+      ? ['Location', 'Date & time', 'Your info']
+      : ['Meeting', 'Date & time', 'Your info']
+  const indicatorStep = lockedSkipsChooser ? step - 1 : step
+  const heroEyebrow = lockedType ? `Schedule · ${lockedType.label}` : 'Schedule a session'
+
   const handleLocationSelect = (schoolId) => {
     if (schoolId === CUSTOM_LOCATION_VALUE) {
       setIsCustomLocation(true)
@@ -600,7 +634,7 @@ function App() {
   if (isBooked) {
     return (
       <div className="booking-page">
-        <Header logoUrl={logoUrl} businessName={siteConfig.businessName} tagline={siteConfig.businessDescription} />
+        <Header logoUrl={logoUrl} businessName={siteConfig.businessName} tagline={siteConfig.businessDescription} eyebrow={heroEyebrow} />
         <div className="booking-card-wrap">
           <div className="booking-card">
             <div className="success-message">
@@ -644,14 +678,15 @@ function App() {
   /* ── Wizard ───────────────────────────────────────────────────────────── */
   return (
     <div className="booking-page">
-      <Header logoUrl={logoUrl} businessName={siteConfig.businessName} tagline={siteConfig.businessDescription} />
+      <Header logoUrl={logoUrl} businessName={siteConfig.businessName} tagline={siteConfig.businessDescription} eyebrow={heroEyebrow} />
       <div className="booking-card-wrap">
         <div className="booking-card">
-          <StepIndicator step={step} />
+          <StepIndicator steps={stepLabels} step={indicatorStep} />
 
           {step === 1 && (
             <Step1
               meetingTypes={meetingTypes}
+              lockedType={lockedType}
               schools={schools}
               bookingData={bookingData}
               selectedMeetingType={selectedMeetingType}
@@ -679,6 +714,7 @@ function App() {
               handleMonthChange={handleMonthChange}
               handleBack={handleBack}
               handleNext={handleNext}
+              showBack={!lockedSkipsChooser}
               canProceedFromStep1={canProceedFromStep1}
               advanceBookingDays={config.booking.advanceBookingDays}
               timezone={timezone}
@@ -714,16 +750,16 @@ function App() {
 
 /* ── Step 1: Meeting type + location ────────────────────────────────────── */
 function Step1({
-  meetingTypes, schools, bookingData, selectedMeetingType, isCustomLocation, siteConfig,
+  meetingTypes, lockedType, schools, bookingData, selectedMeetingType, isCustomLocation, siteConfig,
   handleMeetingTypeSelect, handleLocationSelect, handleCustomLocationChange,
   handleNext, canProceedFromStep2
 }) {
   return (
     <div className="form-section">
-      <h2>How would you like to meet?</h2>
+      <h2>{lockedType ? 'Where would you like to meet?' : 'How would you like to meet?'}</h2>
 
       <div className="meeting-options">
-        {meetingTypes.map(mt => (
+        {(lockedType ? [] : meetingTypes).map(mt => (
           <button
             key={mt.id}
             type="button"
@@ -813,7 +849,7 @@ function Step2({
   bookingData, selectedSchool, isCustomLocation, selectedMeetingType,
   availableSlots, loadingDays, handleDateSelect, handleTimeSelect,
   isDateDisabled, handleMonthChange, handleBack, handleNext,
-  canProceedFromStep1, advanceBookingDays, timezone, setTimezone
+  showBack = true, canProceedFromStep1, advanceBookingDays, timezone, setTimezone
 }) {
   return (
     <div className="form-section">
@@ -906,10 +942,12 @@ function Step2({
         </div>
       </div>
 
-      <div className="button-group">
-        <button className="btn btn-ghost" onClick={handleBack}>
-          <Icon.ArrowL style={{ width: 16, height: 16 }} /> Back
-        </button>
+      <div className="button-group" style={showBack ? undefined : { justifyContent: 'flex-end' }}>
+        {showBack && (
+          <button className="btn btn-ghost" onClick={handleBack}>
+            <Icon.ArrowL style={{ width: 16, height: 16 }} /> Back
+          </button>
+        )}
         <button className="btn btn-primary" onClick={handleNext} disabled={!canProceedFromStep1}>
           Continue <Icon.ArrowR style={{ width: 16, height: 16 }} />
         </button>
