@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 const WIDTH_OPTIONS = [
   { value: '100%',  label: '100% — full width' },
@@ -50,6 +50,20 @@ export default function EmbedBuilder() {
   const [shadow, setShadow] = useState('subtle')
   const [scroll, setScroll] = useState('auto')
   const [copied, setCopied] = useState(false)
+  const [meetingTypes, setMeetingTypes] = useState([])
+  const [typeId, setTypeId] = useState('')
+
+  useEffect(() => {
+    fetch('/api/meeting-types')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (Array.isArray(data)) setMeetingTypes(data) })
+      .catch(() => {})
+  }, [])
+
+  const embedUrl = typeId ? `${origin}/book/${typeId}` : `${origin}/`
+  const embedTitle = typeId
+    ? `Book: ${meetingTypes.find(t => t.id === typeId)?.label || typeId}`
+    : 'Book a tutoring session'
 
   const borderCss = BORDER_OPTIONS.find(o => o.value === border)?.css ?? 'none'
   const shadowCss = SHADOW_OPTIONS.find(o => o.value === shadow)?.css ?? 'none'
@@ -64,11 +78,11 @@ export default function EmbedBuilder() {
 
   const iframeCode = [
     '<iframe',
-    `  src="${origin}/"`,
+    `  src="${embedUrl}"`,
     `  width="${width}"`,
     `  height="${height}"`,
     `  style="${styleParts.join('; ')}"`,
-    '  title="Book a tutoring session"',
+    `  title="${embedTitle}"`,
     '  loading="lazy"',
     '></iframe>',
   ].join('\n')
@@ -100,7 +114,7 @@ export default function EmbedBuilder() {
           Use the options to match your site's style — the preview updates live.
         </p>
         <p style={{ margin: 0 }}>
-          The widget loads from <code>{origin}/</code>. Make sure your site can reach that URL.
+          The widget loads from <code>{embedUrl}</code>. Make sure your site can reach that URL.
         </p>
       </div>
 
@@ -108,6 +122,15 @@ export default function EmbedBuilder() {
       <div className="settings-section">
         <h2>Customization</h2>
         <div className="embed-options">
+          <div className="embed-option-group">
+            <label>Booking options</label>
+            <select value={typeId} onChange={e => setTypeId(e.target.value)}>
+              <option value="">All meeting types</option>
+              {meetingTypes.map(t => (
+                <option key={t.id} value={t.id}>{t.label} only</option>
+              ))}
+            </select>
+          </div>
           <div className="embed-option-group">
             <label>Width</label>
             <select value={width} onChange={e => setWidth(e.target.value)}>
@@ -167,10 +190,10 @@ export default function EmbedBuilder() {
         <p className="field-hint">Scroll inside the frame to walk through the full booking flow.</p>
         <div className="embed-preview-wrap">
           <iframe
-            key={`${width}-${height}-${radius}-${border}-${shadow}-${scroll}`}
-            src={`${origin}/`}
+            key={`${typeId}-${width}-${height}-${radius}-${border}-${shadow}-${scroll}`}
+            src={embedUrl}
             style={previewFrameStyle}
-            title="Book a tutoring session"
+            title={embedTitle}
           />
         </div>
       </div>

@@ -9,6 +9,7 @@ function Router() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<App />} />
+        <Route path="/book/:typeId" element={<App />} />
         <Route path="/manage/:token" element={<Manage />} />
         <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
       </Routes>
