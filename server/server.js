@@ -112,12 +112,14 @@ app.use(helmet({
     }
   }
 }));
-// Keep request bodies small on public endpoints; only the logo upload (base64
-// data URL) needs the larger limit.
+// Keep request bodies small on public endpoints. The logo upload and the
+// schools save need a larger limit: schools embed their tile logos as base64
+// data URLs, so PUT /api/schools carries every school's logo on each save.
 const standardJson = express.json({ limit: '64kb' });
-const largeJson = express.json({ limit: '4mb' });
+const largeJson = express.json({ limit: '16mb' });
 app.use((req, res, next) => {
-  if (req.method === 'PUT' && req.path === '/api/logo') return largeJson(req, res, next);
+  const needsLarge = req.method === 'PUT' && (req.path === '/api/logo' || req.path === '/api/schools');
+  if (needsLarge) return largeJson(req, res, next);
   return standardJson(req, res, next);
 });
 
