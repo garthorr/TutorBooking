@@ -49,9 +49,10 @@ export function normalizeAvailability(availability, label = 'availability') {
       if (!start || !end) {
         return { error: `${label}: day ${day} has an invalid time (expected 24-hour HH:MM, got "${block?.start}"–"${block?.end}")` };
       }
-      if (end <= start) {
-        return { error: `${label}: day ${day} block ${start}–${end} ends before it starts` };
-      }
+      // Inverted/empty ranges (end <= start) are tolerated: legacy data may
+      // contain them, they harmlessly produce no slots, and rejecting them
+      // here would block saving every school over one stale block. The admin
+      // UI flags them visually instead.
       normalized.push({ ...block, start, end });
     }
     if (normalized.length > 0) out[day] = normalized;

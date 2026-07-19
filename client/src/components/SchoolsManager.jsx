@@ -66,12 +66,14 @@ export default function SchoolsManager({ mapsApiKey, mapsLoaded }) {
       if (res.ok) {
         setSchools(updated)
         showMessage('Schools saved', 'success')
-      } else {
-        const data = await res.json().catch(() => null)
-        showMessage(data?.error || 'Failed to save schools', 'error')
+        return true
       }
+      const data = await res.json().catch(() => null)
+      showMessage(data?.error || 'Failed to save schools', 'error')
+      return false
     } catch {
       showMessage('Failed to save schools', 'error')
+      return false
     } finally {
       setSaving(false)
     }
@@ -98,15 +100,16 @@ export default function SchoolsManager({ mapsApiKey, mapsLoaded }) {
     }
   }
 
-  const handleSchoolSave = (school) => {
+  const handleSchoolSave = async (school) => {
     let updated
     if (editing === 'new') {
       updated = [...schools, school]
     } else {
       updated = schools.map(s => s.id === school.id ? school : s)
     }
-    setEditing(null)
-    saveSchools(updated)
+    // Keep the form open on failure so the admin's edits aren't lost.
+    const ok = await saveSchools(updated)
+    if (ok) setEditing(null)
   }
 
   const handleDelete = (id) => {
@@ -183,6 +186,9 @@ export default function SchoolsManager({ mapsApiKey, mapsLoaded }) {
   if (editing !== null) {
     return (
       <div>
+        {message.text && (
+          <div className={`message ${message.type}`}>{message.text}</div>
+        )}
         <h3>{editing === 'new' ? 'Add School' : `Edit: ${editing.name}`}</h3>
         <SchoolForm
           initial={editing === 'new' ? null : editing}
