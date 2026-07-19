@@ -854,6 +854,34 @@ gmp-placeautocomplete::part(input):focus {
   background: var(--white);
 }
 
+.mt-secret-badge {
+  font-size: 0.75rem;
+  color: var(--navy-700);
+  background: var(--gray-100);
+  border: 1px dashed var(--navy-600);
+  border-radius: var(--radius-pill);
+  padding: 2px 8px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  font-family: var(--font-display);
+  font-weight: 600;
+}
+
+.mt-secret-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 0.875rem;
+  color: var(--gray-700);
+  cursor: pointer;
+}
+.mt-secret-toggle input[type="checkbox"] {
+  width: auto;
+  margin-top: 2px;
+  accent-color: var(--navy-600);
+  flex-shrink: 0;
+}
+
 .mt-school-badge {
   font-size: 0.75rem;
   color: var(--gray-600);

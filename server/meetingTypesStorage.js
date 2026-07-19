@@ -22,7 +22,8 @@ export function getDefaultMeetingTypes(googleMeetDuration = 60) {
       sessionDuration: 15,
       availability: { ...DEFAULT_WEEKDAY_AVAILABILITY },
       isBuiltin: true,
-      requiresSchool: false
+      requiresSchool: false,
+      secret: false
     },
     {
       id: 'google-meet',
@@ -34,7 +35,8 @@ export function getDefaultMeetingTypes(googleMeetDuration = 60) {
       sessionDuration: googleMeetDuration,
       availability: { ...DEFAULT_WEEKDAY_AVAILABILITY },
       isBuiltin: true,
-      requiresSchool: false
+      requiresSchool: false,
+      secret: false
     },
     {
       id: 'physical',
@@ -46,7 +48,8 @@ export function getDefaultMeetingTypes(googleMeetDuration = 60) {
       sessionDuration: null,
       availability: null,
       isBuiltin: true,
-      requiresSchool: true
+      requiresSchool: true,
+      secret: false
     }
   ]
 }

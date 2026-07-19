@@ -56,6 +56,7 @@ CREATE TABLE IF NOT EXISTS meeting_types (
   unavailable_dates TEXT, -- JSON string (array of dates/ranges)
   is_builtin INTEGER DEFAULT 0,
   requires_school INTEGER DEFAULT 0,
+  is_secret INTEGER DEFAULT 0,
   FOREIGN KEY (user_id) REFERENCES users (id)
 );
 

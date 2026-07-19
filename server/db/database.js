@@ -61,6 +61,11 @@ if (!mtColumns.includes('unavailable_dates')) {
   db.prepare('ALTER TABLE meeting_types ADD COLUMN unavailable_dates TEXT').run();
 }
 
+if (!mtColumns.includes('is_secret')) {
+  console.log('Adding is_secret column to meeting_types table...');
+  db.prepare('ALTER TABLE meeting_types ADD COLUMN is_secret INTEGER DEFAULT 0').run();
+}
+
 // Migration: Add status and manage_token to bookings if they don't exist
 const bookingsInfo = db.prepare("PRAGMA table_info(bookings)").all();
 const bookingColumns = bookingsInfo.map(c => c.name);

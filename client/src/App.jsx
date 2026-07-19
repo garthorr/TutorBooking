@@ -516,16 +516,31 @@ function App() {
   }
 
   // Apply the single-type lock once the real meeting types have loaded.
-  // An unknown or disabled type id falls back to the normal full page.
+  // Secret types don't appear in the public listing, so a type missing from
+  // the list is resolved by id before giving up; an unknown or disabled type
+  // id falls back to the normal full page.
   const lockAppliedRef = useRef(false)
   useEffect(() => {
     if (!requestedTypeId || !typesLoaded || lockAppliedRef.current) return
-    lockAppliedRef.current = true
     const mt = meetingTypes.find(t => t.id === requestedTypeId && t.enabled !== false)
-    if (!mt) return
-    setLockedTypeId(mt.id)
-    handleMeetingTypeSelect(mt.id)
-  }, [typesLoaded])
+    if (mt) {
+      lockAppliedRef.current = true
+      setLockedTypeId(mt.id)
+      handleMeetingTypeSelect(mt.id)
+      return
+    }
+    let cancelled = false
+    fetch(`/api/meeting-types/${encodeURIComponent(requestedTypeId)}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(t => {
+        if (cancelled) return
+        if (!t?.id) { lockAppliedRef.current = true; return }
+        // Adding it to state re-runs this effect, which then applies the lock.
+        setMeetingTypes(prev => prev.some(p => p.id === t.id) ? prev : [...prev, t])
+      })
+      .catch(() => { if (!cancelled) lockAppliedRef.current = true })
+    return () => { cancelled = true }
+  }, [typesLoaded, meetingTypes])
 
   const lockedType = getMeetingType(lockedTypeId) || null
   // In single-type mode for types without a location step, the wizard starts
