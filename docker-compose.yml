@@ -10,6 +10,11 @@ services:
     environment:
       - NODE_ENV=production
       - DATA_DIR=/app/data
+      # Number of proxies in front of the app, counted from the app outwards:
+      # nginx (the client container) + Traefik = 2. Per-IP rate limiting depends
+      # on this being exact — too high and clients can forge their own address,
+      # too low and everyone is rate limited as one. Drop to 1 if you remove
+      # Traefik and serve the client container directly. Never set it to "true".
       - TRUST_PROXY=2
     env_file:
       - ./server/.env
