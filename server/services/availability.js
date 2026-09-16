@@ -126,9 +126,13 @@ export function hasSchedulingConflict(slotStart, slotEnd, events, schoolId, walk
   return false;
 }
 
-export function getAvailableSlotsForDay(date, availabilityBlocks, sessionDuration, events, schoolId, walkTime, getDriveTime = NO_DRIVE_TIME) {
+// `minStart` drops slots that begin before a given instant — pass `new Date()`
+// so today's already-elapsed times are not offered. Left optional (and off by
+// default) so the function stays a pure, fixed-date-testable helper.
+export function getAvailableSlotsForDay(date, availabilityBlocks, sessionDuration, events, schoolId, walkTime, getDriveTime = NO_DRIVE_TIME, minStart = null) {
   const slots = [];
   const duration = sessionDuration || 60;
+  const floor = minStart ? minStart.getTime() : null;
   for (const block of availabilityBlocks) {
     const [startH, startM] = block.start.split(':').map(Number);
     const [endH, endM] = block.end.split(':').map(Number);
@@ -137,6 +141,10 @@ export function getAvailableSlotsForDay(date, availabilityBlocks, sessionDuratio
     while (slotStart < blockEnd) {
       const slotEnd = new Date(slotStart.getTime() + duration * 60 * 1000);
       if (slotEnd > blockEnd) break;
+      if (floor !== null && slotStart.getTime() < floor) {
+        slotStart = new Date(slotStart.getTime() + 5 * 60 * 1000);
+        continue;
+      }
       const isBlocked = hasSchedulingConflict(slotStart, slotEnd, events, schoolId, walkTime, getDriveTime);
       if (!isBlocked) slots.push({ time: slotStart.toISOString(), available: true, blockName: block.name || null });
       slotStart = new Date(slotStart.getTime() + 5 * 60 * 1000);

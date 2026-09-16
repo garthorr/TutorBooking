@@ -57,6 +57,43 @@ async function fetchEventsForPeriod(timeMin, timeMax) {
   return results.flat();
 }
 
+// The app's own confirmed bookings, shaped like Google Calendar events so the
+// same conflict logic covers both.
+//
+// Google Calendar alone is not a safe source of truth here: fetchEventsForPeriod
+// returns [] when no calendar is connected AND when the Calendar API call fails,
+// so relying on it alone means every slot looks free — and the same slot can be
+// booked over and over — before a calendar is linked, after tokens expire, or
+// during a Google outage.
+function bookingsAsEvents(timeMin, timeMax, excludeBookingId = null) {
+  // Pad the window so bookings stored in a non-UTC ISO format are still caught;
+  // hasSchedulingConflict does the precise overlap maths on parsed dates.
+  const pad = DAY_MS;
+  const rows = dbService.getConfirmedBookingsBetween(
+    new Date(timeMin.getTime() - pad).toISOString(),
+    new Date(timeMax.getTime() + pad).toISOString()
+  );
+  const events = [];
+  for (const b of rows) {
+    if (excludeBookingId && b.id === excludeBookingId) continue;
+    const start = new Date(b.time);
+    if (isNaN(start.getTime())) continue;
+    events.push({
+      id: `booking:${b.id}`,
+      start: { dateTime: start.toISOString() },
+      end: { dateTime: new Date(start.getTime() + (b.session_duration || 60) * 60 * 1000).toISOString() },
+      extendedProperties: { private: { schoolId: b.school_id || '' } }
+    });
+  }
+  return events;
+}
+
+// Google Calendar events plus the app's own bookings for the same window.
+async function fetchBusyForPeriod(timeMin, timeMax, excludeBookingId = null) {
+  const events = await fetchEventsForPeriod(timeMin, timeMax);
+  return events.concat(bookingsAsEvents(timeMin, timeMax, excludeBookingId));
+}
+
 export const getAvailability = async (req, res) => {
   try {
     const { date, schoolId, sessionDuration, availabilityBlocks, availableDates, unavailableDates } = req.body;
@@ -86,9 +123,9 @@ export const getAvailability = async (req, res) => {
     const noonUTC = new Date(tzDateStr + 'T12:00:00.000Z');
     const timeMin = tzDate(noonUTC, 0, 0);
     const timeMax = tzDate(noonUTC, 23, 59);
-    const events = await fetchEventsForPeriod(timeMin, timeMax);
+    const events = await fetchBusyForPeriod(timeMin, timeMax);
     const walkTime = dbService.getSettings(1)?.walk_time ?? 5;
-    const slots = getAvailableSlotsForDay(noonUTC, blocks, sessionDuration, events, schoolId, walkTime, getDriveTimeFromStorage);
+    const slots = getAvailableSlotsForDay(noonUTC, blocks, sessionDuration, events, schoolId, walkTime, getDriveTimeFromStorage, new Date());
     res.json({ slots });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch availability' });
@@ -115,7 +152,7 @@ export const getAvailableDays = async (req, res) => {
 
     const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: TIMEZONE });
     const availableDates = [];
-    const allEvents = await fetchEventsForPeriod(timeMin, timeMax);
+    const allEvents = await fetchBusyForPeriod(timeMin, timeMax);
     const walkTime = dbService.getSettings(1)?.walk_time ?? 5;
     for (let d = 1; d <= daysInMonth; d++) {
       const dateStr = toDateStr(year, month, d);
@@ -145,7 +182,7 @@ export const getAvailableDays = async (req, res) => {
         const start = new Date(e.start.dateTime);
         return start.toLocaleDateString('en-CA', { timeZone: TIMEZONE }) === dateStr;
       });
-      const slots = getAvailableSlotsForDay(date, blocks, sessionDuration, dayEvents, schoolId, walkTime, getDriveTimeFromStorage);
+      const slots = getAvailableSlotsForDay(date, blocks, sessionDuration, dayEvents, schoolId, walkTime, getDriveTimeFromStorage, new Date());
       if (slots.length > 0) {
         availableDates.push(dateStr);
       }
@@ -211,7 +248,7 @@ function resolveBookingConfig(meetingTypeId, schoolId) {
 // off-grid times, overridden dates, past days and double-bookings in one pass.
 // `excludeEventId` drops a booking's own calendar event so a reschedule does
 // not conflict with itself.
-async function isSlotAvailable(cfg, startISO, excludeEventId = null) {
+async function isSlotAvailable(cfg, startISO, exclude = {}) {
   const start = new Date(startISO);
   if (isNaN(start.getTime())) return false;
 
@@ -227,11 +264,11 @@ async function isSlotAvailable(cfg, startISO, excludeEventId = null) {
   if (blocks.length === 0) return false;
 
   const noonUTC = new Date(dateStr + 'T12:00:00.000Z');
-  let events = await fetchEventsForPeriod(tzDate(noonUTC, 0, 0), tzDate(noonUTC, 23, 59));
-  if (excludeEventId) events = events.filter(e => e.id !== excludeEventId);
+  let events = await fetchBusyForPeriod(tzDate(noonUTC, 0, 0), tzDate(noonUTC, 23, 59), exclude.bookingId || null);
+  if (exclude.eventId) events = events.filter(e => e.id !== exclude.eventId);
 
   const walkTime = dbService.getSettings(ADMIN_ID)?.walk_time ?? 5;
-  const slots = getAvailableSlotsForDay(noonUTC, blocks, cfg.sessionDuration, events, cfg.schoolId, walkTime, getDriveTimeFromStorage);
+  const slots = getAvailableSlotsForDay(noonUTC, blocks, cfg.sessionDuration, events, cfg.schoolId, walkTime, getDriveTimeFromStorage, new Date());
   return slots.some(s => new Date(s.time).getTime() === start.getTime());
 }
 
@@ -394,7 +431,10 @@ function rescheduleParams(booking) {
 // Validate that a requested new start time is a real, conflict-free slot for the
 // booking. Same check the initial booking runs, minus the booking's own event.
 async function isSlotAvailableForReschedule(booking, newStartISO) {
-  return isSlotAvailable(getRescheduleConfig(booking), newStartISO, booking.calendar_event_id || null);
+  return isSlotAvailable(getRescheduleConfig(booking), newStartISO, {
+    eventId: booking.calendar_event_id || null,
+    bookingId: booking.id
+  });
 }
 
 async function deleteCalendarEvent(eventId) {

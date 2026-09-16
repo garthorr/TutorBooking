@@ -81,6 +81,14 @@ class DBService {
       .run(date, time, userId, id);
   }
 
+  // Confirmed bookings whose start falls in [startISO, endISO]. Used as a
+  // conflict source alongside Google Calendar, so the app still blocks double
+  // bookings when no calendar is connected or the Calendar API is unreachable.
+  getConfirmedBookingsBetween(startISO, endISO) {
+    return db.prepare("SELECT * FROM bookings WHERE status = 'confirmed' AND time >= ? AND time <= ? ORDER BY time ASC")
+      .all(startISO, endISO);
+  }
+
   // Confirmed bookings starting after `afterISO`, used by the reminder job.
   getUpcomingConfirmed(afterISO) {
     return db.prepare("SELECT * FROM bookings WHERE status = 'confirmed' AND time > ? ORDER BY time ASC").all(afterISO);

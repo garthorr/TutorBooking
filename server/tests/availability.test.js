@@ -72,6 +72,19 @@ test('hasSchedulingConflict respects an injected drive-time buffer after an even
   assert.strictEqual(hasSchedulingConflict(slotStart, slotEnd, events, 'B', 5, () => 0), false);
 });
 
+test('getAvailableSlotsForDay drops slots that start before minStart', () => {
+  // Mid-block "now": only slots at or after 09:20 should be offered.
+  const now = new Date('2026-06-10T09:20:00.000Z');
+  const slots = getAvailableSlotsForDay(DAY, [{ start: '09:00', end: '10:00' }], 30, [], 'school-1', 5, undefined, now);
+  assert.strictEqual(slots[0].time, '2026-06-10T09:20:00.000Z');
+  assert.ok(slots.every(s => new Date(s.time) >= now), 'no slot may start in the past');
+});
+
+test('getAvailableSlotsForDay without minStart still offers the whole block', () => {
+  const slots = getAvailableSlotsForDay(DAY, [{ start: '09:00', end: '10:00' }], 30, [], 'school-1', 5);
+  assert.strictEqual(slots.length, 7);
+});
+
 test('getAvailableSlotsForDay returns nothing when a slot cannot fit the block', () => {
   const slots = getAvailableSlotsForDay(DAY, [{ start: '09:00', end: '09:20' }], 30, [], 'school-1', 5);
   assert.strictEqual(slots.length, 0);

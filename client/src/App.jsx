@@ -339,6 +339,8 @@ function App() {
   const [timezone, setTimezone] = useState(detectTimezone)
   const [captcha, setCaptcha] = useState({ enabled: false })
   const [captchaToken, setCaptchaToken] = useState('')
+  const [captchaResetKey, setCaptchaResetKey] = useState(0)
+  const [submitError, setSubmitError] = useState('')
 
   const getMeetingType = (id) => meetingTypes.find(t => t.id === id)
 
@@ -496,8 +498,8 @@ function App() {
 
   const handleNext = () => setStep(step + 1)
   const handleBack = () => setStep(step - 1)
-  const handleDateSelect = (date) => setBookingData({ ...bookingData, date, time: null })
-  const handleTimeSelect = (time) => setBookingData({ ...bookingData, time })
+  const handleDateSelect = (date) => { setSubmitError(''); setBookingData({ ...bookingData, date, time: null }) }
+  const handleTimeSelect = (time) => { setSubmitError(''); setBookingData({ ...bookingData, time }) }
 
   const handleMeetingTypeSelect = (type) => {
     const mt = getMeetingType(type)
@@ -589,8 +591,16 @@ function App() {
     setBookingData({ ...bookingData, [name]: value })
   }
 
+  // A solved CAPTCHA token can only be redeemed once, so a failed submit must
+  // throw the old one away and re-arm the widget.
+  const resetCaptcha = () => {
+    setCaptchaToken('')
+    setCaptchaResetKey(k => k + 1)
+  }
+
   const handleSubmit = async () => {
     setIsSubmitting(true)
+    setSubmitError('')
     try {
       const mt = getMeetingType(bookingData.meetingType)
       const finalBookingData = {
@@ -610,16 +620,28 @@ function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(finalBookingData)
       })
+      const data = await response.json().catch(() => ({}))
       if (response.ok) {
-        const data = await response.json().catch(() => ({}))
         if (data?.booking?.manageToken) setManageToken(data.booking.manageToken)
         setIsBooked(true)
-      } else {
-        alert('Failed to book appointment. Please try again.')
+        return
+      }
+      // Show what the server actually said ("That time is no longer available",
+      // "Invalid email address", ...) rather than one generic line.
+      setSubmitError(data.error || 'Could not book that time. Please try again.')
+      resetCaptcha()
+      if (response.status === 409) {
+        // The slot went while they were filling the form. Reload the day's
+        // times and send them back to pick again, so they cannot retry into
+        // the same dead slot.
+        setBookingData(prev => ({ ...prev, time: null }))
+        if (bookingData.date) generateTimeSlots(bookingData.date)
+        setStep(2)
       }
     } catch (error) {
       console.error('Booking error:', error)
-      alert('An error occurred. Please try again.')
+      setSubmitError('Could not reach the server. Please check your connection and try again.')
+      resetCaptcha()
     } finally {
       setIsSubmitting(false)
     }
@@ -734,6 +756,7 @@ function App() {
               advanceBookingDays={config.booking.advanceBookingDays}
               timezone={timezone}
               setTimezone={setTimezone}
+              submitError={submitError}
             />
           )}
 
@@ -750,6 +773,8 @@ function App() {
               timezone={timezone}
               captcha={captcha}
               onCaptchaToken={setCaptchaToken}
+              captchaResetKey={captchaResetKey}
+              submitError={submitError}
             />
           )}
         </div>
@@ -864,11 +889,14 @@ function Step2({
   bookingData, selectedSchool, isCustomLocation, selectedMeetingType,
   availableSlots, loadingDays, handleDateSelect, handleTimeSelect,
   isDateDisabled, handleMonthChange, handleBack, handleNext,
-  showBack = true, canProceedFromStep1, advanceBookingDays, timezone, setTimezone
+  showBack = true, canProceedFromStep1, advanceBookingDays, timezone, setTimezone,
+  submitError
 }) {
   return (
     <div className="form-section">
       <h2>When works for you?</h2>
+
+      {submitError && <div className="message error" role="alert">{submitError}</div>}
 
       {selectedSchool && (
         <div className="selected-school-chip">
@@ -975,11 +1003,13 @@ function Step2({
 function Step3({
   bookingData, getFinalLocation, getSessionDurationDisplay,
   handleInputChange, handleBack, handleSubmit, canSubmit, isSubmitting, timezone,
-  captcha, onCaptchaToken
+  captcha, onCaptchaToken, captchaResetKey, submitError
 }) {
   return (
     <div className="form-section">
       <h2>A little about your student.</h2>
+
+      {submitError && <div className="message error" role="alert">{submitError}</div>}
 
       <div className="booking-summary">
         <SummaryItem label="Date & time"
@@ -1012,7 +1042,7 @@ function Step3({
 
       {captcha?.enabled && (
         <div className="form-group">
-          <Captcha provider={captcha.provider} siteKey={captcha.siteKey} onToken={onCaptchaToken} />
+          <Captcha provider={captcha.provider} siteKey={captcha.siteKey} onToken={onCaptchaToken} resetKey={captchaResetKey} />
         </div>
       )}
 
