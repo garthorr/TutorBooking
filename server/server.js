@@ -36,7 +36,11 @@ initializeDefaultUser().then(() => {
   startReminderJob();
   startCalendarSyncJob();
 }).catch(err => {
-  console.error('✗ Database initialization failed:', err);
+  // Without a database the app cannot serve or store anything, and a failure
+  // here can mean the admin user was deliberately not seeded (see
+  // ADMIN_PASSWORD_HASH). Stop rather than run in a half-initialized state.
+  console.error(`✗ Database initialization failed: ${err.message}`);
+  process.exit(1);
 });
 
 // Trust proxy for Docker/nginx environment
