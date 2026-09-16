@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "node --watch server.js",
     "start": "node server.js",
-    "test": "node --test"
+    "test": "node --test --import ./tests/setup.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
