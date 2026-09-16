@@ -1,5 +1,8 @@
 # Build stage
-FROM node:18-alpine AS build
+# Node 20+ is required by the build toolchain: vite and @vitejs/plugin-react
+# declare engines ^20.19.0 || >=22.12.0, and react-router-dom >=20.0.0.
+# Dropping below this silently breaks `docker compose build client`.
+FROM node:22-alpine AS build
 
 WORKDIR /app
 
