@@ -623,3 +623,17 @@ input:focus, select:focus, textarea:focus {
   color: var(--danger);
   border: 1px solid #e8b0ac;
 }
+
+/* ── Empty state ────────────────────────────────────────────────────────── */
+/* Shown when a meeting type needs a location but none are configured yet. */
+.empty-state {
+  padding: var(--space-5) var(--space-4);
+  text-align: center;
+  color: var(--gray-600);
+  background: var(--gray-50);
+  border: 1px dashed var(--gray-300);
+  border-radius: var(--radius-md);
+  margin-top: var(--space-4);
+}
+.empty-state p { margin: 0; }
+.empty-state .field-hint { margin-top: 6px; }

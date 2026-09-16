@@ -194,6 +194,15 @@ function SummaryItem({ label, value }) {
 }
 
 /* ── Hero header ────────────────────────────────────────────────────────── */
+// The hero accents part of the name. With a configurable name there is no
+// fixed split point, so accent the last word of a multi-word name and leave a
+// single-word name solid.
+function BrandName({ name }) {
+  const words = String(name || '').trim().split(/\s+/).filter(Boolean)
+  if (words.length < 2) return <>{words[0] || ''}</>
+  return <>{words.slice(0, -1).join(' ')} <em>{words[words.length - 1]}</em></>
+}
+
 function Header({ logoUrl, businessName, tagline, eyebrow = 'Schedule a session' }) {
   return (
     <div className="booking-hero">
@@ -205,7 +214,7 @@ function Header({ logoUrl, businessName, tagline, eyebrow = 'Schedule a session'
           }
         </div>
         <div className="eyebrow">{eyebrow}</div>
-        <h1>Educat<em>Orr</em></h1>
+        <h1><BrandName name={businessName} /></h1>
         <p>{tagline}</p>
         <div className="hero-credentials">
           <span className="cred"><Icon.Check style={{ width: 14, height: 14 }} /> 15-min intro call is free</span>
@@ -281,13 +290,12 @@ function App() {
   })
 
   useEffect(() => {
+    // No fallback to sample data: a fresh install has no schools yet, and
+    // showing invented ones lets visitors book a location that does not exist.
     fetch('/api/schools')
       .then(r => r.json())
-      .then(data => {
-        if (Array.isArray(data) && data.length > 0) setSchools(data)
-        else setSchools(config.schools)
-      })
-      .catch(() => setSchools(config.schools))
+      .then(data => setSchools(Array.isArray(data) ? data : []))
+      .catch(() => setSchools([]))
 
     fetch('/api/logo')
       .then(r => r.ok ? r.json() : null)
@@ -311,6 +319,8 @@ function App() {
           customLocationDuration: data.customLocationDuration || config.locationOptions.customLocationSessionDuration
         })
         if (data.captcha?.enabled) setCaptcha(data.captcha)
+        const name = data.businessName || config.businessName
+        if (name) document.title = `Book a Session \u00b7 ${name}`
       })
       .catch(() => {})
   }, [])
@@ -779,7 +789,7 @@ function App() {
           )}
         </div>
         <div className="booking-foot">
-          <span>EducatOrr Tutoring</span>
+          <span>{siteConfig.businessName}</span>
           <span className="dot" />
           <span>Questions? Reply to your confirmation email</span>
         </div>
@@ -822,7 +832,14 @@ function Step1({
         ))}
       </div>
 
-      {selectedMeetingType?.requiresSchool && (
+      {selectedMeetingType?.requiresSchool && schools.length === 0 && !config.locationOptions.allowCustomLocation && (
+        <div className="empty-state">
+          <p>No locations have been set up yet.</p>
+          <p className="field-hint">Please pick another way to meet, or get in touch to arrange one.</p>
+        </div>
+      )}
+
+      {selectedMeetingType?.requiresSchool && (schools.length > 0 || config.locationOptions.allowCustomLocation) && (
         <div className="location-select">
           <label>Choose a location</label>
           <div className="school-tiles">
