@@ -140,6 +140,23 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// Every client here expects JSON. Express's default handler returns an HTML
+// page (with a stack trace outside production), which breaks the admin UI's
+// error handling and leaks server paths. Catch everything that reaches this
+// point — including body-parser's malformed-JSON and payload-too-large errors
+// — and answer in JSON with a message that gives nothing away.
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
+  if (res.headersSent) return next(err);
+  const status = err.status || err.statusCode || 500;
+  console.error(`[error] ${req.method} ${req.url} → ${status}:`, err.message);
+  const message = status === 413 ? 'Request body is too large'
+    : status === 400 && err.type === 'entity.parse.failed' ? 'Malformed JSON in request body'
+    : status < 500 ? err.message
+    : 'Internal server error';
+  res.status(status).json({ error: message });
+});
+
 
 app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);

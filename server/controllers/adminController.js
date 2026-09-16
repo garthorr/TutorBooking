@@ -76,9 +76,39 @@ export const getDriveTimes = (req, res) => {
   res.json(loadDriveTimes());
 };
 
+// Expects { fromSchoolId: { toSchoolId: minutes } }. Anything else would be
+// written straight to the drive_times table and then fed into slot generation.
 export const updateDriveTimes = (req, res) => {
-  saveDriveTimes(req.body);
-  res.json({ success: true });
+  const body = req.body;
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return res.status(400).json({ error: 'Expected an object of drive times keyed by school id' });
+  }
+  // drive_times has foreign keys onto schools, so an unknown id would surface
+  // as a raw SqliteError rather than something the admin screen can show.
+  const knownSchools = new Set(loadSchools().map(s => s.id));
+  for (const [fromId, targets] of Object.entries(body)) {
+    if (!targets || typeof targets !== 'object' || Array.isArray(targets)) {
+      return res.status(400).json({ error: `Drive times for "${fromId}" must be an object keyed by destination school id` });
+    }
+    if (!knownSchools.has(fromId)) {
+      return res.status(400).json({ error: `Unknown school "${fromId}"` });
+    }
+    for (const [toId, minutes] of Object.entries(targets)) {
+      if (!knownSchools.has(toId)) {
+        return res.status(400).json({ error: `Unknown school "${toId}"` });
+      }
+      if (!Number.isFinite(Number(minutes)) || Number(minutes) < 0 || Number(minutes) > 24 * 60) {
+        return res.status(400).json({ error: `Drive time ${fromId} \u2192 ${toId} must be a number of minutes between 0 and 1440` });
+      }
+    }
+  }
+  try {
+    saveDriveTimes(body);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Failed to save drive times:', err);
+    res.status(500).json({ error: 'Failed to save drive times' });
+  }
 };
 
 export const calculateDriveTimes = async (req, res) => {
@@ -171,9 +201,24 @@ export const getCalendarConfig = (req, res) => {
   res.json(loadCalendarConfig());
 };
 
+// A malformed body here used to be stored verbatim, so `check_calendars` could
+// become the string "undefined" and every later JSON.parse would throw — taking
+// down availability site-wide with no admin screen left to fix it from.
 export const updateCalendarConfig = (req, res) => {
-  saveCalendarConfig(req.body);
-  res.json({ success: true });
+  const { checkCalendars, bookingCalendar } = req.body || {};
+  if (!Array.isArray(checkCalendars) || !checkCalendars.every(id => typeof id === 'string' && id.trim())) {
+    return res.status(400).json({ error: 'checkCalendars must be an array of calendar ids' });
+  }
+  if (typeof bookingCalendar !== 'string' || !bookingCalendar.trim()) {
+    return res.status(400).json({ error: 'bookingCalendar must be a calendar id' });
+  }
+  try {
+    saveCalendarConfig({ checkCalendars, bookingCalendar });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Failed to save calendar config:', err);
+    res.status(500).json({ error: 'Failed to save calendar config' });
+  }
 };
 
 export const getLogo = (req, res) => {
@@ -182,9 +227,26 @@ export const getLogo = (req, res) => {
   res.json({ dataUrl: logo.data_url });
 };
 
+// The logo is echoed back to every public visitor via GET /api/logo and dropped
+// straight into an <img src>, so only real image data URLs are accepted.
+const LOGO_DATA_URL_RE = /^data:image\/(png|jpeg|jpg|gif|webp|svg\+xml);base64,[A-Za-z0-9+/]+=*$/;
+const MAX_LOGO_BYTES = 2 * 1024 * 1024;
+
 export const updateLogo = (req, res) => {
-  dbService.saveLogo(ADMIN_ID, req.body.dataUrl);
-  res.json({ success: true });
+  const { dataUrl } = req.body || {};
+  if (typeof dataUrl !== 'string' || !LOGO_DATA_URL_RE.test(dataUrl)) {
+    return res.status(400).json({ error: 'Logo must be a base64 image data URL (PNG, JPEG, GIF, WebP or SVG)' });
+  }
+  if (Buffer.byteLength(dataUrl, 'utf8') > MAX_LOGO_BYTES) {
+    return res.status(413).json({ error: 'Logo is too large \u2014 please use an image under 2MB' });
+  }
+  try {
+    dbService.saveLogo(ADMIN_ID, dataUrl);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Failed to save logo:', err);
+    res.status(500).json({ error: 'Failed to save logo' });
+  }
 };
 
 export const deleteLogo = (req, res) => {
