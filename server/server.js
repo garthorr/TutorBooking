@@ -36,7 +36,11 @@ initializeDefaultUser().then(() => {
   startReminderJob();
   startCalendarSyncJob();
 }).catch(err => {
-  console.error('✗ Database initialization failed:', err);
+  // Without a database the app cannot serve or store anything, and a failure
+  // here can mean the admin user was deliberately not seeded (see
+  // ADMIN_PASSWORD_HASH). Stop rather than run in a half-initialized state.
+  console.error(`✗ Database initialization failed: ${err.message}`);
+  process.exit(1);
 });
 
 // Trust proxy for Docker/nginx environment
@@ -134,6 +138,23 @@ app.get('/api/health', (req, res) => {
     status: 'ok',
     timestamp: new Date().toISOString()
   });
+});
+
+// Every client here expects JSON. Express's default handler returns an HTML
+// page (with a stack trace outside production), which breaks the admin UI's
+// error handling and leaks server paths. Catch everything that reaches this
+// point — including body-parser's malformed-JSON and payload-too-large errors
+// — and answer in JSON with a message that gives nothing away.
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
+  if (res.headersSent) return next(err);
+  const status = err.status || err.statusCode || 500;
+  console.error(`[error] ${req.method} ${req.url} → ${status}:`, err.message);
+  const message = status === 413 ? 'Request body is too large'
+    : status === 400 && err.type === 'entity.parse.failed' ? 'Malformed JSON in request body'
+    : status < 500 ? err.message
+    : 'Internal server error';
+  res.status(status).json({ error: message });
 });
 
 

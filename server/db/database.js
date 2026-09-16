@@ -103,11 +103,24 @@ export async function initializeDefaultUser() {
 
   if (userCount === 0) {
     console.log('Initializing default admin user...');
-    // Use hash for 'password' if not set in .env
-    const passwordHash = process.env.ADMIN_PASSWORD_HASH || '$2b$12$cIQGLBLEIgm6yFVWW3jo2eOKN7AlZ80v1AC3PII7FAZWMq06DK1ZK';
+
+    // Seeding a well-known password would leave the admin panel open to anyone
+    // who has read this repository, so production must supply its own hash.
+    // Development falls back to "password" and is warned about on every boot.
+    const DEV_FALLBACK_HASH = '$2b$12$cIQGLBLEIgm6yFVWW3jo2eOKN7AlZ80v1AC3PII7FAZWMq06DK1ZK';
+    const passwordHash = process.env.ADMIN_PASSWORD_HASH;
+    if (!passwordHash && process.env.NODE_ENV === 'production') {
+      throw new Error(
+        'ADMIN_PASSWORD_HASH is not set. Refusing to seed the admin user with a ' +
+        'publicly known default password in production.\n' +
+        '  Generate one with:\n' +
+        "    node -e \"require('bcryptjs').hash('your-password-here', 12).then(console.log)\"\n" +
+        '  then set ADMIN_PASSWORD_HASH in server/.env and restart.'
+      );
+    }
 
     db.prepare('INSERT INTO users (username, password_hash) VALUES (?, ?)')
-      .run('admin', passwordHash);
+      .run('admin', passwordHash || DEV_FALLBACK_HASH);
 
     const adminId = db.prepare('SELECT id FROM users WHERE username = ?').get('admin').id;
 

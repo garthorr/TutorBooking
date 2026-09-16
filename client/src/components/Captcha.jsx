@@ -42,7 +42,10 @@ function loadScript(provider) {
   return promise
 }
 
-export default function Captcha({ provider, siteKey, onToken }) {
+// `resetKey` lets the parent recycle the widget: CAPTCHA tokens are single-use,
+// so after a rejected submit the solved widget must be reset or every retry
+// re-sends a token the provider has already burned.
+export default function Captcha({ provider, siteKey, onToken, resetKey = 0 }) {
   const containerRef = useRef(null)
   const widgetIdRef = useRef(null)
 
@@ -70,6 +73,15 @@ export default function Captcha({ provider, siteKey, onToken }) {
       }
     }
   }, [provider, siteKey])
+
+  const firstRenderRef = useRef(true)
+  useEffect(() => {
+    if (firstRenderRef.current) { firstRenderRef.current = false; return }
+    const api = window[provider === 'hcaptcha' ? 'hcaptcha' : 'turnstile']
+    if (api?.reset && widgetIdRef.current != null) {
+      try { api.reset(widgetIdRef.current) } catch { /* widget already gone */ }
+    }
+  }, [resetKey])
 
   return <div ref={containerRef} className="captcha-widget" style={{ margin: '8px 0' }} />
 }

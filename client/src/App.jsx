@@ -194,6 +194,15 @@ function SummaryItem({ label, value }) {
 }
 
 /* ── Hero header ────────────────────────────────────────────────────────── */
+// The hero accents part of the name. With a configurable name there is no
+// fixed split point, so accent the last word of a multi-word name and leave a
+// single-word name solid.
+function BrandName({ name }) {
+  const words = String(name || '').trim().split(/\s+/).filter(Boolean)
+  if (words.length < 2) return <>{words[0] || ''}</>
+  return <>{words.slice(0, -1).join(' ')} <em>{words[words.length - 1]}</em></>
+}
+
 function Header({ logoUrl, businessName, tagline, eyebrow = 'Schedule a session' }) {
   return (
     <div className="booking-hero">
@@ -205,7 +214,7 @@ function Header({ logoUrl, businessName, tagline, eyebrow = 'Schedule a session'
           }
         </div>
         <div className="eyebrow">{eyebrow}</div>
-        <h1>Educat<em>Orr</em></h1>
+        <h1><BrandName name={businessName} /></h1>
         <p>{tagline}</p>
         <div className="hero-credentials">
           <span className="cred"><Icon.Check style={{ width: 14, height: 14 }} /> 15-min intro call is free</span>
@@ -281,13 +290,12 @@ function App() {
   })
 
   useEffect(() => {
+    // No fallback to sample data: a fresh install has no schools yet, and
+    // showing invented ones lets visitors book a location that does not exist.
     fetch('/api/schools')
       .then(r => r.json())
-      .then(data => {
-        if (Array.isArray(data) && data.length > 0) setSchools(data)
-        else setSchools(config.schools)
-      })
-      .catch(() => setSchools(config.schools))
+      .then(data => setSchools(Array.isArray(data) ? data : []))
+      .catch(() => setSchools([]))
 
     fetch('/api/logo')
       .then(r => r.ok ? r.json() : null)
@@ -311,6 +319,8 @@ function App() {
           customLocationDuration: data.customLocationDuration || config.locationOptions.customLocationSessionDuration
         })
         if (data.captcha?.enabled) setCaptcha(data.captcha)
+        const name = data.businessName || config.businessName
+        if (name) document.title = `Book a Session \u00b7 ${name}`
       })
       .catch(() => {})
   }, [])
@@ -339,6 +349,8 @@ function App() {
   const [timezone, setTimezone] = useState(detectTimezone)
   const [captcha, setCaptcha] = useState({ enabled: false })
   const [captchaToken, setCaptchaToken] = useState('')
+  const [captchaResetKey, setCaptchaResetKey] = useState(0)
+  const [submitError, setSubmitError] = useState('')
 
   const getMeetingType = (id) => meetingTypes.find(t => t.id === id)
 
@@ -496,8 +508,8 @@ function App() {
 
   const handleNext = () => setStep(step + 1)
   const handleBack = () => setStep(step - 1)
-  const handleDateSelect = (date) => setBookingData({ ...bookingData, date, time: null })
-  const handleTimeSelect = (time) => setBookingData({ ...bookingData, time })
+  const handleDateSelect = (date) => { setSubmitError(''); setBookingData({ ...bookingData, date, time: null }) }
+  const handleTimeSelect = (time) => { setSubmitError(''); setBookingData({ ...bookingData, time }) }
 
   const handleMeetingTypeSelect = (type) => {
     const mt = getMeetingType(type)
@@ -589,8 +601,16 @@ function App() {
     setBookingData({ ...bookingData, [name]: value })
   }
 
+  // A solved CAPTCHA token can only be redeemed once, so a failed submit must
+  // throw the old one away and re-arm the widget.
+  const resetCaptcha = () => {
+    setCaptchaToken('')
+    setCaptchaResetKey(k => k + 1)
+  }
+
   const handleSubmit = async () => {
     setIsSubmitting(true)
+    setSubmitError('')
     try {
       const mt = getMeetingType(bookingData.meetingType)
       const finalBookingData = {
@@ -610,16 +630,28 @@ function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(finalBookingData)
       })
+      const data = await response.json().catch(() => ({}))
       if (response.ok) {
-        const data = await response.json().catch(() => ({}))
         if (data?.booking?.manageToken) setManageToken(data.booking.manageToken)
         setIsBooked(true)
-      } else {
-        alert('Failed to book appointment. Please try again.')
+        return
+      }
+      // Show what the server actually said ("That time is no longer available",
+      // "Invalid email address", ...) rather than one generic line.
+      setSubmitError(data.error || 'Could not book that time. Please try again.')
+      resetCaptcha()
+      if (response.status === 409) {
+        // The slot went while they were filling the form. Reload the day's
+        // times and send them back to pick again, so they cannot retry into
+        // the same dead slot.
+        setBookingData(prev => ({ ...prev, time: null }))
+        if (bookingData.date) generateTimeSlots(bookingData.date)
+        setStep(2)
       }
     } catch (error) {
       console.error('Booking error:', error)
-      alert('An error occurred. Please try again.')
+      setSubmitError('Could not reach the server. Please check your connection and try again.')
+      resetCaptcha()
     } finally {
       setIsSubmitting(false)
     }
@@ -734,6 +766,7 @@ function App() {
               advanceBookingDays={config.booking.advanceBookingDays}
               timezone={timezone}
               setTimezone={setTimezone}
+              submitError={submitError}
             />
           )}
 
@@ -750,11 +783,13 @@ function App() {
               timezone={timezone}
               captcha={captcha}
               onCaptchaToken={setCaptchaToken}
+              captchaResetKey={captchaResetKey}
+              submitError={submitError}
             />
           )}
         </div>
         <div className="booking-foot">
-          <span>EducatOrr Tutoring</span>
+          <span>{siteConfig.businessName}</span>
           <span className="dot" />
           <span>Questions? Reply to your confirmation email</span>
         </div>
@@ -797,7 +832,14 @@ function Step1({
         ))}
       </div>
 
-      {selectedMeetingType?.requiresSchool && (
+      {selectedMeetingType?.requiresSchool && schools.length === 0 && !config.locationOptions.allowCustomLocation && (
+        <div className="empty-state">
+          <p>No locations have been set up yet.</p>
+          <p className="field-hint">Please pick another way to meet, or get in touch to arrange one.</p>
+        </div>
+      )}
+
+      {selectedMeetingType?.requiresSchool && (schools.length > 0 || config.locationOptions.allowCustomLocation) && (
         <div className="location-select">
           <label>Choose a location</label>
           <div className="school-tiles">
@@ -864,11 +906,14 @@ function Step2({
   bookingData, selectedSchool, isCustomLocation, selectedMeetingType,
   availableSlots, loadingDays, handleDateSelect, handleTimeSelect,
   isDateDisabled, handleMonthChange, handleBack, handleNext,
-  showBack = true, canProceedFromStep1, advanceBookingDays, timezone, setTimezone
+  showBack = true, canProceedFromStep1, advanceBookingDays, timezone, setTimezone,
+  submitError
 }) {
   return (
     <div className="form-section">
       <h2>When works for you?</h2>
+
+      {submitError && <div className="message error" role="alert">{submitError}</div>}
 
       {selectedSchool && (
         <div className="selected-school-chip">
@@ -975,11 +1020,13 @@ function Step2({
 function Step3({
   bookingData, getFinalLocation, getSessionDurationDisplay,
   handleInputChange, handleBack, handleSubmit, canSubmit, isSubmitting, timezone,
-  captcha, onCaptchaToken
+  captcha, onCaptchaToken, captchaResetKey, submitError
 }) {
   return (
     <div className="form-section">
       <h2>A little about your student.</h2>
+
+      {submitError && <div className="message error" role="alert">{submitError}</div>}
 
       <div className="booking-summary">
         <SummaryItem label="Date & time"
@@ -1012,7 +1059,7 @@ function Step3({
 
       {captcha?.enabled && (
         <div className="form-group">
-          <Captcha provider={captcha.provider} siteKey={captcha.siteKey} onToken={onCaptchaToken} />
+          <Captcha provider={captcha.provider} siteKey={captcha.siteKey} onToken={onCaptchaToken} resetKey={captchaResetKey} />
         </div>
       )}
 

@@ -608,3 +608,32 @@ input:focus, select:focus, textarea:focus {
   background: var(--white); color: var(--navy-900);
   max-width: 220px;
 }
+
+/* ── Inline messages ────────────────────────────────────────────────────── */
+/* Used by the booking wizard and the self-service manage page. */
+.message {
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  font-size: 0.9375rem;
+  line-height: 1.45;
+  margin-bottom: var(--space-4);
+}
+.message.error {
+  background: var(--danger-bg);
+  color: var(--danger);
+  border: 1px solid #e8b0ac;
+}
+
+/* ── Empty state ────────────────────────────────────────────────────────── */
+/* Shown when a meeting type needs a location but none are configured yet. */
+.empty-state {
+  padding: var(--space-5) var(--space-4);
+  text-align: center;
+  color: var(--gray-600);
+  background: var(--gray-50);
+  border: 1px dashed var(--gray-300);
+  border-radius: var(--radius-md);
+  margin-top: var(--space-4);
+}
+.empty-state p { margin: 0; }
+.empty-state .field-hint { margin-top: 6px; }
