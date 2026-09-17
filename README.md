@@ -273,6 +273,10 @@ Optional:
   is a floor on the whole day and is separate from travel buffers, which space
   sessions apart from one another; a slot must satisfy both. Bookings you create
   from the admin panel ignore it.
+- **Booking window** (default 90 days) - how far ahead students can book. The
+  calendar stops here and the API refuses anything beyond it; previously only the
+  calendar limited it, so a direct request could book years out. Admin bookings
+  are not limited.
 
 **CAPTCHA on the public booking form** (optional — disabled unless both keys are set):
 - `CAPTCHA_PROVIDER` - `turnstile` (default) or `hcaptcha`

@@ -66,6 +66,7 @@ CREATE TABLE IF NOT EXISTS settings (
   custom_location_duration INTEGER DEFAULT 60,
   walk_time INTEGER DEFAULT 5,
   minimum_notice_minutes INTEGER DEFAULT 120,
+  max_advance_days INTEGER DEFAULT 90,
   theme_color TEXT DEFAULT '#4f46e5',
   business_name TEXT,
   business_description TEXT,

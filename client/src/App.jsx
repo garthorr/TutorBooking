@@ -287,7 +287,8 @@ function App() {
     businessName: config.businessName,
     businessDescription: config.businessDescription,
     customLocationDuration: config.locationOptions.customLocationSessionDuration,
-    customLocationAvailability: config.locationOptions.customLocationAvailability
+    customLocationAvailability: config.locationOptions.customLocationAvailability,
+    maxAdvanceDays: config.booking.advanceBookingDays
   })
 
   useEffect(() => {
@@ -320,7 +321,9 @@ function App() {
           customLocationDuration: data.customLocationDuration || config.locationOptions.customLocationSessionDuration,
           // Served by the API so the slots offered here match the ones the
           // server will accept; the bundled copy is only a fallback.
-          customLocationAvailability: data.customLocationAvailability || config.locationOptions.customLocationAvailability
+          customLocationAvailability: data.customLocationAvailability || config.locationOptions.customLocationAvailability,
+          // Served so the calendar stops where the server stops accepting.
+          maxAdvanceDays: data.maxAdvanceDays || config.booking.advanceBookingDays
         })
         if (data.captcha?.enabled) setCaptcha(data.captcha)
         const name = data.businessName || config.businessName
@@ -767,7 +770,7 @@ function App() {
               handleNext={handleNext}
               showBack={!lockedSkipsChooser}
               canProceedFromStep1={canProceedFromStep1}
-              advanceBookingDays={config.booking.advanceBookingDays}
+              advanceBookingDays={siteConfig.maxAdvanceDays}
               timezone={timezone}
               setTimezone={setTimezone}
               submitError={submitError}

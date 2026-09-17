@@ -22,6 +22,7 @@ class DBService {
         custom_location_duration = ?,
         walk_time = ?,
         minimum_notice_minutes = ?,
+        max_advance_days = ?,
         theme_color = ?,
         business_name = ?,
         business_description = ?
@@ -31,6 +32,7 @@ class DBService {
       settings.customLocationDuration,
       settings.walkTime,
       settings.minimumNoticeMinutes,
+      settings.maxAdvanceDays,
       settings.themeColor,
       settings.businessName,
       settings.businessDescription,

@@ -6,6 +6,12 @@ function ProtectedRoute({ children }) {
   const [state, setState] = useState('checking') // 'checking' | 'authed' | 'unauthed'
 
   useEffect(() => {
+    // /admin otherwise inherits the booking page's title from index.html.
+    // Admin refines it with the business name once settings load.
+    document.title = 'Booking Admin'
+  }, [])
+
+  useEffect(() => {
     const token = getToken()
     if (!token) { setState('unauthed'); return }
     fetch('/auth/admin/verify', { headers: { Authorization: `Bearer ${token}` } })

@@ -178,3 +178,26 @@ test('minimum notice of zero offers the whole block', () => {
   const zero = getAvailableSlotsForDay(day, blocks, 60, [], '', 5, () => 0, new Date('2026-10-05T00:00:00.000Z'));
   assert.deepStrictEqual(zero.map(s => s.time), all.map(s => s.time));
 });
+
+test('maxStart stops slots beyond the booking window', () => {
+  const day = new Date('2026-10-05T12:00:00.000Z');
+  const blocks = [{ start: '09:00', end: '17:00' }];
+  const all = getAvailableSlotsForDay(day, blocks, 60, [], '', 5, () => 0);
+  // A ceiling mid-block keeps the earlier starts and drops the later ones.
+  const ceiling = new Date('2026-10-05T11:00:00.000Z');
+  const bounded = getAvailableSlotsForDay(day, blocks, 60, [], '', 5, () => 0, null, ceiling);
+  assert.ok(bounded.length > 0 && bounded.length < all.length, 'some slots kept, some dropped');
+  assert.strictEqual(bounded[bounded.length - 1].time, '2026-10-05T11:00:00.000Z', 'last slot is exactly at the ceiling');
+  assert.ok(bounded.every(s => new Date(s.time) <= ceiling), 'nothing past the ceiling');
+  assert.deepStrictEqual(bounded.map(s => s.time), all.filter(s => new Date(s.time) <= ceiling).map(s => s.time));
+});
+
+test('minStart and maxStart bound the day from both ends', () => {
+  const day = new Date('2026-10-05T12:00:00.000Z');
+  const blocks = [{ start: '09:00', end: '17:00' }];
+  const from = new Date('2026-10-05T10:00:00.000Z');
+  const to = new Date('2026-10-05T12:00:00.000Z');
+  const slots = getAvailableSlotsForDay(day, blocks, 60, [], '', 5, () => 0, from, to);
+  assert.strictEqual(slots[0].time, '2026-10-05T10:00:00.000Z');
+  assert.strictEqual(slots[slots.length - 1].time, '2026-10-05T12:00:00.000Z');
+});

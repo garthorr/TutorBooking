@@ -66,6 +66,20 @@ function earliestBookableStart(bypass = false) {
   return new Date(now + Math.max(0, minutes) * 60 * 1000);
 }
 
+/*
+ * The latest instant a session may start, or null when unbounded.
+ *
+ * The booking page's calendar already stopped at 90 days, but only in the UI —
+ * the API accepted any future date, so a direct request could book years out.
+ * Admin bookings are unbounded for the same reason they skip the notice: the
+ * limit protects the tutor from the public, not from themselves.
+ */
+function latestBookableStart(bypass = false) {
+  if (bypass) return null;
+  const days = dbService.getSettings(ADMIN_ID)?.max_advance_days ?? 90;
+  return new Date(Date.now() + Math.max(1, days) * DAY_MS);
+}
+
 // The app's own confirmed bookings, shaped like Google Calendar events so the
 // same conflict logic covers both.
 //
@@ -134,7 +148,7 @@ async function handleAvailability(req, res, bypassNotice = false) {
     const timeMax = tzDate(noonUTC, 23, 59);
     const events = await fetchBusyForPeriod(timeMin, timeMax);
     const walkTime = dbService.getSettings(1)?.walk_time ?? 5;
-    const slots = getAvailableSlotsForDay(noonUTC, blocks, sessionDuration, events, schoolId, walkTime, createDriveTimeResolver(), earliestBookableStart(bypassNotice));
+    const slots = getAvailableSlotsForDay(noonUTC, blocks, sessionDuration, events, schoolId, walkTime, createDriveTimeResolver(), earliestBookableStart(bypassNotice), latestBookableStart(bypassNotice));
     res.json({ slots });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch availability' });
@@ -171,6 +185,8 @@ async function handleAvailableDays(req, res, bypassNotice = false) {
     // One drive-time read for the whole month, not one per lookup.
     const getDriveTime = createDriveTimeResolver();
     const now = earliestBookableStart(bypassNotice);
+    const latest = latestBookableStart(bypassNotice);
+    const latestDateStr = latest ? latest.toLocaleDateString('en-CA', { timeZone: TIMEZONE }) : null;
     // Working out which calendar day a timed event falls on costs a timezone
     // conversion, so do it once per event and bucket by day. Re-deriving it for
     // every day of the month made this the most expensive part of the request.
@@ -186,6 +202,7 @@ async function handleAvailableDays(req, res, bypassNotice = false) {
     for (let d = 1; d <= daysInMonth; d++) {
       const dateStr = toDateStr(year, month, d);
       if (dateStr < todayStr) continue;
+      if (latestDateStr && dateStr > latestDateStr) break;
 
       if (isDateInOverrides(dateStr, mtUnavailableDates)) continue;
       if (mtAvailableDates && mtAvailableDates.length > 0) {
@@ -207,7 +224,7 @@ async function handleAvailableDays(req, res, bypassNotice = false) {
       // so they are still checked per day, but there are few of them.
       const dayEvents = (timedByDay.get(dateStr) || [])
         .concat(allDayEvents.filter(e => dateStr >= e.start.date && dateStr < e.end.date));
-      const slots = getAvailableSlotsForDay(date, blocks, sessionDuration, dayEvents, schoolId, walkTime, getDriveTime, now);
+      const slots = getAvailableSlotsForDay(date, blocks, sessionDuration, dayEvents, schoolId, walkTime, getDriveTime, now, latest);
       if (slots.length > 0) {
         availableDates.push(dateStr);
       }
@@ -296,7 +313,7 @@ async function isSlotAvailable(cfg, startISO, exclude = {}, bypassNotice = false
   if (exclude.eventId) events = events.filter(e => e.id !== exclude.eventId);
 
   const walkTime = dbService.getSettings(ADMIN_ID)?.walk_time ?? 5;
-  const slots = getAvailableSlotsForDay(noonUTC, blocks, cfg.sessionDuration, events, cfg.schoolId, walkTime, createDriveTimeResolver(), earliestBookableStart(bypassNotice));
+  const slots = getAvailableSlotsForDay(noonUTC, blocks, cfg.sessionDuration, events, cfg.schoolId, walkTime, createDriveTimeResolver(), earliestBookableStart(bypassNotice), latestBookableStart(bypassNotice));
   return slots.some(s => new Date(s.time).getTime() === start.getTime());
 }
 

@@ -15,6 +15,7 @@ export const getConfig = (req, res) => {
     customLocationDuration: settings.custom_location_duration,
     walkTime: settings.walk_time ?? 5,
     minimumNoticeMinutes: settings.minimum_notice_minutes ?? 120,
+    maxAdvanceDays: settings.max_advance_days ?? 90,
     themeColor: settings.theme_color,
     businessName: settings.business_name,
     businessDescription: settings.business_description,
@@ -34,6 +35,7 @@ export const getSettings = (req, res) => {
     customLocationDuration: settings.custom_location_duration,
     walkTime: settings.walk_time ?? 5,
     minimumNoticeMinutes: settings.minimum_notice_minutes ?? 120,
+    maxAdvanceDays: settings.max_advance_days ?? 90,
     themeColor: settings.theme_color,
     businessName: settings.business_name,
     businessDescription: settings.business_description,
@@ -50,6 +52,15 @@ function clampNotice(value, fallback) {
   return Math.min(Math.round(n), 30 * 24 * 60);
 }
 
+// How far ahead a session may be booked. At least 1 day; 3650 is an upper
+// bound that keeps the month-view loop and date maths sane.
+function clampAdvance(value, fallback) {
+  if (value === undefined || value === null || value === '') return fallback;
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 1) return fallback;
+  return Math.min(Math.round(n), 3650);
+}
+
 export const updateSettings = (req, res) => {
   const current = dbService.getSettings(ADMIN_ID);
   const updated = {
@@ -57,6 +68,7 @@ export const updateSettings = (req, res) => {
     customLocationDuration: req.body.customLocationDuration || current.custom_location_duration,
     walkTime: req.body.walkTime ?? current.walk_time ?? 5,
     minimumNoticeMinutes: clampNotice(req.body.minimumNoticeMinutes, current.minimum_notice_minutes ?? 120),
+    maxAdvanceDays: clampAdvance(req.body.maxAdvanceDays, current.max_advance_days ?? 90),
     themeColor: req.body.themeColor || current.theme_color,
     businessName: (req.body.businessName || current.business_name || '').trim(),
     businessDescription: (req.body.businessDescription || current.business_description || '').trim()

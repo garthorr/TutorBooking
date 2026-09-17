@@ -63,6 +63,13 @@ if (!settingsColumns.includes('minimum_notice_minutes')) {
   db.prepare('ALTER TABLE settings ADD COLUMN minimum_notice_minutes INTEGER DEFAULT 120').run();
 }
 
+// Migration: how far ahead bookings are accepted. Previously only the calendar
+// UI limited this, so the API accepted any future date.
+if (!settingsColumns.includes('max_advance_days')) {
+  console.log('Adding max_advance_days column to settings table...');
+  db.prepare('ALTER TABLE settings ADD COLUMN max_advance_days INTEGER DEFAULT 90').run();
+}
+
 // Migration: Add available_dates and unavailable_dates to meeting_types if they don't exist
 const meetingTypesInfo = db.prepare("PRAGMA table_info(meeting_types)").all();
 const mtColumns = meetingTypesInfo.map(c => c.name);
