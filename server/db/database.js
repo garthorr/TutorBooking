@@ -89,6 +89,16 @@ if (!mtColumns.includes('is_secret')) {
   db.prepare('ALTER TABLE meeting_types ADD COLUMN is_secret INTEGER DEFAULT 0').run();
 }
 
+// Migration: per-meeting-type booking notice. NULL inherits the global setting,
+// so existing types keep whatever is configured globally. The built-in phone
+// call is the exception: a quick call is the one thing worth taking at short
+// notice, so it starts with no notice requirement. Change either in /admin.
+if (!mtColumns.includes('minimum_notice_minutes')) {
+  console.log('Adding minimum_notice_minutes column to meeting_types table...');
+  db.prepare('ALTER TABLE meeting_types ADD COLUMN minimum_notice_minutes INTEGER').run();
+  db.prepare("UPDATE meeting_types SET minimum_notice_minutes = 0 WHERE id = 'phone-call'").run();
+}
+
 // Migration: Add status and manage_token to bookings if they don't exist
 const bookingsInfo = db.prepare("PRAGMA table_info(bookings)").all();
 const bookingColumns = bookingsInfo.map(c => c.name);

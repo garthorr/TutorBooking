@@ -17,6 +17,17 @@ const DAYS = [
 
 const SESSION_DURATIONS = Array.from({ length: 36 }, (_, i) => (i + 1) * 5)
 
+const TYPE_NOTICE_OPTIONS = [
+  { value: 0, label: 'None — bookable right up to the start time' },
+  { value: 30, label: '30 minutes' },
+  { value: 60, label: '1 hour' },
+  { value: 120, label: '2 hours' },
+  { value: 240, label: '4 hours' },
+  { value: 720, label: '12 hours' },
+  { value: 1440, label: '24 hours' },
+  { value: 2880, label: '2 days' }
+]
+
 function durationLabel(d) {
   if (d < 60) return `${d} min`
   if (d === 60) return '1 hr'
@@ -418,6 +429,26 @@ export default function MeetingTypesManager() {
                   <input type="text" value={t.description}
                     onChange={e => updateField(t.id, { description: e.target.value })}
                     placeholder="Shown to students on the booking page" />
+                </div>
+
+                <div className="mt-detail-field">
+                  <label>Minimum booking notice</label>
+                  <select
+                    value={t.minimumNoticeMinutes === null || t.minimumNoticeMinutes === undefined ? '' : String(t.minimumNoticeMinutes)}
+                    onChange={e => updateField(t.id, {
+                      minimumNoticeMinutes: e.target.value === '' ? null : Number(e.target.value)
+                    })}
+                  >
+                    <option value="">Use the global setting</option>
+                    {TYPE_NOTICE_OPTIONS.map(o => (
+                      <option key={o.value} value={String(o.value)}>{o.label}</option>
+                    ))}
+                  </select>
+                  <p className="field-hint">
+                    How much warning you need before a session of this type. Overrides the
+                    global setting in Settings — useful when a quick call is fine at short
+                    notice but a school visit is not.
+                  </p>
                 </div>
                 <div className="mt-detail-field">
                   <label className="mt-secret-toggle">

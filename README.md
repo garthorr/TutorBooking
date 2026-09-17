@@ -272,7 +272,10 @@ Optional:
   window, so on an empty day the earliest slot offered is this far from now. It
   is a floor on the whole day and is separate from travel buffers, which space
   sessions apart from one another; a slot must satisfy both. Bookings you create
-  from the admin panel ignore it.
+  from the admin panel ignore it. Each meeting type can override this under
+  Meeting Types → Details, so a quick phone call can stay bookable at short
+  notice while a school visit needs hours of warning; leaving a type on "use the
+  global setting" inherits the value above.
 - **Booking window** (default 90 days) - how far ahead students can book. The
   calendar stops here and the API refuses anything beyond it; previously only the
   calendar limited it, so a direct request could book years out. Admin bookings

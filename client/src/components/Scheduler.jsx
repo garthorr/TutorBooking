@@ -76,7 +76,8 @@ export default function Scheduler({ params, onPick, maxAdvanceDays = 90, busy = 
           sessionDuration: params.sessionDuration,
           availabilityBlocks: params.availabilityBlocks,
           availableDates: params.availableDates,
-          unavailableDates: params.unavailableDates
+          unavailableDates: params.unavailableDates,
+          meetingType: params.meetingType
         })
       })
       if (res.ok) {
@@ -108,7 +109,8 @@ export default function Scheduler({ params, onPick, maxAdvanceDays = 90, busy = 
           sessionDuration: params.sessionDuration,
           availabilityBlocks: dayBlocks,
           availableDates: params.availableDates,
-          unavailableDates: params.unavailableDates
+          unavailableDates: params.unavailableDates,
+          meetingType: params.meetingType
         })
       })
       if (reqId !== reqRef.current) return

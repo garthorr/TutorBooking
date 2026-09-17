@@ -227,7 +227,9 @@ class DBService {
       unavailableDates: r.unavailable_dates ? JSON.parse(r.unavailable_dates) : null,
       isBuiltin: Boolean(r.is_builtin),
       requiresSchool: Boolean(r.requires_school),
-      secret: Boolean(r.is_secret)
+      secret: Boolean(r.is_secret),
+      // null means "use the global minimum notice"; a number overrides it.
+      minimumNoticeMinutes: r.minimum_notice_minutes ?? null
     }));
   }
 
@@ -236,8 +238,9 @@ class DBService {
     const insertStmt = db.prepare(`
       INSERT INTO meeting_types (
         id, user_id, label, description, icon, enabled, sort_order,
-        session_duration, availability, available_dates, unavailable_dates, is_builtin, requires_school, is_secret
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        session_duration, availability, available_dates, unavailable_dates, is_builtin, requires_school, is_secret,
+        minimum_notice_minutes
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const transaction = db.transaction((types) => {
@@ -249,7 +252,9 @@ class DBService {
           JSON.stringify(t.availability),
           JSON.stringify(t.availableDates || null),
           JSON.stringify(t.unavailableDates || null),
-          t.isBuiltin ? 1 : 0, t.requiresSchool ? 1 : 0, t.secret ? 1 : 0
+          t.isBuiltin ? 1 : 0, t.requiresSchool ? 1 : 0, t.secret ? 1 : 0,
+          t.minimumNoticeMinutes === null || t.minimumNoticeMinutes === undefined || t.minimumNoticeMinutes === ''
+            ? null : Math.max(0, Math.round(Number(t.minimumNoticeMinutes)))
         );
       }
     });
