@@ -232,6 +232,10 @@ function Header({ logoUrl, businessName, tagline, eyebrow = 'Schedule a session'
 
 const CUSTOM_LOCATION_VALUE = '__CUSTOM__'
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+// Keep in step with MAX_GUESTS in server/services/guests.js, which enforces it.
+const MAX_GUESTS = 5
+
 const DEFAULT_MEETING_TYPES = [
   {
     id: 'phone-call',
@@ -342,7 +346,8 @@ function App() {
     name: '',
     email: '',
     phone: '',
-    notes: ''
+    notes: '',
+    guests: []
   })
   const [availableSlots, setAvailableSlots] = useState([])
   const [availableDates, setAvailableDates] = useState(null)
@@ -606,6 +611,18 @@ function App() {
   }
 
   const handleCustomLocationChange = (e) => setBookingData({ ...bookingData, customLocation: e.target.value })
+
+  /* Guests: people invited onto the calendar event alongside the student,
+     typically a parent. Rows start empty and are only sent once filled in. */
+  const addGuest = () => setBookingData(d => (
+    d.guests.length >= MAX_GUESTS ? d : { ...d, guests: [...d.guests, ''] }
+  ))
+  const updateGuest = (index, value) => setBookingData(d => (
+    { ...d, guests: d.guests.map((g, i) => (i === index ? value : g)) }
+  ))
+  const removeGuest = (index) => setBookingData(d => (
+    { ...d, guests: d.guests.filter((_, i) => i !== index) }
+  ))
   const handleInputChange = (e) => {
     const { name, value } = e.target
     setBookingData({ ...bookingData, [name]: value })
@@ -629,6 +646,8 @@ function App() {
         time: bookingData.time.toISOString(),
         timezone,
         captchaToken,
+        // A row the visitor added and left blank is not a guest.
+        guests: bookingData.guests.map(g => g.trim()).filter(Boolean),
         location: isCustomLocation
           ? bookingData.customLocation
           : selectedSchool
@@ -673,7 +692,10 @@ function App() {
     !selectedMeetingType?.requiresSchool ||
     (bookingData.schoolId && (bookingData.schoolId !== CUSTOM_LOCATION_VALUE || bookingData.customLocation.trim()))
   )
-  const canSubmit = bookingData.name && bookingData.email && (!captcha.enabled || captchaToken)
+  // A typo'd guest address is rejected server-side, so catch it before the
+  // visitor loses their slot to a failed submit.
+  const guestsValid = bookingData.guests.every(g => !g.trim() || EMAIL_RE.test(g.trim()))
+  const canSubmit = bookingData.name && bookingData.email && guestsValid && (!captcha.enabled || captchaToken)
 
   const getFinalLocation = () => {
     const mt = getMeetingType(bookingData.meetingType)
@@ -786,6 +808,9 @@ function App() {
               getFinalLocation={getFinalLocation}
               getSessionDurationDisplay={getSessionDurationDisplay}
               handleInputChange={handleInputChange}
+              addGuest={addGuest}
+              updateGuest={updateGuest}
+              removeGuest={removeGuest}
               handleBack={handleBack}
               handleSubmit={handleSubmit}
               canSubmit={canSubmit}
@@ -1026,10 +1051,58 @@ function Step2({
   )
 }
 
+/* ── Guests ─────────────────────────────────────────────────────────────────
+   Extra people added to the calendar invite — usually a parent. They receive
+   the Google Calendar invite rather than an email from us, so the invite is
+   also where they get the link to reschedule or cancel. */
+function GuestFields({ guests, addGuest, updateGuest, removeGuest }) {
+  const isInvalid = (value) => Boolean(value.trim()) && !EMAIL_RE.test(value.trim())
+  return (
+    <div className="form-group">
+      <label>Also invite <span style={{ color: 'var(--gray-500)', fontWeight: 400 }}>(optional)</span></label>
+      <div className="field-hint" style={{ marginTop: 0, marginBottom: 'var(--space-2)' }}>
+        A parent or guardian you'd like on the invite. They'll get the same calendar
+        invite as you, and can reschedule or cancel from it.
+      </div>
+
+      {guests.map((guest, i) => (
+        <div className="guest-row" key={i}>
+          <input
+            type="email"
+            value={guest}
+            className={isInvalid(guest) ? 'invalid' : undefined}
+            aria-invalid={isInvalid(guest) || undefined}
+            aria-label={`Guest email ${i + 1}`}
+            onChange={e => updateGuest(i, e.target.value)}
+            placeholder="parent@email.com"
+          />
+          <button type="button" className="btn btn-ghost guest-remove"
+            onClick={() => removeGuest(i)} aria-label={`Remove guest ${i + 1}`}>
+            Remove
+          </button>
+        </div>
+      ))}
+
+      {guests.some(isInvalid) && (
+        <div className="field-hint guest-error">That doesn't look like an email address.</div>
+      )}
+
+      {guests.length < MAX_GUESTS ? (
+        <button type="button" className="btn btn-ghost guest-add" onClick={addGuest}>
+          + Add {guests.length === 0 ? 'a guest' : 'another'}
+        </button>
+      ) : (
+        <div className="field-hint">You can invite up to {MAX_GUESTS} guests.</div>
+      )}
+    </div>
+  )
+}
+
 /* ── Step 3: Your info ──────────────────────────────────────────────────── */
 function Step3({
   bookingData, getFinalLocation, getSessionDurationDisplay,
-  handleInputChange, handleBack, handleSubmit, canSubmit, isSubmitting, timezone,
+  handleInputChange, addGuest, updateGuest, removeGuest,
+  handleBack, handleSubmit, canSubmit, isSubmitting, timezone,
   captcha, onCaptchaToken, captchaResetKey, submitError
 }) {
   return (
@@ -1066,6 +1139,13 @@ function Step3({
         <textarea name="notes" value={bookingData.notes} onChange={handleInputChange} rows="4"
           placeholder="Topics you're working on, recent test scores, accommodations…" />
       </div>
+
+      <GuestFields
+        guests={bookingData.guests}
+        addGuest={addGuest}
+        updateGuest={updateGuest}
+        removeGuest={removeGuest}
+      />
 
       {captcha?.enabled && (
         <div className="form-group">

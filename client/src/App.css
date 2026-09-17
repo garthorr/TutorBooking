@@ -245,6 +245,24 @@ input:focus, select:focus, textarea:focus {
   box-shadow: 0 0 0 3px rgba(151,202,232,0.45);
 }
 
+/* ── Guest fields ──────────────────────────────────────────────────────── */
+.guest-row {
+  display: flex; align-items: center; gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+.guest-row input { flex: 1; min-width: 0; }
+.guest-row input.invalid { border-color: var(--danger); }
+.guest-row input.invalid:focus {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 3px rgba(179,50,42,0.18);
+}
+.guest-remove, .guest-add {
+  padding: 9px 14px; font-size: 13px;
+  white-space: nowrap; flex-shrink: 0;
+}
+.guest-add { margin-top: var(--space-1); }
+.guest-error { color: var(--danger); }
+
 /* ── Meeting types ─────────────────────────────────────────────────────── */
 .meeting-options { display: grid; gap: var(--space-3); margin-top: var(--space-2); }
 .meeting-option {

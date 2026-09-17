@@ -5,7 +5,8 @@ import { loadCalendarConfig } from '../calendarStorage.js';
 import { loadMeetingTypes } from '../meetingTypesStorage.js';
 import { CUSTOM_LOCATION_AVAILABILITY } from '../customLocationConfig.js';
 import { addBooking as addBookingToDisk, loadBookings } from '../bookingsStorage.js';
-import { sendConfirmation, sendReschedule, sendCancellation, notifyAdminOfBooking } from '../services/emailService.js';
+import { sendConfirmation, sendReschedule, sendCancellation, notifyAdminOfBooking, manageUrl } from '../services/emailService.js';
+import { normalizeGuestEmails, parseGuestEmails } from '../services/guests.js';
 import { verifyCaptcha } from '../services/captchaService.js';
 import { getCalendar } from '../services/googleClient.js';
 import {
@@ -349,6 +350,40 @@ function validateBookingInput(b) {
   return null;
 }
 
+/*
+ * The Google Calendar event for a booking.
+ *
+ * Guests are attendees alongside the student. They get no email from us, so the
+ * manage link goes in the description as well: every attendee sees it, which
+ * makes the invite the one place a parent can reschedule or cancel from.
+ *
+ * Exported so the event's shape can be checked without a Google connection.
+ */
+export function buildBookingEvent(booking, start, end) {
+  const guests = booking.guestEmails || [];
+  const manageLink = manageUrl(booking.manageToken);
+  const event = {
+    summary: `${booking.name} — Tutoring`,
+    description: [
+      `Client: ${booking.name}`,
+      `Email: ${booking.email}`,
+      guests.length > 0 ? `Guests: ${guests.join(', ')}` : null,
+      booking.notes ? `Notes: ${booking.notes}` : null,
+      manageLink ? `\nReschedule or cancel: ${manageLink}` : null
+    ].filter(Boolean).join('\n'),
+    start: { dateTime: start.toISOString(), timeZone: TIMEZONE },
+    end: { dateTime: end.toISOString(), timeZone: TIMEZONE },
+    attendees: [{ email: booking.email }, ...guests.map(guest => ({ email: guest }))],
+    extendedProperties: { private: { schoolId: booking.schoolId || '', meetingType: booking.meetingType } }
+  };
+  if (booking.meetingType === 'google-meet') {
+    event.conferenceData = { createRequest: { requestId: booking.id, conferenceSolutionKey: { type: 'hangoutsMeet' } } };
+  } else {
+    event.location = booking.location;
+  }
+  return event;
+}
+
 // Shared by the public booking form and the admin panel. `options.bypassNotice`
 // skips the minimum-notice floor, and `options.requireCaptcha` is false for the
 // admin path, which is already behind authentication.
@@ -358,6 +393,11 @@ async function handleCreateBooking(req, res, options = {}) {
     const { time, meetingType, location, schoolId, name, email, phone, notes, timezone, captchaToken } = req.body;
     const validationError = validateBookingInput(req.body);
     if (validationError) return res.status(400).json({ error: validationError });
+
+    // Runs after the email check above, since the student's own address is what
+    // a duplicate guest entry is measured against.
+    const { emails: guestEmails, error: guestError } = normalizeGuestEmails(req.body.guests, email);
+    if (guestError) return res.status(400).json({ error: guestError });
 
     if (requireCaptcha) {
       // Gate the public endpoint behind CAPTCHA when configured. This is a
@@ -397,6 +437,7 @@ async function handleCreateBooking(req, res, options = {}) {
       date: bookingDate,
       time: startDateTime.toISOString(),
       meetingType, location, schoolId, name, email, phone, notes,
+      guestEmails,
       sessionDuration: duration,
       timezone: timezone || null,
       status: 'confirmed',
@@ -405,24 +446,10 @@ async function handleCreateBooking(req, res, options = {}) {
     };
     const calendar = getCalendar();
     if (calendar) {
-      const endDateTime = slotEnd;
-      const event = {
-        summary: `${name} — Tutoring`,
-        description: `Client: ${name}\nEmail: ${email}\nNotes: ${notes}`,
-        start: { dateTime: startDateTime.toISOString(), timeZone: TIMEZONE },
-        end: { dateTime: endDateTime.toISOString(), timeZone: TIMEZONE },
-        attendees: [{ email }],
-        extendedProperties: { private: { schoolId: schoolId || '', meetingType } }
-      };
-      if (meetingType === 'google-meet') {
-        event.conferenceData = { createRequest: { requestId: booking.id, conferenceSolutionKey: { type: 'hangoutsMeet' } } };
-      } else {
-        event.location = location;
-      }
       const { bookingCalendar } = loadCalendarConfig();
       const calendarEvent = await calendar.events.insert({
         calendarId: bookingCalendar || 'primary',
-        resource: event,
+        resource: buildBookingEvent(booking, startDateTime, slotEnd),
         conferenceDataVersion: meetingType === 'google-meet' ? 1 : 0,
         sendUpdates: 'all'
       });
@@ -454,7 +481,11 @@ export const createBookingAsAdmin = (req, res) =>
   handleCreateBooking(req, res, { bypassNotice: true, requireCaptcha: false, createdBy: 'admin' });
 
 export const getBookings = (req, res) => {
-  res.json({ bookings: loadBookings() });
+  // guest_emails is stored as JSON; hand the admin panel a real array so it
+  // never has to know the storage format.
+  res.json({
+    bookings: loadBookings().map(b => ({ ...b, guestEmails: parseGuestEmails(b.guest_emails) }))
+  });
 };
 
 /* ── Cancel & reschedule ──────────────────────────────────────────────────── */
@@ -568,6 +599,7 @@ function toPublicBooking(b) {
     meetingType: b.meeting_type,
     location: b.location,
     name: b.name,
+    guests: parseGuestEmails(b.guest_emails),
     sessionDuration: b.session_duration,
     status: b.status,
     meetLink: b.meet_link,

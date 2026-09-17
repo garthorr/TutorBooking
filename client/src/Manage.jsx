@@ -142,6 +142,7 @@ export default function Manage() {
                     <div className="summary-item"><span className="summary-label">Length</span><span className="summary-value">{booking.sessionDuration} minutes</span></div>
                     <div className="summary-item"><span className="summary-label">Type</span><span className="summary-value">{booking.meetingType}</span></div>
                     {booking.location && <div className="summary-item"><span className="summary-label">Location</span><span className="summary-value">{booking.location}</span></div>}
+                    {booking.guests?.length > 0 && <div className="summary-item"><span className="summary-label">Also invited</span><span className="summary-value">{booking.guests.join(', ')}</span></div>}
                     {booking.meetLink && <div className="summary-item"><span className="summary-label">Meet link</span><span className="summary-value"><a href={booking.meetLink} target="_blank" rel="noopener noreferrer">Join</a></span></div>}
                   </div>
                   <div className="button-group">
