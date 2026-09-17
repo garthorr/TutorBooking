@@ -1,5 +1,6 @@
 import nodemailer from 'nodemailer';
 import dbService from './dbService.js';
+import { parseGuestEmails } from './guests.js';
 
 /*
  * Optional transactional email. Entirely no-op unless SMTP is configured via
@@ -43,9 +44,18 @@ function businessName() {
   return dbService.getSettings(1)?.business_name || 'Tutoring';
 }
 
-function manageUrl(token) {
+/*
+ * Absolute URL of a booking's self-service page, or null when one cannot be
+ * built. Exported because the calendar invite carries it too: guests get no
+ * email from us, so the invite is the only place they can reach it.
+ *
+ * Without PUBLIC_BASE_URL this would be a bare "/manage/…" path, which is
+ * useless in an email or a calendar invite, so the link is omitted instead.
+ */
+export function manageUrl(token) {
   if (!token) return null;
   const base = (process.env.PUBLIC_BASE_URL || '').replace(/\/$/, '');
+  if (!base) return null;
   return `${base}/manage/${token}`;
 }
 
@@ -69,6 +79,8 @@ function normalize(booking) {
     timezone: booking.timezone ?? booking.client_timezone ?? null,
     location: booking.location,
     sessionDuration: booking.sessionDuration ?? booking.session_duration,
+    // An array on a freshly created booking, a JSON string on a row read back.
+    guests: parseGuestEmails(booking.guestEmails ?? booking.guest_emails),
     manageToken: booking.manageToken ?? booking.manage_token,
     meetLink: booking.meetLink ?? booking.meet_link
   };
@@ -87,6 +99,7 @@ function detailsHtml(b) {
     ['When', esc(formatWhen(b.timeISO, b.timezone))],
     ['Length', b.sessionDuration ? `${esc(b.sessionDuration)} minutes` : null],
     ['Location', esc(b.location)],
+    ['Also invited', b.guests.length > 0 ? esc(b.guests.join(', ')) : null],
     ['Video link', b.meetLink ? `<a href="${esc(b.meetLink)}">${esc(b.meetLink)}</a>` : null]
   ].filter(([, v]) => v);
   return `<table style="border-collapse:collapse;width:100%">${rows.map(([k, v]) =>
@@ -158,6 +171,7 @@ export async function notifyAdminOfBooking(booking, { createdBy = 'public' } = {
     ['Phone', esc(booking.phone ?? booking.phone_number ?? '')],
     ['Length', b.sessionDuration ? `${esc(b.sessionDuration)} minutes` : null],
     ['Location', esc(b.location)],
+    ['Guests', b.guests.length > 0 ? esc(b.guests.join(', ')) : null],
     ['Notes', esc(booking.notes)],
     ['Booked via', createdBy === 'admin' ? 'admin panel' : 'booking page']
   ].filter(([, v]) => v);

@@ -128,6 +128,13 @@ if (!bookingColumns.includes('client_timezone')) {
   db.prepare('ALTER TABLE bookings ADD COLUMN client_timezone TEXT').run();
 }
 
+// Migration: guests invited alongside the student. NULL means no guests, which
+// is exactly how every booking made before this column existed reads back.
+if (!bookingColumns.includes('guest_emails')) {
+  console.log('Adding guest_emails column to bookings table...');
+  db.prepare('ALTER TABLE bookings ADD COLUMN guest_emails TEXT').run();
+}
+
 /**
  * Initialize a default admin user if no users exist
  */

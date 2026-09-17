@@ -3,6 +3,10 @@ import { format, parseISO, isValid } from 'date-fns'
 import { adminFetch } from '../auth'
 import Scheduler from './Scheduler'
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+// Keep in step with MAX_GUESTS in server/services/guests.js, which enforces it.
+const MAX_GUESTS = 5
+
 function fmtDateTime(b) {
   // Prefer the precise ISO start time; fall back to the date string.
   const dt = b.time ? parseISO(b.time) : null
@@ -29,7 +33,7 @@ export default function BookingsManager() {
   const [creating, setCreating] = useState(false)
   const [meetingTypes, setMeetingTypes] = useState([])
   const [schools, setSchools] = useState([])
-  const [draft, setDraft] = useState({ meetingType: '', schoolId: '', customLocation: '', name: '', email: '', phone: '', notes: '' })
+  const [draft, setDraft] = useState({ meetingType: '', schoolId: '', customLocation: '', name: '', email: '', phone: '', notes: '', guests: [] })
 
   useEffect(() => {
     if (!creating || meetingTypes.length) return
@@ -59,10 +63,11 @@ export default function BookingsManager() {
           meetingType: draft.meetingType }
       : null
 
-  const draftReady = Boolean(draftType && draft.name.trim() && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(draft.email)
+  const guestsValid = draft.guests.every(g => !g.trim() || EMAIL_RE.test(g.trim()))
+  const draftReady = Boolean(draftType && draft.name.trim() && EMAIL_RE.test(draft.email) && guestsValid
     && (!needsLocation || (draft.schoolId && (draft.schoolId !== CUSTOM || draft.customLocation.trim()))))
 
-  const resetDraft = () => setDraft({ meetingType: '', schoolId: '', customLocation: '', name: '', email: '', phone: '', notes: '' })
+  const resetDraft = () => setDraft({ meetingType: '', schoolId: '', customLocation: '', name: '', email: '', phone: '', notes: '', guests: [] })
 
   const handleCreatePick = async (isoTime) => {
     setActionBusy(true)
@@ -78,7 +83,8 @@ export default function BookingsManager() {
         body: JSON.stringify({
           time: isoTime, meetingType: draft.meetingType,
           schoolId: needsLocation ? draft.schoolId : '', location,
-          name: draft.name.trim(), email: draft.email.trim(), phone: draft.phone.trim(), notes: draft.notes.trim()
+          name: draft.name.trim(), email: draft.email.trim(), phone: draft.phone.trim(), notes: draft.notes.trim(),
+          guests: draft.guests.map(g => g.trim()).filter(Boolean)
         })
       })
       const data = await res.json().catch(() => ({}))
@@ -191,7 +197,8 @@ export default function BookingsManager() {
     .filter(b => {
       if (!search.trim()) return true
       const q = search.toLowerCase()
-      return [b.name, b.email, b.location, b.meeting_type].some(v => (v || '').toLowerCase().includes(q))
+      return [b.name, b.email, b.location, b.meeting_type, ...(b.guestEmails || [])]
+        .some(v => (v || '').toLowerCase().includes(q))
     })
     .sort((a, b) => startOfBooking(a) - startOfBooking(b))
 
@@ -249,6 +256,11 @@ export default function BookingsManager() {
               <span data-label="Client">
                 <span className="booking-name">{b.name}</span>
                 <span className="booking-email">{b.email}</span>
+                {b.guestEmails?.length > 0 && (
+                  <span className="booking-guests" title={b.guestEmails.join(', ')}>
+                    + {b.guestEmails.length} guest{b.guestEmails.length > 1 ? 's' : ''}
+                  </span>
+                )}
               </span>
               <span data-label="Type">{b.meeting_type}</span>
               <span data-label="Location">{b.location || '—'}</span>
@@ -328,9 +340,47 @@ export default function BookingsManager() {
               <label>Notes <span className="field-hint-inline">(optional)</span></label>
               <textarea rows="2" value={draft.notes} onChange={e => setDraft(d => ({ ...d, notes: e.target.value }))} />
             </div>
+            <div className="settings-field">
+              <label>Also invite <span className="field-hint-inline">(optional)</span></label>
+              {draft.guests.map((guest, i) => {
+                const invalid = Boolean(guest.trim()) && !EMAIL_RE.test(guest.trim())
+                return (
+                  <div className="guest-row" key={i}>
+                    <input type="email" value={guest} placeholder="parent@email.com"
+                      className={invalid ? 'invalid' : undefined}
+                      aria-invalid={invalid || undefined}
+                      aria-label={`Guest email ${i + 1}`}
+                      onChange={e => setDraft(d => ({ ...d, guests: d.guests.map((g, gi) => (gi === i ? e.target.value : g)) }))} />
+                    <button type="button" className="btn btn-ghost btn-sm"
+                      aria-label={`Remove guest ${i + 1}`}
+                      onClick={() => setDraft(d => ({ ...d, guests: d.guests.filter((_, gi) => gi !== i) }))}>
+                      Remove
+                    </button>
+                  </div>
+                )
+              })}
+              {draft.guests.length < MAX_GUESTS ? (
+                <button type="button" className="btn btn-ghost btn-sm"
+                  onClick={() => setDraft(d => ({ ...d, guests: [...d.guests, ''] }))}>
+                  + Add {draft.guests.length === 0 ? 'a guest' : 'another'}
+                </button>
+              ) : (
+                <p className="field-hint">You can invite up to {MAX_GUESTS} guests.</p>
+              )}
+              <p className="field-hint">
+                Parents or guardians go on the calendar invite alongside the student, and can
+                reschedule or cancel from it.
+              </p>
+            </div>
 
             {!draftReady ? (
-              <p className="field-hint">Choose a meeting type{needsLocation ? ', a location' : ''} and enter the student&rsquo;s name and email to pick a time.</p>
+              // Without this branch an unparseable guest address silently hides
+              // the slot picker behind a message about the student's details.
+              !guestsValid ? (
+                <p className="field-hint">Check the highlighted guest email address.</p>
+              ) : (
+                <p className="field-hint">Choose a meeting type{needsLocation ? ', a location' : ''} and enter the student&rsquo;s name and email to pick a time.</p>
+              )
             ) : (
               <Scheduler params={draftParams} onPick={handleCreatePick} busy={actionBusy} admin />
             )}

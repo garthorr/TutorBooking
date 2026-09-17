@@ -34,6 +34,16 @@ Designed for a scalable tutor/admin workflow:
   - **Timezone-aware**: visitors pick/auto-detect their timezone and all slots,
     summaries, and emails are shown in it
 
+- **Guests** (up to 5 per booking)
+  - A student can invite parents or guardians while booking; the tutor can do
+    the same from the admin panel's New booking form
+  - Guests go on the Google Calendar event as attendees, so Google sends them
+    the invite and, later, any reschedule or cancellation
+  - They get no separate email from this app. The invite carries the booking's
+    manage link in its description instead, which is how a guest reschedules or
+    cancels — so set `PUBLIC_BASE_URL` if you want that to work
+  - Guests are set at booking time and cannot be edited afterwards
+
 - **Admin dashboard** (`/admin`)
   - View, search, cancel, and reschedule upcoming and past bookings
   - Cancel/reschedule push the change to Google Calendar and notify the student
@@ -41,7 +51,8 @@ Designed for a scalable tutor/admin workflow:
 - **Self-service manage links**
   - Every booking gets a private, token-scoped manage page (`/manage/:token`)
   - Students can reschedule or cancel themselves — no login required
-  - The link is included in confirmation/reschedule/reminder emails
+  - The link is included in confirmation/reschedule/reminder emails, and in the
+    calendar invite's description so invited guests can use it too
 
 - **Email notifications** (optional, via SMTP)
   - Confirmation, reschedule, and cancellation emails
@@ -263,7 +274,9 @@ Optional:
 - `SMTP_SECURE` - `true` for port 465, `false` for STARTTLS on 587 (default `false`)
 - `SMTP_USER`, `SMTP_PASS` - SMTP credentials
 - `EMAIL_FROM` - from address, e.g. `Tutoring <no-reply@example.com>` (falls back to `SMTP_USER`)
-- `PUBLIC_BASE_URL` - public site URL, used to build manage links in emails, e.g. `https://booking.example.com`
+- `PUBLIC_BASE_URL` - public site URL, used to build manage links in emails and in
+  the calendar invite's description, e.g. `https://booking.example.com`. Unset, the
+  link is left out rather than written as an unusable relative path.
 - `ADMIN_EMAIL` - where your own new-booking notifications go. Falls back to
   `EMAIL_FROM`, then `SMTP_USER`.
 
