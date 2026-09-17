@@ -333,7 +333,9 @@ export const createBooking = async (req, res) => {
     const bookingDate = startDateTime.toLocaleDateString('en-CA', { timeZone: TIMEZONE });
 
     const booking = {
-      id: Date.now().toString(),
+      // Not Date.now(): two bookings landing in the same millisecond collide on
+      // the primary key, and the loser gets a 500 instead of a booking.
+      id: crypto.randomUUID(),
       date: bookingDate,
       time: startDateTime.toISOString(),
       meetingType, location, schoolId, name, email, phone, notes,
