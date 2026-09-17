@@ -29,6 +29,7 @@ export default function Manage() {
   const [mode, setMode] = useState('view') // view | reschedule
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [businessName, setBusinessName] = useState('')
 
   const load = async () => {
     setLoading(true)
@@ -51,9 +52,19 @@ export default function Manage() {
   useEffect(() => {
     fetch('/api/config').then(r => r.ok ? r.json() : null).then(d => {
       if (d?.themeColor) applyTheme(d.themeColor)
+      if (d?.businessName) setBusinessName(d.businessName)
     }).catch(() => {})
     load()
   }, [token])
+
+  // Derived rather than set inside the two fetches above: they resolve
+  // independently, so whichever landed last would win the title. Without this
+  // the tab reads "Book a Session" — the booking page's title from index.html —
+  // while the student is looking at a session they already have.
+  useEffect(() => {
+    const base = notFound ? 'Booking not found' : 'Your Session'
+    document.title = businessName ? `${base} \u00b7 ${businessName}` : base
+  }, [notFound, businessName])
 
   const handleCancel = async () => {
     if (!confirm('Cancel this session? This cannot be undone.')) return
