@@ -46,15 +46,17 @@ export default function BookingsManager() {
   const draftParams = !draftType ? null
     : !needsLocation
       ? { schoolId: '', sessionDuration: draftType.sessionDuration || 60, availabilityBlocks: draftType.availability || {},
-          availableDates: draftType.availableDates || null, unavailableDates: draftType.unavailableDates || null }
+          availableDates: draftType.availableDates || null, unavailableDates: draftType.unavailableDates || null,
+          meetingType: draftType.id }
     : draft.schoolId === CUSTOM
-      ? { schoolId: 'custom', sessionDuration: 60,
+      ? { schoolId: 'custom', sessionDuration: 60, meetingType: draft.meetingType,
           availabilityBlocks: { 1: [{ start: '09:00', end: '17:00' }], 2: [{ start: '09:00', end: '17:00' }],
             3: [{ start: '09:00', end: '17:00' }], 4: [{ start: '09:00', end: '17:00' }], 5: [{ start: '09:00', end: '17:00' }] },
           availableDates: null, unavailableDates: null }
     : draftSchool
       ? { schoolId: draftSchool.id, sessionDuration: draftSchool.sessionDuration || 60,
-          availabilityBlocks: draftSchool.availability || {}, availableDates: null, unavailableDates: null }
+          availabilityBlocks: draftSchool.availability || {}, availableDates: null, unavailableDates: null,
+          meetingType: draft.meetingType }
       : null
 
   const draftReady = Boolean(draftType && draft.name.trim() && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(draft.email)

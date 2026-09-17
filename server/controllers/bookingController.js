@@ -59,11 +59,20 @@ async function fetchEventsForPeriod(timeMin, timeMax) {
  * Admin-initiated bookings pass bypass=true: the rule exists to stop the tutor
  * being ambushed, and the tutor booking someone in themselves is not an ambush.
  */
-function earliestBookableStart(bypass = false) {
+function earliestBookableStart(bypass = false, noticeMinutes = null) {
   const now = Date.now();
   if (bypass) return new Date(now);
-  const minutes = dbService.getSettings(ADMIN_ID)?.minimum_notice_minutes ?? 120;
+  const minutes = noticeMinutes ?? dbService.getSettings(ADMIN_ID)?.minimum_notice_minutes ?? 120;
   return new Date(now + Math.max(0, minutes) * 60 * 1000);
+}
+
+// A meeting type may override the global notice — a phone call is worth taking
+// at short notice even when a school visit is not. null means inherit.
+// Resolved from the stored type by id, never from a value the client sends.
+function noticeForMeetingType(meetingTypeId) {
+  if (!meetingTypeId) return null;
+  const mt = loadMeetingTypes().find(t => t.id === meetingTypeId);
+  return mt?.minimumNoticeMinutes ?? null;
 }
 
 /*
@@ -119,7 +128,10 @@ async function fetchBusyForPeriod(timeMin, timeMax, excludeBookingId = null) {
 
 async function handleAvailability(req, res, bypassNotice = false) {
   try {
-    const { date, schoolId, sessionDuration, availabilityBlocks, availableDates, unavailableDates } = req.body;
+    const { date, schoolId, sessionDuration, availabilityBlocks, availableDates, unavailableDates, meetingType } = req.body;
+    // The client sends only the id; the notice value is read from the stored
+    // meeting type, so it cannot be widened by a crafted request.
+    const notice = noticeForMeetingType(meetingType);
     // date is expected to be YYYY-MM-DD
     const tzDateStr = date;
 
@@ -148,7 +160,7 @@ async function handleAvailability(req, res, bypassNotice = false) {
     const timeMax = tzDate(noonUTC, 23, 59);
     const events = await fetchBusyForPeriod(timeMin, timeMax);
     const walkTime = dbService.getSettings(1)?.walk_time ?? 5;
-    const slots = getAvailableSlotsForDay(noonUTC, blocks, sessionDuration, events, schoolId, walkTime, createDriveTimeResolver(), earliestBookableStart(bypassNotice), latestBookableStart(bypassNotice));
+    const slots = getAvailableSlotsForDay(noonUTC, blocks, sessionDuration, events, schoolId, walkTime, createDriveTimeResolver(), earliestBookableStart(bypassNotice, notice), latestBookableStart(bypassNotice));
     res.json({ slots });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch availability' });
@@ -162,7 +174,8 @@ export const getAvailabilityAsAdmin = (req, res) => handleAvailability(req, res,
 
 async function handleAvailableDays(req, res, bypassNotice = false) {
   try {
-    const { year, month, schoolId, sessionDuration, availabilityBlocks, availableDates: mtAvailableDates, unavailableDates: mtUnavailableDates } = req.body;
+    const { year, month, schoolId, sessionDuration, availabilityBlocks, availableDates: mtAvailableDates, unavailableDates: mtUnavailableDates, meetingType } = req.body;
+    const notice = noticeForMeetingType(meetingType);
     let availability = availabilityBlocks;
     if (!availability) {
       const schools = loadSchools();
@@ -184,7 +197,7 @@ async function handleAvailableDays(req, res, bypassNotice = false) {
     const walkTime = dbService.getSettings(1)?.walk_time ?? 5;
     // One drive-time read for the whole month, not one per lookup.
     const getDriveTime = createDriveTimeResolver();
-    const now = earliestBookableStart(bypassNotice);
+    const now = earliestBookableStart(bypassNotice, notice);
     const latest = latestBookableStart(bypassNotice);
     const latestDateStr = latest ? latest.toLocaleDateString('en-CA', { timeZone: TIMEZONE }) : null;
     // Working out which calendar day a timed event falls on costs a timezone
@@ -256,7 +269,8 @@ function resolveBookingConfig(meetingTypeId, schoolId) {
         sessionDuration: mt.sessionDuration || 60,
         weeklyAvailability: mt.availability || {},
         availableDates: mt.availableDates || null,
-        unavailableDates: mt.unavailableDates || null
+        unavailableDates: mt.unavailableDates || null,
+        minimumNoticeMinutes: mt.minimumNoticeMinutes ?? null
       }
     };
   }
@@ -270,7 +284,10 @@ function resolveBookingConfig(meetingTypeId, schoolId) {
         sessionDuration: school.sessionDuration || 60,
         weeklyAvailability: school.availability || {},
         availableDates: null,
-        unavailableDates: null
+        unavailableDates: null,
+        // The schedule comes from the school, but the notice is a property of
+        // how you are meeting, so it still comes from the meeting type.
+        minimumNoticeMinutes: mt.minimumNoticeMinutes ?? null
       }
     };
   }
@@ -282,7 +299,8 @@ function resolveBookingConfig(meetingTypeId, schoolId) {
       sessionDuration: dbService.getSettings(ADMIN_ID)?.custom_location_duration || 60,
       weeklyAvailability: CUSTOM_LOCATION_AVAILABILITY,
       availableDates: null,
-      unavailableDates: null
+      unavailableDates: null,
+      minimumNoticeMinutes: mt.minimumNoticeMinutes ?? null
     }
   };
 }
@@ -313,7 +331,7 @@ async function isSlotAvailable(cfg, startISO, exclude = {}, bypassNotice = false
   if (exclude.eventId) events = events.filter(e => e.id !== exclude.eventId);
 
   const walkTime = dbService.getSettings(ADMIN_ID)?.walk_time ?? 5;
-  const slots = getAvailableSlotsForDay(noonUTC, blocks, cfg.sessionDuration, events, cfg.schoolId, walkTime, createDriveTimeResolver(), earliestBookableStart(bypassNotice), latestBookableStart(bypassNotice));
+  const slots = getAvailableSlotsForDay(noonUTC, blocks, cfg.sessionDuration, events, cfg.schoolId, walkTime, createDriveTimeResolver(), earliestBookableStart(bypassNotice, cfg.minimumNoticeMinutes ?? null), latestBookableStart(bypassNotice));
   return slots.some(s => new Date(s.time).getTime() === start.getTime());
 }
 
@@ -447,6 +465,7 @@ export const getBookings = (req, res) => {
 function getRescheduleConfig(booking) {
   const sessionDuration = booking.session_duration || 60;
   const mt = loadMeetingTypes().find(t => t.id === booking.meeting_type);
+  const minimumNoticeMinutes = mt?.minimumNoticeMinutes ?? null;
 
   if (mt && !mt.requiresSchool) {
     return {
@@ -454,7 +473,8 @@ function getRescheduleConfig(booking) {
       sessionDuration,
       weeklyAvailability: mt.availability || {},
       availableDates: mt.availableDates || null,
-      unavailableDates: mt.unavailableDates || null
+      unavailableDates: mt.unavailableDates || null,
+      minimumNoticeMinutes
     };
   }
 
@@ -465,7 +485,8 @@ function getRescheduleConfig(booking) {
       sessionDuration,
       weeklyAvailability: school?.availability || {},
       availableDates: null,
-      unavailableDates: null
+      unavailableDates: null,
+      minimumNoticeMinutes
     };
   }
 
@@ -475,7 +496,8 @@ function getRescheduleConfig(booking) {
     sessionDuration,
     weeklyAvailability: CUSTOM_LOCATION_AVAILABILITY,
     availableDates: null,
-    unavailableDates: null
+    unavailableDates: null,
+    minimumNoticeMinutes
   };
 }
 
@@ -488,7 +510,9 @@ function rescheduleParams(booking) {
     sessionDuration: cfg.sessionDuration,
     availabilityBlocks: cfg.weeklyAvailability,
     availableDates: cfg.availableDates,
-    unavailableDates: cfg.unavailableDates
+    unavailableDates: cfg.unavailableDates,
+    // So the slot picker applies this type's own minimum notice.
+    meetingType: booking.meeting_type
   };
 }
 

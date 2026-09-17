@@ -57,6 +57,7 @@ CREATE TABLE IF NOT EXISTS meeting_types (
   is_builtin INTEGER DEFAULT 0,
   requires_school INTEGER DEFAULT 0,
   is_secret INTEGER DEFAULT 0,
+  minimum_notice_minutes INTEGER, -- NULL = inherit the global setting
   FOREIGN KEY (user_id) REFERENCES users (id)
 );
 

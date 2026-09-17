@@ -23,7 +23,9 @@ export function getDefaultMeetingTypes(googleMeetDuration = 60) {
       availability: { ...DEFAULT_WEEKDAY_AVAILABILITY },
       isBuiltin: true,
       requiresSchool: false,
-      secret: false
+      secret: false,
+      // A quick call is worth taking at short notice.
+      minimumNoticeMinutes: 0
     },
     {
       id: 'google-meet',
@@ -36,7 +38,8 @@ export function getDefaultMeetingTypes(googleMeetDuration = 60) {
       availability: { ...DEFAULT_WEEKDAY_AVAILABILITY },
       isBuiltin: true,
       requiresSchool: false,
-      secret: false
+      secret: false,
+      minimumNoticeMinutes: null
     },
     {
       id: 'physical',
@@ -49,7 +52,8 @@ export function getDefaultMeetingTypes(googleMeetDuration = 60) {
       availability: null,
       isBuiltin: true,
       requiresSchool: true,
-      secret: false
+      secret: false,
+      minimumNoticeMinutes: null
     }
   ]
 }

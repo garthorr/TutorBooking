@@ -405,7 +405,9 @@ function App() {
         body: JSON.stringify({
           year, month, schoolId, sessionDuration, availabilityBlocks,
           availableDates: mtAvailableDates,
-          unavailableDates: mtUnavailableDates
+          unavailableDates: mtUnavailableDates,
+          // Lets the server apply this type's own minimum notice.
+          meetingType
         })
       })
       if (res.ok) {
@@ -469,7 +471,8 @@ function App() {
         body: JSON.stringify({
           date: format(date, 'yyyy-MM-dd'), schoolId, sessionDuration, availabilityBlocks: availability,
           availableDates: mtAvailableDates,
-          unavailableDates: mtUnavailableDates
+          unavailableDates: mtUnavailableDates,
+          meetingType: bookingData.meetingType
         })
       })
       if (response.ok) {
