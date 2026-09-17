@@ -22,6 +22,15 @@ const db = new Database(dbPath);
 // Enable foreign keys
 db.pragma('foreign_keys = ON');
 
+// Write-ahead logging lets readers carry on during a write, which matters here
+// because two background jobs write on a timer while visitors are reading
+// availability. Without it a writer blocks every reader for the duration.
+db.pragma('journal_mode = WAL');
+// If a write is in progress, wait rather than failing immediately with
+// SQLITE_BUSY. Contention is brief; a hard error would surface as a failed
+// booking.
+db.pragma('busy_timeout = 5000');
+
 // Initialize schema
 db.exec(schema);
 

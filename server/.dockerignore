@@ -1,5 +1,16 @@
 node_modules
 npm-debug.log
+
+# Runtime data. Without this, COPY . . bakes a developer's local database —
+# bookings, student names and emails, the admin password hash — into the image.
+data/
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+
+# Not needed to run the server.
+tests/
 .git
 .gitignore
 README.md

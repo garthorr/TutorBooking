@@ -88,15 +88,39 @@ function isLocalhostOrigin(origin) {
   }
 }
 
-app.use(cors({
-  origin(origin, callback) {
-    if (!origin) return callback(null, true);
-    if (corsOrigins.includes(origin)) return callback(null, true);
-    if (isLocalhostOrigin(origin)) return callback(null, true);
-    console.warn(`[CORS] Blocked origin: ${origin}`);
-    return callback(new Error('CORS origin not allowed'));
-  },
-  credentials: true
+// A request whose Origin matches the Host it arrived on is same-origin — the
+// browser is talking to the page's own site through the proxy. That is the
+// normal case for this app, and it must not depend on CORS_ORIGINS being set
+// correctly: getting it wrong there fails every admin write, and the app has
+// no cookie auth for CORS to be protecting in the first place (the admin token
+// travels in an Authorization header, which cross-site requests cannot set).
+function isSameOriginRequest(origin, req) {
+  const host = req.headers.host;
+  if (!host) return false;
+  try {
+    return new URL(origin).host === host;
+  } catch {
+    return false;
+  }
+}
+
+// The options-delegate form is used because it is the only one that hands the
+// request to the decision — cors() calls a plain `origin` function without it.
+app.use(cors((req, callback) => {
+  const origin = req.headers.origin;
+  const allowed = !origin
+    || corsOrigins.includes(origin)
+    || isLocalhostOrigin(origin)
+    || isSameOriginRequest(origin, req);
+
+  if (allowed) return callback(null, { origin: true, credentials: true });
+
+  console.warn(`[CORS] Blocked origin: ${origin}`);
+  const err = new Error(`Origin ${origin} is not allowed by CORS. Add it to CORS_ORIGINS.`);
+  // Without a status this surfaced as a 500, which reads like a server fault
+  // rather than the configuration problem it is.
+  err.status = 403;
+  callback(err);
 }));
 
 // CAPTCHA widgets (Cloudflare Turnstile / hCaptcha) load a script and render in
