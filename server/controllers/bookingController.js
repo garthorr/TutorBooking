@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import dbService from '../services/dbService.js';
-import { loadSchools, getDriveTimeFromStorage } from '../schoolsStorage.js';
+import { loadSchools, createDriveTimeResolver } from '../schoolsStorage.js';
 import { loadCalendarConfig } from '../calendarStorage.js';
 import { loadMeetingTypes } from '../meetingTypesStorage.js';
 import { addBooking as addBookingToDisk, loadBookings } from '../bookingsStorage.js';
@@ -125,7 +125,7 @@ export const getAvailability = async (req, res) => {
     const timeMax = tzDate(noonUTC, 23, 59);
     const events = await fetchBusyForPeriod(timeMin, timeMax);
     const walkTime = dbService.getSettings(1)?.walk_time ?? 5;
-    const slots = getAvailableSlotsForDay(noonUTC, blocks, sessionDuration, events, schoolId, walkTime, getDriveTimeFromStorage, new Date());
+    const slots = getAvailableSlotsForDay(noonUTC, blocks, sessionDuration, events, schoolId, walkTime, createDriveTimeResolver(), new Date());
     res.json({ slots });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch availability' });
@@ -154,6 +154,21 @@ export const getAvailableDays = async (req, res) => {
     const availableDates = [];
     const allEvents = await fetchBusyForPeriod(timeMin, timeMax);
     const walkTime = dbService.getSettings(1)?.walk_time ?? 5;
+    // One drive-time read for the whole month, not one per lookup.
+    const getDriveTime = createDriveTimeResolver();
+    const now = new Date();
+    // Working out which calendar day a timed event falls on costs a timezone
+    // conversion, so do it once per event and bucket by day. Re-deriving it for
+    // every day of the month made this the most expensive part of the request.
+    const timedByDay = new Map();
+    const allDayEvents = [];
+    for (const e of allEvents) {
+      if (e.start?.date) { allDayEvents.push(e); continue; }
+      if (!e.start?.dateTime) continue;
+      const key = new Date(e.start.dateTime).toLocaleDateString('en-CA', { timeZone: TIMEZONE });
+      const bucket = timedByDay.get(key);
+      if (bucket) bucket.push(e); else timedByDay.set(key, [e]);
+    }
     for (let d = 1; d <= daysInMonth; d++) {
       const dateStr = toDateStr(year, month, d);
       if (dateStr < todayStr) continue;
@@ -174,15 +189,11 @@ export const getAvailableDays = async (req, res) => {
 
       // Use noon UTC so tzDate always resolves to the correct TIMEZONE calendar day
       const date = new Date(dateStr + 'T12:00:00.000Z');
-      // Filter events for this day to improve performance, while being careful with all-day events
-      const dayEvents = allEvents.filter(e => {
-        if (e.start.date) {
-          return dateStr >= e.start.date && dateStr < e.end.date;
-        }
-        const start = new Date(e.start.dateTime);
-        return start.toLocaleDateString('en-CA', { timeZone: TIMEZONE }) === dateStr;
-      });
-      const slots = getAvailableSlotsForDay(date, blocks, sessionDuration, dayEvents, schoolId, walkTime, getDriveTimeFromStorage, new Date());
+      // Timed events come from the pre-built index; all-day events span a range
+      // so they are still checked per day, but there are few of them.
+      const dayEvents = (timedByDay.get(dateStr) || [])
+        .concat(allDayEvents.filter(e => dateStr >= e.start.date && dateStr < e.end.date));
+      const slots = getAvailableSlotsForDay(date, blocks, sessionDuration, dayEvents, schoolId, walkTime, getDriveTime, now);
       if (slots.length > 0) {
         availableDates.push(dateStr);
       }
@@ -268,7 +279,7 @@ async function isSlotAvailable(cfg, startISO, exclude = {}) {
   if (exclude.eventId) events = events.filter(e => e.id !== exclude.eventId);
 
   const walkTime = dbService.getSettings(ADMIN_ID)?.walk_time ?? 5;
-  const slots = getAvailableSlotsForDay(noonUTC, blocks, cfg.sessionDuration, events, cfg.schoolId, walkTime, getDriveTimeFromStorage, new Date());
+  const slots = getAvailableSlotsForDay(noonUTC, blocks, cfg.sessionDuration, events, cfg.schoolId, walkTime, createDriveTimeResolver(), new Date());
   return slots.some(s => new Date(s.time).getTime() === start.getTime());
 }
 

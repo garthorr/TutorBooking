@@ -95,35 +95,56 @@ export function isDateInOverrides(date, overrides) {
 // for meeting types that never incur travel buffers).
 const NO_DRIVE_TIME = () => 0;
 
-export function hasSchedulingConflict(slotStart, slotEnd, events, schoolId, walkTime, getDriveTime = NO_DRIVE_TIME) {
+/*
+ * Conflict checking runs once per candidate slot, and a day has dozens of
+ * candidate slots. Anything that depends only on the event — parsing its
+ * timestamps, resolving an all-day event's boundaries through Intl, looking up
+ * its travel buffers — is therefore resolved once here, up front, leaving the
+ * per-slot check as plain number comparisons.
+ */
+function prepareEvents(events, schoolId, walkTime, getDriveTime) {
+  const prepared = [];
   for (const event of events) {
-    let eventStart, eventEnd;
+    let startMs, endMs;
     if (event.start.date) {
-      // All-day event: start.date and end.date are YYYY-MM-DD
-      // Use noon UTC to ensure tzDate correctly identifies the calendar day in TIMEZONE
-      eventStart = tzDate(new Date(event.start.date + 'T12:00:00.000Z'), 0, 0);
-      eventEnd = tzDate(new Date(event.end.date + 'T12:00:00.000Z'), 0, 0);
+      // All-day event: start.date and end.date are YYYY-MM-DD. Noon UTC makes
+      // tzDate resolve the right calendar day in TIMEZONE.
+      startMs = tzDate(new Date(event.start.date + 'T12:00:00.000Z'), 0, 0).getTime();
+      endMs = tzDate(new Date(event.end.date + 'T12:00:00.000Z'), 0, 0).getTime();
     } else {
-      eventStart = new Date(event.start.dateTime);
-      eventEnd = new Date(event.end.dateTime);
+      startMs = new Date(event.start.dateTime).getTime();
+      endMs = new Date(event.end.dateTime).getTime();
     }
     const eventSchoolId = event.extendedProperties?.private?.schoolId;
+    // Both buffers depend only on the event's location and the slot's, and the
+    // slot's is fixed for the whole day. A zero buffer collapses the window to
+    // nothing, which is why the original `> 0` guards are not needed.
+    prepared.push({
+      startMs,
+      endMs,
+      bufferEndMs: endMs + getDriveTime(eventSchoolId, schoolId, walkTime) * 60000,
+      bufferStartMs: startMs - getDriveTime(schoolId, eventSchoolId, walkTime) * 60000
+    });
+  }
+  return prepared;
+}
 
-    if (slotStart < eventEnd && slotEnd > eventStart) return true;
-
-    const driveTimeBefore = getDriveTime(eventSchoolId, schoolId, walkTime);
-    if (driveTimeBefore > 0) {
-      const bufferEnd = new Date(eventEnd.getTime() + driveTimeBefore * 60 * 1000);
-      if (slotStart >= eventEnd && slotStart < bufferEnd) return true;
-    }
-
-    const driveTimeAfter = getDriveTime(schoolId, eventSchoolId, walkTime);
-    if (driveTimeAfter > 0) {
-      const bufferStart = new Date(eventStart.getTime() - driveTimeAfter * 60 * 1000);
-      if (slotEnd <= eventStart && slotEnd > bufferStart) return true;
-    }
+// Numeric conflict check against events already through prepareEvents().
+function conflictsWith(slotStartMs, slotEndMs, prepared) {
+  for (const e of prepared) {
+    if (slotStartMs < e.endMs && slotEndMs > e.startMs) return true;
+    if (slotStartMs >= e.endMs && slotStartMs < e.bufferEndMs) return true;
+    if (slotEndMs <= e.startMs && slotEndMs > e.bufferStartMs) return true;
   }
   return false;
+}
+
+export function hasSchedulingConflict(slotStart, slotEnd, events, schoolId, walkTime, getDriveTime = NO_DRIVE_TIME) {
+  return conflictsWith(
+    slotStart.getTime(),
+    slotEnd.getTime(),
+    prepareEvents(events, schoolId, walkTime, getDriveTime)
+  );
 }
 
 // `minStart` drops slots that begin before a given instant — pass `new Date()`
@@ -133,21 +154,21 @@ export function getAvailableSlotsForDay(date, availabilityBlocks, sessionDuratio
   const slots = [];
   const duration = sessionDuration || 60;
   const floor = minStart ? minStart.getTime() : null;
+  // Resolved once for the whole day rather than once per candidate slot.
+  const prepared = prepareEvents(events, schoolId, walkTime, getDriveTime);
+  const durationMs = duration * 60 * 1000;
+  const STEP_MS = 5 * 60 * 1000;
   for (const block of availabilityBlocks) {
     const [startH, startM] = block.start.split(':').map(Number);
     const [endH, endM] = block.end.split(':').map(Number);
-    let slotStart = tzDate(date, startH, startM);
-    const blockEnd = tzDate(date, endH, endM);
-    while (slotStart < blockEnd) {
-      const slotEnd = new Date(slotStart.getTime() + duration * 60 * 1000);
-      if (slotEnd > blockEnd) break;
-      if (floor !== null && slotStart.getTime() < floor) {
-        slotStart = new Date(slotStart.getTime() + 5 * 60 * 1000);
-        continue;
-      }
-      const isBlocked = hasSchedulingConflict(slotStart, slotEnd, events, schoolId, walkTime, getDriveTime);
-      if (!isBlocked) slots.push({ time: slotStart.toISOString(), available: true, blockName: block.name || null });
-      slotStart = new Date(slotStart.getTime() + 5 * 60 * 1000);
+    const blockEndMs = tzDate(date, endH, endM).getTime();
+    const blockName = block.name || null;
+    for (let slotStartMs = tzDate(date, startH, startM).getTime(); slotStartMs < blockEndMs; slotStartMs += STEP_MS) {
+      const slotEndMs = slotStartMs + durationMs;
+      if (slotEndMs > blockEndMs) break;
+      if (floor !== null && slotStartMs < floor) continue;
+      if (conflictsWith(slotStartMs, slotEndMs, prepared)) continue;
+      slots.push({ time: new Date(slotStartMs).toISOString(), available: true, blockName });
     }
   }
   return slots;

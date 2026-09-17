@@ -4,6 +4,7 @@ import { loadCalendarConfig } from '../calendarStorage.js';
 import { sendCancellation, sendReschedule } from './emailService.js';
 
 const TIMEZONE = process.env.TIMEZONE || 'America/Chicago';
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 /*
  * Two-way calendar sync (Google -> app).
@@ -53,6 +54,69 @@ async function fetchEvent(calendar, calendarId, eventId) {
   }
 }
 
+/*
+ * Resolve the current Google event behind each booking, as a Map of
+ * booking id -> event (or null when the event is gone).
+ *
+ * One events.list covers the window the bookings sit in, instead of one
+ * events.get per booking every five minutes — at a hundred bookings that was
+ * ~28,800 API calls a day against a quota.
+ *
+ * Absence from that list is not proof of deletion, though: an event moved
+ * outside the window is missing for the same reason a deleted one is. Anything
+ * not found is therefore confirmed with a direct get, which is the rare path,
+ * so a normal run costs one call and never mistakes a moved event for a
+ * cancelled booking.
+ */
+export async function resolveBookingEvents(calendar, calendarId, bookings) {
+  const resolved = new Map();
+  if (bookings.length === 0) return resolved;
+
+  const times = bookings.map(b => new Date(b.time).getTime()).filter(t => !isNaN(t));
+  const timeMin = new Date(Math.min(...times) - DAY_MS);
+  const timeMax = new Date(Math.max(...times) + DAY_MS);
+
+  const byId = new Map();
+  let listed = false;
+  try {
+    let pageToken;
+    do {
+      const { data } = await calendar.events.list({
+        calendarId,
+        timeMin: timeMin.toISOString(),
+        timeMax: timeMax.toISOString(),
+        singleEvents: true,
+        showDeleted: true,
+        maxResults: 2500,
+        pageToken
+      });
+      for (const e of data.items || []) if (e.id) byId.set(e.id, e);
+      pageToken = data.nextPageToken;
+    } while (pageToken);
+    listed = true;
+  } catch (error) {
+    // Fall back to per-booking gets rather than treating every booking as
+    // deleted because one list call failed.
+    console.error('[calendar-sync] events.list failed, falling back to per-booking lookups:', error.message);
+  }
+
+  for (const booking of bookings) {
+    if (listed && byId.has(booking.calendar_event_id)) {
+      resolved.set(booking.id, byId.get(booking.calendar_event_id));
+      continue;
+    }
+    // Not in the window (or no list): confirm directly before concluding it is gone.
+    try {
+      resolved.set(booking.id, await fetchEvent(calendar, calendarId, booking.calendar_event_id));
+    } catch (error) {
+      // Leave this booking unresolved so it is skipped this run and retried on
+      // the next, rather than failing the whole sync or being read as deleted.
+      console.error(`[calendar-sync] failed to fetch event for booking ${booking.id}:`, error.message);
+    }
+  }
+  return resolved;
+}
+
 // Reconcile all confirmed bookings that have a linked calendar event against
 // the current state of Google Calendar.
 export async function runCalendarSync() {
@@ -70,14 +134,17 @@ export async function runCalendarSync() {
   let cancelled = 0;
   let rescheduled = 0;
 
+  let resolved;
+  try {
+    resolved = await resolveBookingEvents(calendar, calendarId, bookings);
+  } catch (error) {
+    console.error('[calendar-sync] could not resolve calendar events:', error.message);
+    return { checked: 0, cancelled: 0, rescheduled: 0 };
+  }
+
   for (const booking of bookings) {
-    let event;
-    try {
-      event = await fetchEvent(calendar, calendarId, booking.calendar_event_id);
-    } catch (error) {
-      console.error(`[calendar-sync] failed to fetch event for booking ${booking.id}:`, error.message);
-      continue;
-    }
+    if (!resolved.has(booking.id)) continue;
+    const event = resolved.get(booking.id);
 
     const action = decideSyncAction(booking, event);
     if (action.type === 'cancel') {
