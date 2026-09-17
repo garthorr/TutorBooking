@@ -374,7 +374,7 @@ export const createBooking = async (req, res) => {
     const msUntil = new Date(booking.time).getTime() - Date.now();
     booking.reminder24hSent = msUntil <= DAY_MS;
     booking.reminder1hSent = msUntil <= HOUR_MS;
-    addBookingToDisk([], booking);
+    addBookingToDisk(booking);
     sendConfirmation(booking);
     res.status(201).json({ success: true, booking });
   } catch (error) {

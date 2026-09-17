@@ -51,10 +51,6 @@ export function deleteTokens() {
   return true;
 }
 
-export function hasTokens() {
-  return !!dbService.getTokens(ADMIN_ID);
-}
-
 export function getTokenInfo() {
   const info = {
     storage: 'sqlite',
