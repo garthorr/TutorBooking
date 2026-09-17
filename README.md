@@ -160,19 +160,29 @@ The move to **SQLite** provides a significant performance boost over the previou
 
 ## Quick start (Docker)
 
-**Local testing** - works out of the box on port 5500:
-
 ```bash
 git clone <your-repo-url>
 cd TutorBooking
 cp server/.env.example server/.env
-# edit server/.env with your values
+# Fill in ADMIN_PASSWORD_HASH, JWT_SECRET and ENCRYPTION_KEY at minimum —
+# the server refuses to start in production without the last two, and refuses
+# to seed an admin user without the first. Each .env entry says how.
 docker compose up -d --build
 ```
 
-Open:
-- Booking page: `http://localhost:5500/`
-- Admin page: `http://localhost:5500/admin`
+`docker-compose.yml` publishes **no host ports**: the client container is
+reached through Traefik on the network named in its labels (see *Production
+deployment* below). To browse it directly on a machine with no Traefik, add a
+port mapping to the `client` service:
+
+```yaml
+  client:
+    ports:
+      - "5500:80"
+```
+
+Then the booking page is at `http://localhost:5500/` and the admin page at
+`http://localhost:5500/admin`.
 
 ---
 
@@ -185,16 +195,21 @@ The application is pre-configured to run behind a **Traefik** reverse proxy.
 1. **Update docker-compose.yml**:
    Ensure the Traefik host rule matches your domain:
    ```yaml
-   - "traefik.http.routers.tutorbooking.rule=Host(`tutorbooking.oracle.tastymath.com`)"
+   - "traefik.http.routers.tutorbooking.rule=Host(`booking.example.com`)"
    ```
+
+   The labels live on the **client** service, which also proxies `/api` and
+   `/auth` through to the server. If that container is not running, Traefik has
+   no route for the host and answers every request — including the admin
+   panel's — with its own `404 page not found`.
 
 2. **Configure environment variables in `server/.env`**:
 ```bash
 # Google OAuth redirect URI
-GOOGLE_REDIRECT_URI=https://tutorbooking.oracle.tastymath.com/auth/google/callback
+GOOGLE_REDIRECT_URI=https://booking.example.com/auth/google/callback
 
 # CORS origins
-CORS_ORIGINS=https://tutorbooking.oracle.tastymath.com
+CORS_ORIGINS=https://booking.example.com
 
 # Trust proxy
 TRUST_PROXY=2
@@ -211,20 +226,36 @@ docker compose up -d --build
 
 Set these in `server/.env`:
 
-- `ADMIN_PASSWORD_HASH` - bcrypt hash for admin login password
-- `JWT_SECRET` - secret used to sign admin JWTs
-- `ENCRYPTION_KEY` - key used to encrypt stored Google OAuth tokens
+- `ADMIN_PASSWORD_HASH` - bcrypt hash for the admin login password. Production
+  refuses to seed an admin user without it, rather than falling back to a
+  password that is public in this repository. Only used when creating the user
+  on a fresh database; after that the password lives in the database and is
+  changed at `/admin`.
+- `JWT_SECRET` - signs admin session tokens. At least 16 characters and unique;
+  the server refuses to start in production otherwise. Changing it logs every
+  admin session out.
+- `ENCRYPTION_KEY` - encrypts the stored Google OAuth tokens. Same rules.
+  **Do not change it on a running deployment**: the stored tokens were
+  encrypted with the old value and become unreadable, which silently drops the
+  Google Calendar connection until you reconnect at `/admin`.
 - `GOOGLE_CLIENT_ID`
 - `GOOGLE_CLIENT_SECRET`
-- `GOOGLE_REDIRECT_URI` - e.g. `https://tutorbooking.oracle.tastymath.com/auth/google/callback`
+- `GOOGLE_REDIRECT_URI` - e.g. `https://booking.example.com/auth/google/callback`
 
 Optional:
 - `TIMEZONE` (default `America/Chicago`)
 - `GOOGLE_MAPS_API_KEY` (enables address autocomplete + drive-time matrix)
 - `PORT` (default `5000`)
 - `DATA_DIR` (defaults to /app/data in Docker)
-- `TRUST_PROXY` (set to `2` when behind Traefik)
-- `CORS_ORIGINS` (comma-separated list for production)
+- `TRUST_PROXY` - number of proxies in front of the app, counted outwards.
+  `docker-compose.yml` sets `2` (nginx + Traefik). Per-IP rate limiting depends
+  on this being exact: too high and clients can forge their own address, too low
+  and every visitor is rate limited as one. Never set it to `true`, which the
+  server rejects at startup.
+- `CORS_ORIGINS` - comma-separated extra origins allowed to call the API.
+  A single-domain deployment needs nothing here: requests whose `Origin` matches
+  the host they arrived on are same-origin and always allowed, as are localhost
+  and 127.0.0.1. Set it only when a *different* origin must call the API.
 
 **Email / reminders** (optional — all email features are disabled unless `SMTP_HOST` is set):
 - `SMTP_HOST` - SMTP server hostname
@@ -239,7 +270,7 @@ Optional:
 - `CAPTCHA_SITE_KEY` - public site key (served to the browser)
 - `CAPTCHA_SECRET_KEY` - private secret (used server-side to verify tokens)
 
-See `.env.example` for a copy-paste template of all variables.
+See `server/.env.example` for an annotated, copy-paste template of all variables.
 
 ---
 
@@ -281,13 +312,19 @@ default `admin` user — change its password immediately via `/admin`.
 
 ## Testing
 
-A small test suite (Node's built-in `node:test`, no extra dependencies) covers
-the availability/scheduling logic and the two-way sync + CAPTCHA helpers:
+A test suite (Node's built-in `node:test`, no extra dependencies) covers the
+availability and scheduling logic, the two-way calendar sync, the schools and
+database layers, and the CAPTCHA helpers:
 
 ```bash
 cd server
 npm test
 ```
+
+`tests/setup.js` runs before any test module and points `DATA_DIR` at a fresh
+temporary database, seeded with the admin user the schools, settings and
+bookings tables reference. Each test file gets its own, so the suite never
+touches `server/data` or leaks state between files.
 
 The availability and reschedule logic lives in `server/services/availability.js`
 as pure functions so it can be tested without a database or network.
@@ -312,4 +349,28 @@ Expected output:
 `🚀 Server running on http://localhost:5000`
 
 ### CORS Errors
-If you see CORS errors in the browser console, ensure `CORS_ORIGINS` in your `.env` exactly matches the URL you are using to access the site.
+Same-origin requests are allowed automatically, so this should not happen on a
+normal single-domain deployment. If a genuinely different origin needs to call
+the API, add it to `CORS_ORIGINS`. A rejected origin returns `403` and names
+itself in the error.
+
+### `Error loading tokens: unable to authenticate data`
+`ENCRYPTION_KEY` no longer matches the one the stored Google OAuth tokens were
+encrypted with. Nothing is lost — the encrypted row is intact — so either put
+the previous key back and restart, or keep the new key and reconnect Google
+Calendar at `/admin`, which overwrites the unreadable row.
+
+Until it is resolved the site keeps working, but new bookings get no calendar
+event and events already in your Google Calendar stop blocking slots. Bookings
+still block each other, because the app checks its own database as well.
+
+### Traefik returns `404 page not found`
+That 404 comes from Traefik, not the app: Express answers with HTML and nginx
+with its own page, while `404 page not found` in `text/plain` is Go's. It means
+no Traefik router matched the request.
+
+The Traefik labels are on the **client** service, so the usual cause is that the
+client container is not running — check `docker compose ps` and
+`docker logs tutor-booking-client`. A failed client build leaves the whole host
+unrouted, including the API, because `/api` and `/auth` are proxied through that
+same container.
