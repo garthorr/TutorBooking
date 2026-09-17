@@ -286,7 +286,8 @@ function App() {
   const [siteConfig, setSiteConfig] = useState({
     businessName: config.businessName,
     businessDescription: config.businessDescription,
-    customLocationDuration: config.locationOptions.customLocationSessionDuration
+    customLocationDuration: config.locationOptions.customLocationSessionDuration,
+    customLocationAvailability: config.locationOptions.customLocationAvailability
   })
 
   useEffect(() => {
@@ -316,7 +317,10 @@ function App() {
         setSiteConfig({
           businessName: data.businessName || config.businessName,
           businessDescription: data.businessDescription || config.businessDescription,
-          customLocationDuration: data.customLocationDuration || config.locationOptions.customLocationSessionDuration
+          customLocationDuration: data.customLocationDuration || config.locationOptions.customLocationSessionDuration,
+          // Served by the API so the slots offered here match the ones the
+          // server will accept; the bundled copy is only a fallback.
+          customLocationAvailability: data.customLocationAvailability || config.locationOptions.customLocationAvailability
         })
         if (data.captcha?.enabled) setCaptcha(data.captcha)
         const name = data.businessName || config.businessName
@@ -380,7 +384,7 @@ function App() {
     } else if (isCustom) {
       schoolId = 'custom'
       sessionDuration = siteConfig.customLocationDuration
-      availabilityBlocks = config.locationOptions.customLocationAvailability
+      availabilityBlocks = siteConfig.customLocationAvailability
     } else if (school) {
       schoolId = school.id
       sessionDuration = school.sessionDuration
@@ -444,7 +448,7 @@ function App() {
       sessionDuration = mt.sessionDuration
       schoolId = ''
     } else if (isCustomLocation) {
-      availability = config.locationOptions.customLocationAvailability[dayOfWeek] || []
+      availability = (siteConfig.customLocationAvailability || {})[dayOfWeek] || []
       sessionDuration = siteConfig.customLocationDuration
       schoolId = 'custom'
     } else if (selectedSchool) {
@@ -495,7 +499,7 @@ function App() {
     if (mt && !mt.requiresSchool) {
       blocks = (mt.availability || {})[dayOfWeek] || []
     } else if (isCustomLocation) {
-      blocks = (config.locationOptions.customLocationAvailability || {})[dayOfWeek] || []
+      blocks = (siteConfig.customLocationAvailability || {})[dayOfWeek] || []
     } else if (selectedSchool) {
       blocks = selectedSchool.availability[dayOfWeek] || []
     }

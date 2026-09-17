@@ -4,6 +4,7 @@ import { loadMeetingTypes, saveMeetingTypes } from '../meetingTypesStorage.js';
 import { loadCalendarConfig, saveCalendarConfig } from '../calendarStorage.js';
 import { getCaptchaConfig } from '../services/captchaService.js';
 import { normalizeAvailability } from '../services/availability.js';
+import { CUSTOM_LOCATION_AVAILABILITY } from '../customLocationConfig.js';
 
 const ADMIN_ID = 1;
 
@@ -16,6 +17,9 @@ export const getConfig = (req, res) => {
     themeColor: settings.theme_color,
     businessName: settings.business_name,
     businessDescription: settings.business_description,
+    // The booking page uses this for "Other location" slots. Serving it keeps
+    // the times offered identical to the times the server will accept.
+    customLocationAvailability: CUSTOM_LOCATION_AVAILABILITY,
     // Lets the public booking form know whether/how to render a CAPTCHA widget.
     captcha: getCaptchaConfig()
   });

@@ -3,6 +3,7 @@ import dbService from '../services/dbService.js';
 import { loadSchools, createDriveTimeResolver } from '../schoolsStorage.js';
 import { loadCalendarConfig } from '../calendarStorage.js';
 import { loadMeetingTypes } from '../meetingTypesStorage.js';
+import { CUSTOM_LOCATION_AVAILABILITY } from '../customLocationConfig.js';
 import { addBooking as addBookingToDisk, loadBookings } from '../bookingsStorage.js';
 import { sendConfirmation, sendReschedule, sendCancellation } from '../services/emailService.js';
 import { verifyCaptcha } from '../services/captchaService.js';
@@ -27,16 +28,6 @@ const CUSTOM_LOCATION_ID = '__CUSTOM__';
 // the availability endpoints, so travel buffers resolve identically whether a
 // slot is being listed or booked.
 const CUSTOM_DRIVE_TIME_ID = 'custom';
-
-// Fallback weekly availability for "Other location" bookings, which have no
-// stored per-location schedule. Mirrors the client default (Mon–Fri 9–5).
-const CUSTOM_LOCATION_AVAILABILITY = {
-  1: [{ start: '09:00', end: '17:00' }],
-  2: [{ start: '09:00', end: '17:00' }],
-  3: [{ start: '09:00', end: '17:00' }],
-  4: [{ start: '09:00', end: '17:00' }],
-  5: [{ start: '09:00', end: '17:00' }]
-};
 
 async function fetchEventsForPeriod(timeMin, timeMax) {
   const calendar = getCalendar();
