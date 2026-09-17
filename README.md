@@ -267,6 +267,44 @@ Optional:
 - `ADMIN_EMAIL` - where your own new-booking notifications go. Falls back to
   `EMAIL_FROM`, then `SMTP_USER`.
 
+**Reminders** are sent automatically to the student 24 hours and 1 hour before a
+session, once SMTP is configured. The schedule is fixed in code
+(`server/jobs/reminderJob.js`) and has no setting in the admin panel. Each
+reminder fires at most once per booking, and rescheduling a booking resets both
+so they fire again against the new time. A booking made inside one of these
+windows skips the reminder it is already past.
+
+### Using a Gmail account for SMTP
+
+A personal Gmail or Google Workspace account works as the mail server — no code
+changes needed, just these env vars:
+
+```
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=you@gmail.com
+SMTP_PASS=your16charapppassword
+EMAIL_FROM=Tutoring <you@gmail.com>
+ADMIN_EMAIL=you@gmail.com
+```
+
+`SMTP_PASS` must be an **App Password**, not your normal account password —
+Google rejects account passwords over SMTP. To create one, turn on 2-Step
+Verification for the account (App Passwords are unavailable without it), then
+visit https://myaccount.google.com/apppasswords and generate a 16-character
+password. Spaces in it are ignored.
+
+Notes:
+- `EMAIL_FROM` must use the same address as `SMTP_USER`. Gmail rewrites the From
+  header to the authenticated account, so a `no-reply@` address is replaced
+  anyway. The upside is that student replies come back to your inbox.
+- Free Gmail allows roughly 500 messages a day (2,000 on Workspace). A booking
+  costs up to 4 (confirmation, your notification, two reminders).
+- Port 465 also works: set `SMTP_PORT=465` and `SMTP_SECURE=true`.
+- App Passwords are blocked on accounts with Advanced Protection enrolled, or
+  where a Workspace admin has disabled them.
+
 **Booking rules** (set in `/admin` → Settings):
 - **Minimum booking notice** (default 2 hours) - students cannot book inside this
   window, so on an empty day the earliest slot offered is this far from now. It
