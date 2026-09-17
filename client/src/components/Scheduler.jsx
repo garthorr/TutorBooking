@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { format, getDay } from 'date-fns'
+import { adminFetch } from '../auth'
 import './scheduler.css'
 
 /*
@@ -46,8 +47,12 @@ function isDateInOverrides(date, overrides) {
   })
 }
 
-export default function Scheduler({ params, onPick, maxAdvanceDays = 90, busy = false, timezone }) {
+// `admin` switches to the authenticated availability endpoints, which show
+// times inside the minimum-notice window — the admin is allowed to book those.
+export default function Scheduler({ params, onPick, maxAdvanceDays = 90, busy = false, timezone, admin = false }) {
   const tz = timezone || detectTimezone()
+  const call = admin ? adminFetch : fetch
+  const path = p => admin ? `/api/admin${p}` : `/api${p}`
   const today = new Date()
   const [view, setView] = useState({ year: today.getFullYear(), month: today.getMonth() })
   const [availableDates, setAvailableDates] = useState(null)
@@ -62,7 +67,7 @@ export default function Scheduler({ params, onPick, maxAdvanceDays = 90, busy = 
     if (!params) return
     setLoadingDays(true)
     try {
-      const res = await fetch('/api/availability/days', {
+      const res = await call(path('/availability/days'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -94,7 +99,7 @@ export default function Scheduler({ params, onPick, maxAdvanceDays = 90, busy = 
     if (dayBlocks.length === 0) { setSlots([]); return }
     setLoadingSlots(true)
     try {
-      const res = await fetch('/api/availability', {
+      const res = await call(path('/availability'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

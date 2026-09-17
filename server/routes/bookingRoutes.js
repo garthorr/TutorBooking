@@ -1,8 +1,11 @@
 import express from 'express';
 import {
   getAvailability,
+  getAvailabilityAsAdmin,
   getAvailableDays,
+  getAvailableDaysAsAdmin,
   createBooking,
+  createBookingAsAdmin,
   getBookings,
   getBooking,
   cancelBooking,
@@ -35,6 +38,13 @@ const bookingLimiter = rateLimit({
 router.post('/availability', availabilityLimiter, getAvailability);
 router.post('/availability/days', availabilityLimiter, getAvailableDays);
 router.post('/bookings', bookingLimiter, createBooking);
+// Admin slot picker, so the panel can see and book times inside the
+// minimum-notice window.
+router.post('/admin/availability', adminAuth, getAvailabilityAsAdmin);
+router.post('/admin/availability/days', adminAuth, getAvailableDaysAsAdmin);
+
+// Admin-created bookings: no CAPTCHA, no rate limit, no minimum-notice floor.
+router.post('/bookings/admin', adminAuth, createBookingAsAdmin);
 router.get('/bookings', adminAuth, getBookings);
 router.get('/bookings/:id', adminAuth, getBooking);
 router.patch('/bookings/:id', adminAuth, rescheduleBooking);

@@ -5,7 +5,7 @@ import { loadCalendarConfig } from '../calendarStorage.js';
 import { loadMeetingTypes } from '../meetingTypesStorage.js';
 import { CUSTOM_LOCATION_AVAILABILITY } from '../customLocationConfig.js';
 import { addBooking as addBookingToDisk, loadBookings } from '../bookingsStorage.js';
-import { sendConfirmation, sendReschedule, sendCancellation } from '../services/emailService.js';
+import { sendConfirmation, sendReschedule, sendCancellation, notifyAdminOfBooking } from '../services/emailService.js';
 import { verifyCaptcha } from '../services/captchaService.js';
 import { getCalendar } from '../services/googleClient.js';
 import {
@@ -48,6 +48,24 @@ async function fetchEventsForPeriod(timeMin, timeMax) {
   return results.flat();
 }
 
+/*
+ * The earliest instant a session may start.
+ *
+ * On a day with nothing booked, this is the only thing standing between a
+ * visitor and a session starting in five minutes. It is a floor on the whole
+ * day and is independent of travel buffers, which space sessions apart from
+ * each other; a slot has to satisfy both.
+ *
+ * Admin-initiated bookings pass bypass=true: the rule exists to stop the tutor
+ * being ambushed, and the tutor booking someone in themselves is not an ambush.
+ */
+function earliestBookableStart(bypass = false) {
+  const now = Date.now();
+  if (bypass) return new Date(now);
+  const minutes = dbService.getSettings(ADMIN_ID)?.minimum_notice_minutes ?? 120;
+  return new Date(now + Math.max(0, minutes) * 60 * 1000);
+}
+
 // The app's own confirmed bookings, shaped like Google Calendar events so the
 // same conflict logic covers both.
 //
@@ -85,7 +103,7 @@ async function fetchBusyForPeriod(timeMin, timeMax, excludeBookingId = null) {
   return events.concat(bookingsAsEvents(timeMin, timeMax, excludeBookingId));
 }
 
-export const getAvailability = async (req, res) => {
+async function handleAvailability(req, res, bypassNotice = false) {
   try {
     const { date, schoolId, sessionDuration, availabilityBlocks, availableDates, unavailableDates } = req.body;
     // date is expected to be YYYY-MM-DD
@@ -116,14 +134,19 @@ export const getAvailability = async (req, res) => {
     const timeMax = tzDate(noonUTC, 23, 59);
     const events = await fetchBusyForPeriod(timeMin, timeMax);
     const walkTime = dbService.getSettings(1)?.walk_time ?? 5;
-    const slots = getAvailableSlotsForDay(noonUTC, blocks, sessionDuration, events, schoolId, walkTime, createDriveTimeResolver(), new Date());
+    const slots = getAvailableSlotsForDay(noonUTC, blocks, sessionDuration, events, schoolId, walkTime, createDriveTimeResolver(), earliestBookableStart(bypassNotice));
     res.json({ slots });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch availability' });
   }
-};
+}
 
-export const getAvailableDays = async (req, res) => {
+export const getAvailability = (req, res) => handleAvailability(req, res);
+// Admin slot picker: shows times inside the minimum-notice window, which the
+// admin is allowed to book into.
+export const getAvailabilityAsAdmin = (req, res) => handleAvailability(req, res, true);
+
+async function handleAvailableDays(req, res, bypassNotice = false) {
   try {
     const { year, month, schoolId, sessionDuration, availabilityBlocks, availableDates: mtAvailableDates, unavailableDates: mtUnavailableDates } = req.body;
     let availability = availabilityBlocks;
@@ -147,7 +170,7 @@ export const getAvailableDays = async (req, res) => {
     const walkTime = dbService.getSettings(1)?.walk_time ?? 5;
     // One drive-time read for the whole month, not one per lookup.
     const getDriveTime = createDriveTimeResolver();
-    const now = new Date();
+    const now = earliestBookableStart(bypassNotice);
     // Working out which calendar day a timed event falls on costs a timezone
     // conversion, so do it once per event and bucket by day. Re-deriving it for
     // every day of the month made this the most expensive part of the request.
@@ -193,7 +216,10 @@ export const getAvailableDays = async (req, res) => {
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch available days' });
   }
-};
+}
+
+export const getAvailableDays = (req, res) => handleAvailableDays(req, res);
+export const getAvailableDaysAsAdmin = (req, res) => handleAvailableDays(req, res, true);
 
 /* ── Server-side availability rules ────────────────────────────────── */
 
@@ -250,7 +276,7 @@ function resolveBookingConfig(meetingTypeId, schoolId) {
 // off-grid times, overridden dates, past days and double-bookings in one pass.
 // `excludeEventId` drops a booking's own calendar event so a reschedule does
 // not conflict with itself.
-async function isSlotAvailable(cfg, startISO, exclude = {}) {
+async function isSlotAvailable(cfg, startISO, exclude = {}, bypassNotice = false) {
   const start = new Date(startISO);
   if (isNaN(start.getTime())) return false;
 
@@ -270,7 +296,7 @@ async function isSlotAvailable(cfg, startISO, exclude = {}) {
   if (exclude.eventId) events = events.filter(e => e.id !== exclude.eventId);
 
   const walkTime = dbService.getSettings(ADMIN_ID)?.walk_time ?? 5;
-  const slots = getAvailableSlotsForDay(noonUTC, blocks, cfg.sessionDuration, events, cfg.schoolId, walkTime, createDriveTimeResolver(), new Date());
+  const slots = getAvailableSlotsForDay(noonUTC, blocks, cfg.sessionDuration, events, cfg.schoolId, walkTime, createDriveTimeResolver(), earliestBookableStart(bypassNotice));
   return slots.some(s => new Date(s.time).getTime() === start.getTime());
 }
 
@@ -288,16 +314,22 @@ function validateBookingInput(b) {
   return null;
 }
 
-export const createBooking = async (req, res) => {
+// Shared by the public booking form and the admin panel. `options.bypassNotice`
+// skips the minimum-notice floor, and `options.requireCaptcha` is false for the
+// admin path, which is already behind authentication.
+async function handleCreateBooking(req, res, options = {}) {
+  const { bypassNotice = false, requireCaptcha = true, createdBy = 'public' } = options;
   try {
     const { time, meetingType, location, schoolId, name, email, phone, notes, timezone, captchaToken } = req.body;
     const validationError = validateBookingInput(req.body);
     if (validationError) return res.status(400).json({ error: validationError });
 
-    // Gate the public endpoint behind CAPTCHA when configured. This is a no-op
-    // (always passes) when no CAPTCHA provider is set up.
-    const captchaOk = await verifyCaptcha(captchaToken, req.ip);
-    if (!captchaOk) return res.status(400).json({ error: 'CAPTCHA verification failed. Please try again.' });
+    if (requireCaptcha) {
+      // Gate the public endpoint behind CAPTCHA when configured. This is a
+      // no-op (always passes) when no CAPTCHA provider is set up.
+      const captchaOk = await verifyCaptcha(captchaToken, req.ip);
+      if (!captchaOk) return res.status(400).json({ error: 'CAPTCHA verification failed. Please try again.' });
+    }
 
     // Resolve the meeting type and location against stored config. This rejects
     // unknown and disabled meeting types, rejects unknown schools, and decides
@@ -312,7 +344,7 @@ export const createBooking = async (req, res) => {
     if (startDateTime.getTime() <= Date.now()) {
       return res.status(400).json({ error: 'That time is in the past. Please pick another.' });
     }
-    if (!await isSlotAvailable(config, startDateTime.toISOString())) {
+    if (!await isSlotAvailable(config, startDateTime.toISOString(), {}, bypassNotice)) {
       return res.status(409).json({ error: 'That time is no longer available. Please pick another.' });
     }
 
@@ -369,11 +401,22 @@ export const createBooking = async (req, res) => {
     booking.reminder1hSent = msUntil <= HOUR_MS;
     addBookingToDisk(booking);
     sendConfirmation(booking);
+    // Tell the tutor too — otherwise a booking is only visible in the calendar
+    // invite, and a same-day one suppresses both reminder emails.
+    notifyAdminOfBooking(booking, { createdBy });
     res.status(201).json({ success: true, booking });
   } catch (error) {
     res.status(500).json({ error: 'Failed to create booking' });
   }
-};
+}
+
+// Public booking form: CAPTCHA enforced, minimum notice applies.
+export const createBooking = (req, res) => handleCreateBooking(req, res);
+
+// Admin panel: already authenticated, and the tutor booking someone in is not
+// the ambush the notice rule exists to prevent.
+export const createBookingAsAdmin = (req, res) =>
+  handleCreateBooking(req, res, { bypassNotice: true, requireCaptcha: false, createdBy: 'admin' });
 
 export const getBookings = (req, res) => {
   res.json({ bookings: loadBookings() });
@@ -434,11 +477,11 @@ function rescheduleParams(booking) {
 
 // Validate that a requested new start time is a real, conflict-free slot for the
 // booking. Same check the initial booking runs, minus the booking's own event.
-async function isSlotAvailableForReschedule(booking, newStartISO) {
+async function isSlotAvailableForReschedule(booking, newStartISO, bypassNotice = false) {
   return isSlotAvailable(getRescheduleConfig(booking), newStartISO, {
     eventId: booking.calendar_event_id || null,
     bookingId: booking.id
-  });
+  }, bypassNotice);
 }
 
 async function deleteCalendarEvent(eventId) {
@@ -498,8 +541,8 @@ async function performCancel(booking) {
   sendCancellation(booking);
 }
 
-async function performReschedule(booking, time) {
-  const ok = await isSlotAvailableForReschedule(booking, time);
+async function performReschedule(booking, time, bypassNotice = false) {
+  const ok = await isSlotAvailableForReschedule(booking, time, bypassNotice);
   if (!ok) return { error: 'That time is no longer available. Please pick another.', code: 409 };
   await patchCalendarEvent(booking.calendar_event_id, time, booking.session_duration);
   const date = new Date(time).toLocaleDateString('en-CA', { timeZone: TIMEZONE });
@@ -534,7 +577,7 @@ export const rescheduleBooking = async (req, res) => {
     const booking = dbService.getBookingById(ADMIN_ID, req.params.id);
     if (!booking) return res.status(404).json({ error: 'Booking not found' });
     if (booking.status === 'cancelled') return res.status(400).json({ error: 'Cannot reschedule a cancelled booking' });
-    const result = await performReschedule(booking, req.body.time);
+    const result = await performReschedule(booking, req.body.time, true);
     if (result.error) return res.status(result.code || 400).json({ error: result.error });
     res.json({ success: true, booking: result.booking });
   } catch (error) {

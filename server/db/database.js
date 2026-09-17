@@ -56,6 +56,13 @@ if (!settingsColumns.includes('walk_time')) {
   db.prepare('ALTER TABLE settings ADD COLUMN walk_time INTEGER DEFAULT 5').run();
 }
 
+// Migration: minimum booking notice. Existing installs had no notice at all,
+// so they get the 2-hour default rather than keeping the old behaviour.
+if (!settingsColumns.includes('minimum_notice_minutes')) {
+  console.log('Adding minimum_notice_minutes column to settings table...');
+  db.prepare('ALTER TABLE settings ADD COLUMN minimum_notice_minutes INTEGER DEFAULT 120').run();
+}
+
 // Migration: Add available_dates and unavailable_dates to meeting_types if they don't exist
 const meetingTypesInfo = db.prepare("PRAGMA table_info(meeting_types)").all();
 const mtColumns = meetingTypesInfo.map(c => c.name);

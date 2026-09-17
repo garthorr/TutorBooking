@@ -65,6 +65,7 @@ CREATE TABLE IF NOT EXISTS settings (
   google_meet_duration INTEGER DEFAULT 60,
   custom_location_duration INTEGER DEFAULT 60,
   walk_time INTEGER DEFAULT 5,
+  minimum_notice_minutes INTEGER DEFAULT 120,
   theme_color TEXT DEFAULT '#4f46e5',
   business_name TEXT,
   business_description TEXT,

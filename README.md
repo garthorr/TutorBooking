@@ -264,6 +264,15 @@ Optional:
 - `SMTP_USER`, `SMTP_PASS` - SMTP credentials
 - `EMAIL_FROM` - from address, e.g. `Tutoring <no-reply@example.com>` (falls back to `SMTP_USER`)
 - `PUBLIC_BASE_URL` - public site URL, used to build manage links in emails, e.g. `https://booking.example.com`
+- `ADMIN_EMAIL` - where your own new-booking notifications go. Falls back to
+  `EMAIL_FROM`, then `SMTP_USER`.
+
+**Booking rules** (set in `/admin` → Settings):
+- **Minimum booking notice** (default 2 hours) - students cannot book inside this
+  window, so on an empty day the earliest slot offered is this far from now. It
+  is a floor on the whole day and is separate from travel buffers, which space
+  sessions apart from one another; a slot must satisfy both. Bookings you create
+  from the admin panel ignore it.
 
 **CAPTCHA on the public booking form** (optional — disabled unless both keys are set):
 - `CAPTCHA_PROVIDER` - `turnstile` (default) or `hcaptcha`
