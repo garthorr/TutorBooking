@@ -137,3 +137,67 @@ test('normalizeAvailability tolerates inverted/empty ranges (legacy data)', () =
   );
   assert.strictEqual(normalizeAvailability({ 1: [{ start: '09:00', end: '09:00' }] }).error, undefined);
 });
+
+/* ── Minimum notice and travel buffers are independent ───────────────────── */
+
+test('minimum notice floors the day without disturbing travel buffers', () => {
+  const day = new Date('2026-10-05T12:00:00.000Z');
+  const at = h => new Date(`2026-10-05T${String(h).padStart(2, '0')}:00:00.000Z`);
+  // An existing session at school-a, 13:00-14:00; 20 minutes to reach school-b.
+  const events = [{
+    id: 'existing',
+    start: { dateTime: at(13).toISOString() },
+    end: { dateTime: at(14).toISOString() },
+    extendedProperties: { private: { schoolId: 'school-a' } }
+  }];
+  const drive = (from, to) => (from && to && from !== to) ? 20 : 0;
+  const blocks = [{ start: '08:00', end: '18:00' }];
+  const slots = f => getAvailableSlotsForDay(day, blocks, 60, events, 'school-b', 5, drive, f)
+    .map(s => s.time.slice(11, 16));
+
+  const noNotice = slots(null);
+  const twoHours = slots(new Date(at(9).getTime() + 2 * 3600e3)); // "now" 09:00, 2h notice
+
+  // The notice floor removes everything before 11:00 and nothing after it.
+  assert.strictEqual(noNotice[0], '08:00');
+  assert.strictEqual(twoHours[0], '11:00');
+  assert.deepStrictEqual(twoHours, noNotice.filter(t => t >= '11:00'));
+
+  // Travel buffers are untouched: last slot before the session must end 20
+  // minutes early (11:40 + 60 = 12:40), and the next starts 20 minutes after.
+  assert.ok(twoHours.includes('11:40'), 'last slot that leaves travel time');
+  assert.ok(!twoHours.includes('11:45'), 'a later start would not leave travel time');
+  assert.ok(!twoHours.includes('14:00'), 'cannot start the moment the session ends');
+  assert.ok(twoHours.includes('14:20'), 'first slot after the travel buffer');
+});
+
+test('minimum notice of zero offers the whole block', () => {
+  const day = new Date('2026-10-05T12:00:00.000Z');
+  const blocks = [{ start: '09:00', end: '11:00' }];
+  const all = getAvailableSlotsForDay(day, blocks, 60, [], '', 5, () => 0, null);
+  const zero = getAvailableSlotsForDay(day, blocks, 60, [], '', 5, () => 0, new Date('2026-10-05T00:00:00.000Z'));
+  assert.deepStrictEqual(zero.map(s => s.time), all.map(s => s.time));
+});
+
+test('maxStart stops slots beyond the booking window', () => {
+  const day = new Date('2026-10-05T12:00:00.000Z');
+  const blocks = [{ start: '09:00', end: '17:00' }];
+  const all = getAvailableSlotsForDay(day, blocks, 60, [], '', 5, () => 0);
+  // A ceiling mid-block keeps the earlier starts and drops the later ones.
+  const ceiling = new Date('2026-10-05T11:00:00.000Z');
+  const bounded = getAvailableSlotsForDay(day, blocks, 60, [], '', 5, () => 0, null, ceiling);
+  assert.ok(bounded.length > 0 && bounded.length < all.length, 'some slots kept, some dropped');
+  assert.strictEqual(bounded[bounded.length - 1].time, '2026-10-05T11:00:00.000Z', 'last slot is exactly at the ceiling');
+  assert.ok(bounded.every(s => new Date(s.time) <= ceiling), 'nothing past the ceiling');
+  assert.deepStrictEqual(bounded.map(s => s.time), all.filter(s => new Date(s.time) <= ceiling).map(s => s.time));
+});
+
+test('minStart and maxStart bound the day from both ends', () => {
+  const day = new Date('2026-10-05T12:00:00.000Z');
+  const blocks = [{ start: '09:00', end: '17:00' }];
+  const from = new Date('2026-10-05T10:00:00.000Z');
+  const to = new Date('2026-10-05T12:00:00.000Z');
+  const slots = getAvailableSlotsForDay(day, blocks, 60, [], '', 5, () => 0, from, to);
+  assert.strictEqual(slots[0].time, '2026-10-05T10:00:00.000Z');
+  assert.strictEqual(slots[slots.length - 1].time, '2026-10-05T12:00:00.000Z');
+});

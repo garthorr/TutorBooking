@@ -147,13 +147,16 @@ export function hasSchedulingConflict(slotStart, slotEnd, events, schoolId, walk
   );
 }
 
-// `minStart` drops slots that begin before a given instant — pass `new Date()`
-// so today's already-elapsed times are not offered. Left optional (and off by
-// default) so the function stays a pure, fixed-date-testable helper.
-export function getAvailableSlotsForDay(date, availabilityBlocks, sessionDuration, events, schoolId, walkTime, getDriveTime = NO_DRIVE_TIME, minStart = null) {
+// `minStart` and `maxStart` bound which slots are offered: the first drops
+// times that have already passed or fall inside the minimum-notice window, the
+// second drops times further ahead than bookings are accepted. Both are
+// optional and off by default, so the function stays a pure, fixed-date-
+// testable helper.
+export function getAvailableSlotsForDay(date, availabilityBlocks, sessionDuration, events, schoolId, walkTime, getDriveTime = NO_DRIVE_TIME, minStart = null, maxStart = null) {
   const slots = [];
   const duration = sessionDuration || 60;
   const floor = minStart ? minStart.getTime() : null;
+  const ceiling = maxStart ? maxStart.getTime() : null;
   // Resolved once for the whole day rather than once per candidate slot.
   const prepared = prepareEvents(events, schoolId, walkTime, getDriveTime);
   const durationMs = duration * 60 * 1000;
@@ -167,6 +170,7 @@ export function getAvailableSlotsForDay(date, availabilityBlocks, sessionDuratio
       const slotEndMs = slotStartMs + durationMs;
       if (slotEndMs > blockEndMs) break;
       if (floor !== null && slotStartMs < floor) continue;
+      if (ceiling !== null && slotStartMs > ceiling) break;
       if (conflictsWith(slotStartMs, slotEndMs, prepared)) continue;
       slots.push({ time: new Date(slotStartMs).toISOString(), available: true, blockName });
     }

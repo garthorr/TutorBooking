@@ -133,6 +133,43 @@ export async function sendCancellation(booking) {
       `If this was a mistake, you can book again any time.</p>`));
 }
 
+/*
+ * Notify the tutor that a booking was made.
+ *
+ * Goes to ADMIN_EMAIL, falling back to EMAIL_FROM then SMTP_USER, so a normal
+ * SMTP setup needs no extra configuration. Without this the only signal is the
+ * Google Calendar invite — and a same-day booking suppresses both reminder
+ * emails, so a session booked for this afternoon could arrive unannounced.
+ */
+function adminRecipient() {
+  return process.env.ADMIN_EMAIL || process.env.EMAIL_FROM || process.env.SMTP_USER || null;
+}
+
+export async function notifyAdminOfBooking(booking, { createdBy = 'public' } = {}) {
+  const to = adminRecipient();
+  if (!to) return;
+  const b = normalize(booking);
+  const soon = new Date(b.timeISO).getTime() - Date.now();
+  const imminent = soon > 0 && soon <= 4 * 60 * 60 * 1000;
+  const rows = [
+    ['When', esc(formatWhen(b.timeISO, null))],
+    ['Student', esc(b.name)],
+    ['Email', esc(b.email)],
+    ['Phone', esc(booking.phone ?? booking.phone_number ?? '')],
+    ['Length', b.sessionDuration ? `${esc(b.sessionDuration)} minutes` : null],
+    ['Location', esc(b.location)],
+    ['Notes', esc(booking.notes)],
+    ['Booked via', createdBy === 'admin' ? 'admin panel' : 'booking page']
+  ].filter(([, v]) => v);
+
+  await send(to, `${imminent ? '⚠ Soon — ' : ''}New booking: ${b.name}, ${formatWhen(b.timeISO, null)}`,
+    layout('New booking',
+      (imminent ? '<p style="color:#b3322a"><strong>This session starts within the next few hours.</strong></p>' : '') +
+      `<table style="border-collapse:collapse;width:100%">${rows.map(([k, v]) =>
+        `<tr><td style="padding:6px 12px 6px 0;color:#64748b;vertical-align:top">${k}</td><td style="padding:6px 0">${v}</td></tr>`
+      ).join('')}</table>`));
+}
+
 export async function sendReminder(booking, label) {
   const b = normalize(booking);
   await send(b.email, `Reminder: your session is ${label}`,

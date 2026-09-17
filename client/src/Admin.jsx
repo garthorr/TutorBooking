@@ -16,6 +16,26 @@ function durationLabel(d) {
   return `${Math.floor(d / 60)} hr ${d % 60} min`
 }
 
+const NOTICE_OPTIONS = [
+  { value: 0, label: 'None — bookable right up to the start time' },
+  { value: 30, label: '30 minutes' },
+  { value: 60, label: '1 hour' },
+  { value: 120, label: '2 hours' },
+  { value: 240, label: '4 hours' },
+  { value: 720, label: '12 hours' },
+  { value: 1440, label: '24 hours' },
+  { value: 2880, label: '2 days' }
+]
+
+const ADVANCE_OPTIONS = [
+  { value: 14, label: '2 weeks ahead' },
+  { value: 30, label: '1 month ahead' },
+  { value: 60, label: '2 months ahead' },
+  { value: 90, label: '3 months ahead' },
+  { value: 180, label: '6 months ahead' },
+  { value: 365, label: '1 year ahead' }
+]
+
 function Admin() {
   const [tab, setTab] = useState('bookings')
   const [status, setStatus] = useState({
@@ -43,6 +63,8 @@ function Admin() {
     businessName: '',
     businessDescription: '',
     customLocationDuration: 60,
+    minimumNoticeMinutes: 120,
+    maxAdvanceDays: 90,
     themeColor: '#4f46e5'
   })
   const [settingsSaving, setSettingsSaving] = useState(false)
@@ -63,8 +85,11 @@ function Admin() {
         businessName: d.businessName || '',
         businessDescription: d.businessDescription || '',
         customLocationDuration: d.customLocationDuration || 60,
+        minimumNoticeMinutes: d.minimumNoticeMinutes ?? 120,
+        maxAdvanceDays: d.maxAdvanceDays ?? 90,
         themeColor: color
       })
+      document.title = d.businessName ? `Booking Admin \u00b7 ${d.businessName}` : 'Booking Admin'
       const isPreset = THEME_PRESETS.some(p => p.primary.toLowerCase() === color.toLowerCase())
       if (!isPreset) setCustomColorInput(color)
       if (d.googleMapsApiKey) setMapsApiKey(d.googleMapsApiKey)
@@ -622,6 +647,50 @@ function Admin() {
                 >
                   {SESSION_DURATIONS.map(d => (
                     <option key={d} value={d}>{durationLabel(d)}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Minimum booking notice */}
+            <div className="settings-section">
+              <h2>Minimum Booking Notice</h2>
+              <p className="field-hint">
+                How much warning you need before a session starts. Students cannot book
+                inside this window — on a day with nothing scheduled, the earliest slot
+                offered is this far from now. It does not affect the travel-time gaps
+                between sessions, which still apply on top. Bookings you make yourself
+                from this panel ignore it.
+              </p>
+              <div className="settings-field settings-field-inline">
+                <label>Notice required</label>
+                <select
+                  value={settingsForm.minimumNoticeMinutes}
+                  onChange={e => setSettingsForm(f => ({ ...f, minimumNoticeMinutes: Number(e.target.value) }))}
+                >
+                  {NOTICE_OPTIONS.map(o => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* How far ahead bookings are accepted */}
+            <div className="settings-section">
+              <h2>Booking Window</h2>
+              <p className="field-hint">
+                How far ahead students can book. The calendar stops here and the API
+                refuses anything beyond it. Bookings you create from this panel are not
+                limited.
+              </p>
+              <div className="settings-field settings-field-inline">
+                <label>Accept bookings up to</label>
+                <select
+                  value={settingsForm.maxAdvanceDays}
+                  onChange={e => setSettingsForm(f => ({ ...f, maxAdvanceDays: Number(e.target.value) }))}
+                >
+                  {ADVANCE_OPTIONS.map(o => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
                   ))}
                 </select>
               </div>
