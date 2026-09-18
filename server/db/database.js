@@ -88,6 +88,13 @@ if (!settingsColumns.includes('reminder_second_minutes')) {
   db.prepare('ALTER TABLE settings ADD COLUMN reminder_second_minutes INTEGER DEFAULT 60').run();
 }
 
+// Migration: the SMS reminder channel. Off by default — an upgrade must never
+// start texting people, so the tutor switches it on deliberately in /admin.
+if (!settingsColumns.includes('sms_reminders_enabled')) {
+  console.log('Adding sms_reminders_enabled column to settings table...');
+  db.prepare('ALTER TABLE settings ADD COLUMN sms_reminders_enabled INTEGER DEFAULT 0').run();
+}
+
 // Migration: Add available_dates and unavailable_dates to meeting_types if they don't exist
 const meetingTypesInfo = db.prepare("PRAGMA table_info(meeting_types)").all();
 const mtColumns = meetingTypesInfo.map(c => c.name);
@@ -161,6 +168,19 @@ if (!reminderColumns.includes('reminder_second_sent')) {
 if (!bookingColumns.includes('client_timezone')) {
   console.log('Adding client_timezone column to bookings table...');
   db.prepare('ALTER TABLE bookings ADD COLUMN client_timezone TEXT').run();
+}
+
+// Migration: SMS reminders. Both default to 0, so every existing booking reads
+// back correctly without a backfill — no prior booking has consent recorded, and
+// none has had a text attempted.
+if (!bookingColumns.includes('sms_consent')) {
+  console.log('Adding sms_consent column to bookings table...');
+  db.prepare('ALTER TABLE bookings ADD COLUMN sms_consent INTEGER DEFAULT 0').run();
+}
+
+if (!bookingColumns.includes('sms_second_sent')) {
+  console.log('Adding sms_second_sent column to bookings table...');
+  db.prepare('ALTER TABLE bookings ADD COLUMN sms_second_sent INTEGER DEFAULT 0').run();
 }
 
 // Migration: guests invited alongside the student. NULL means no guests, which

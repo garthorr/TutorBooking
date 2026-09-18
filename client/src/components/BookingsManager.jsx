@@ -20,7 +20,7 @@ function startOfBooking(b) {
   return b.date ? new Date(b.date).getTime() : 0
 }
 
-export default function BookingsManager() {
+export default function BookingsManager({ smsEnabled = false }) {
   const [bookings, setBookings] = useState([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('upcoming') // upcoming | past | all
@@ -33,7 +33,7 @@ export default function BookingsManager() {
   const [creating, setCreating] = useState(false)
   const [meetingTypes, setMeetingTypes] = useState([])
   const [schools, setSchools] = useState([])
-  const [draft, setDraft] = useState({ meetingType: '', schoolId: '', customLocation: '', name: '', email: '', phone: '', notes: '', guests: [] })
+  const [draft, setDraft] = useState({ meetingType: '', schoolId: '', customLocation: '', name: '', email: '', phone: '', smsConsent: false, notes: '', guests: [] })
 
   useEffect(() => {
     if (!creating || meetingTypes.length) return
@@ -67,7 +67,7 @@ export default function BookingsManager() {
   const draftReady = Boolean(draftType && draft.name.trim() && EMAIL_RE.test(draft.email) && guestsValid
     && (!needsLocation || (draft.schoolId && (draft.schoolId !== CUSTOM || draft.customLocation.trim()))))
 
-  const resetDraft = () => setDraft({ meetingType: '', schoolId: '', customLocation: '', name: '', email: '', phone: '', notes: '', guests: [] })
+  const resetDraft = () => setDraft({ meetingType: '', schoolId: '', customLocation: '', name: '', email: '', phone: '', smsConsent: false, notes: '', guests: [] })
 
   const handleCreatePick = async (isoTime) => {
     setActionBusy(true)
@@ -84,6 +84,7 @@ export default function BookingsManager() {
           time: isoTime, meetingType: draft.meetingType,
           schoolId: needsLocation ? draft.schoolId : '', location,
           name: draft.name.trim(), email: draft.email.trim(), phone: draft.phone.trim(), notes: draft.notes.trim(),
+          smsConsent: draft.smsConsent,
           guests: draft.guests.map(g => g.trim()).filter(Boolean)
         })
       })
@@ -336,6 +337,19 @@ export default function BookingsManager() {
               <label>Phone <span className="field-hint-inline">(optional)</span></label>
               <input type="tel" value={draft.phone} onChange={e => setDraft(d => ({ ...d, phone: e.target.value }))} />
             </div>
+            {smsEnabled && (
+              <div className="settings-field">
+                <label className="settings-toggle">
+                  <input
+                    type="checkbox"
+                    checked={draft.smsConsent}
+                    onChange={e => setDraft(d => ({ ...d, smsConsent: e.target.checked }))}
+                  />
+                  <span>Student agreed to a text reminder</span>
+                </label>
+                <span className="field-hint-inline">Needs a US phone number above.</span>
+              </div>
+            )}
             <div className="settings-field">
               <label>Notes <span className="field-hint-inline">(optional)</span></label>
               <textarea rows="2" value={draft.notes} onChange={e => setDraft(d => ({ ...d, notes: e.target.value }))} />

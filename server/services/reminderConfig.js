@@ -1,4 +1,5 @@
 import dbService from './dbService.js';
+import { isSmsEnabled } from './smsService.js';
 
 const ADMIN_ID = 1;
 const DAY_MINUTES = 24 * 60;
@@ -53,6 +54,10 @@ export function loadReminderConfig() {
     enabled: settings.reminders_enabled === null || settings.reminders_enabled === undefined
       ? DEFAULT_REMINDERS.enabled
       : Boolean(settings.reminders_enabled),
+    // "Texts should go out": the tutor switched them on AND Twilio is actually
+    // configured. One flag rather than two so the sending logic has a single
+    // thing to check.
+    smsEnabled: Boolean(settings.sms_reminders_enabled) && isSmsEnabled(),
     ...normalizeLeads(
       clampLead(settings.reminder_first_minutes, DEFAULT_REMINDERS.firstMinutes),
       clampLead(settings.reminder_second_minutes, DEFAULT_REMINDERS.secondMinutes)
