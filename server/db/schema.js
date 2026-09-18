@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS bookings (
   email TEXT NOT NULL,
   phone TEXT,
   notes TEXT,
+  guest_emails TEXT, -- JSON string array of extra attendee emails
   session_duration INTEGER NOT NULL,
   calendar_event_id TEXT,
   meet_link TEXT,
