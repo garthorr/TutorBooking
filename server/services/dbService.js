@@ -25,7 +25,10 @@ class DBService {
         max_advance_days = ?,
         theme_color = ?,
         business_name = ?,
-        business_description = ?
+        business_description = ?,
+        reminders_enabled = ?,
+        reminder_first_minutes = ?,
+        reminder_second_minutes = ?
       WHERE user_id = ?
     `).run(
       settings.googleMeetDuration,
@@ -36,6 +39,9 @@ class DBService {
       settings.themeColor,
       settings.businessName,
       settings.businessDescription,
+      settings.remindersEnabled ? 1 : 0,
+      settings.reminderFirstMinutes,
+      settings.reminderSecondMinutes,
       userId
     );
   }
@@ -59,7 +65,7 @@ class DBService {
       INSERT INTO bookings (
         id, user_id, date, time, meeting_type, location, school_id,
         name, email, phone, notes, session_duration, calendar_event_id,
-        meet_link, status, manage_token, reminder_24h_sent, reminder_1h_sent,
+        meet_link, status, manage_token, reminder_first_sent, reminder_second_sent,
         client_timezone, created_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
@@ -69,7 +75,7 @@ class DBService {
       b.schoolId && b.schoolId !== '__CUSTOM__' ? b.schoolId : null,
       b.name, b.email, b.phone ?? null, b.notes ?? null, b.sessionDuration || 60,
       b.calendarEventId ?? null, b.meetLink ?? null, b.status || 'confirmed', b.manageToken || null,
-      b.reminder24hSent ? 1 : 0, b.reminder1hSent ? 1 : 0,
+      b.reminderFirstSent ? 1 : 0, b.reminderSecondSent ? 1 : 0,
       b.timezone || null,
       b.createdAt || new Date().toISOString()
     );
@@ -81,7 +87,7 @@ class DBService {
 
   updateBookingSchedule(userId, id, { date, time }) {
     // Reset reminder flags so reminders fire again for the new time.
-    return db.prepare('UPDATE bookings SET date = ?, time = ?, reminder_24h_sent = 0, reminder_1h_sent = 0 WHERE user_id = ? AND id = ?')
+    return db.prepare('UPDATE bookings SET date = ?, time = ?, reminder_first_sent = 0, reminder_second_sent = 0 WHERE user_id = ? AND id = ?')
       .run(date, time, userId, id);
   }
 
@@ -99,7 +105,7 @@ class DBService {
   }
 
   markReminderSent(id, which) {
-    const column = which === '1h' ? 'reminder_1h_sent' : 'reminder_24h_sent';
+    const column = which === 'second' ? 'reminder_second_sent' : 'reminder_first_sent';
     return db.prepare(`UPDATE bookings SET ${column} = 1 WHERE id = ?`).run(id);
   }
 

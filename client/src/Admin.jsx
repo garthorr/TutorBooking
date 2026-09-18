@@ -36,6 +36,21 @@ const ADVANCE_OPTIONS = [
   { value: 365, label: '1 year ahead' }
 ]
 
+// Lead times for the two reminder emails, in minutes before the session.
+// 0 switches that reminder off, so one reminder is the other one set to 0.
+const REMINDER_OPTIONS = [
+  { value: 0, label: 'Off — do not send this one' },
+  { value: 15, label: '15 minutes before' },
+  { value: 30, label: '30 minutes before' },
+  { value: 60, label: '1 hour before' },
+  { value: 120, label: '2 hours before' },
+  { value: 240, label: '4 hours before' },
+  { value: 720, label: '12 hours before' },
+  { value: 1440, label: '1 day before' },
+  { value: 2880, label: '2 days before' },
+  { value: 10080, label: '1 week before' }
+]
+
 function Admin() {
   const [tab, setTab] = useState('bookings')
   const [status, setStatus] = useState({
@@ -65,9 +80,15 @@ function Admin() {
     customLocationDuration: 60,
     minimumNoticeMinutes: 120,
     maxAdvanceDays: 90,
-    themeColor: '#4f46e5'
+    themeColor: '#4f46e5',
+    remindersEnabled: true,
+    reminderFirstMinutes: 1440,
+    reminderSecondMinutes: 60
   })
   const [settingsSaving, setSettingsSaving] = useState(false)
+  // Whether the server has SMTP configured. Assume it does until told
+  // otherwise, so the warning does not flash on every load.
+  const [emailEnabled, setEmailEnabled] = useState(true)
   const [customColorInput, setCustomColorInput] = useState('')
   // Change password
   const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' })
@@ -87,8 +108,12 @@ function Admin() {
         customLocationDuration: d.customLocationDuration || 60,
         minimumNoticeMinutes: d.minimumNoticeMinutes ?? 120,
         maxAdvanceDays: d.maxAdvanceDays ?? 90,
-        themeColor: color
+        themeColor: color,
+        remindersEnabled: d.remindersEnabled ?? true,
+        reminderFirstMinutes: d.reminderFirstMinutes ?? 1440,
+        reminderSecondMinutes: d.reminderSecondMinutes ?? 60
       })
+      setEmailEnabled(d.emailEnabled !== false)
       document.title = d.businessName ? `Booking Admin \u00b7 ${d.businessName}` : 'Booking Admin'
       const isPreset = THEME_PRESETS.some(p => p.primary.toLowerCase() === color.toLowerCase())
       if (!isPreset) setCustomColorInput(color)
@@ -190,12 +215,33 @@ function Admin() {
       const data = await res.json()
       if (data.success) {
         applyTheme(settingsForm.themeColor)
+        // The server puts the earlier reminder first and drops a duplicated
+        // lead time, so show what was stored rather than what was picked.
+        if (data.settings) {
+          setSettingsForm(f => ({
+            ...f,
+            remindersEnabled: data.settings.remindersEnabled,
+            reminderFirstMinutes: data.settings.reminderFirstMinutes,
+            reminderSecondMinutes: data.settings.reminderSecondMinutes
+          }))
+        }
         showMessage('Settings saved!', 'success')
       } else {
         showMessage(data.error || 'Failed to save settings', 'error')
       }
     } catch { showMessage('Error saving settings', 'error') }
     setSettingsSaving(false)
+  }
+
+  // Plain-English summary of the two lead times, so the effect of the selects
+  // is readable without working out what 1440 minutes is. Mirrors what the
+  // server stores: duplicates collapse, and the later reminder is listed second.
+  const describeReminders = () => {
+    const picked = [settingsForm.reminderFirstMinutes, settingsForm.reminderSecondMinutes]
+    const times = [...new Set(picked)].filter(m => m > 0).sort((a, b) => b - a)
+    if (times.length === 0) return 'Both reminders are off, so no reminder emails will be sent.'
+    const labels = times.map(m => REMINDER_OPTIONS.find(o => o.value === m)?.label || `${m} minutes before`)
+    return `Students will be emailed ${labels.join(' and ')}.`
   }
 
   const handleThemePresetSelect = (primary) => {
@@ -694,6 +740,60 @@ function Admin() {
                   ))}
                 </select>
               </div>
+            </div>
+
+            {/* Reminder emails */}
+            <div className="settings-section">
+              <h2>Reminder Emails</h2>
+              <p className="field-hint">
+                Automatic emails reminding the student about an upcoming session. Two can
+                be sent per booking. Rescheduling a booking resets them, so the new time
+                gets its own reminders, and a booking made inside one of these windows
+                skips the reminder it is already past.
+              </p>
+              {!emailEnabled && (
+                <p className="field-hint error">
+                  No mail server is configured on the server (<code>SMTP_HOST</code>), so
+                  nothing here will be sent yet. See the README for setup.
+                </p>
+              )}
+              <div className="settings-field">
+                <label className="settings-toggle">
+                  <input
+                    type="checkbox"
+                    checked={settingsForm.remindersEnabled}
+                    onChange={e => setSettingsForm(f => ({ ...f, remindersEnabled: e.target.checked }))}
+                  />
+                  <span>Send reminder emails</span>
+                </label>
+              </div>
+              {settingsForm.remindersEnabled && (
+                <>
+                  <div className="settings-field settings-field-inline">
+                    <label>First reminder</label>
+                    <select
+                      value={settingsForm.reminderFirstMinutes}
+                      onChange={e => setSettingsForm(f => ({ ...f, reminderFirstMinutes: Number(e.target.value) }))}
+                    >
+                      {REMINDER_OPTIONS.map(o => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="settings-field settings-field-inline">
+                    <label>Second reminder</label>
+                    <select
+                      value={settingsForm.reminderSecondMinutes}
+                      onChange={e => setSettingsForm(f => ({ ...f, reminderSecondMinutes: Number(e.target.value) }))}
+                    >
+                      {REMINDER_OPTIONS.map(o => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <p className="field-hint">{describeReminders()}</p>
+                </>
+              )}
             </div>
 
             {/* Color theme */}

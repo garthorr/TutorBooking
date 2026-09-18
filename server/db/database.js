@@ -70,6 +70,24 @@ if (!settingsColumns.includes('max_advance_days')) {
   db.prepare('ALTER TABLE settings ADD COLUMN max_advance_days INTEGER DEFAULT 90').run();
 }
 
+// Migration: the reminder schedule. Reminders used to be hard-coded at 24 hours
+// and 1 hour with no way to change or switch them off. The defaults below keep
+// existing installs sending exactly what they sent before.
+if (!settingsColumns.includes('reminders_enabled')) {
+  console.log('Adding reminders_enabled column to settings table...');
+  db.prepare('ALTER TABLE settings ADD COLUMN reminders_enabled INTEGER DEFAULT 1').run();
+}
+
+if (!settingsColumns.includes('reminder_first_minutes')) {
+  console.log('Adding reminder_first_minutes column to settings table...');
+  db.prepare('ALTER TABLE settings ADD COLUMN reminder_first_minutes INTEGER DEFAULT 1440').run();
+}
+
+if (!settingsColumns.includes('reminder_second_minutes')) {
+  console.log('Adding reminder_second_minutes column to settings table...');
+  db.prepare('ALTER TABLE settings ADD COLUMN reminder_second_minutes INTEGER DEFAULT 60').run();
+}
+
 // Migration: Add available_dates and unavailable_dates to meeting_types if they don't exist
 const meetingTypesInfo = db.prepare("PRAGMA table_info(meeting_types)").all();
 const mtColumns = meetingTypesInfo.map(c => c.name);
@@ -113,14 +131,31 @@ if (!bookingColumns.includes('manage_token')) {
   db.prepare('ALTER TABLE bookings ADD COLUMN manage_token TEXT').run();
 }
 
-if (!bookingColumns.includes('reminder_24h_sent')) {
-  console.log('Adding reminder_24h_sent column to bookings table...');
-  db.prepare('ALTER TABLE bookings ADD COLUMN reminder_24h_sent INTEGER DEFAULT 0').run();
+// Migration: per-booking "already sent" flags. Installs predating reminders have
+// neither column; installs predating configurable lead times have them under the
+// old reminder_24h_sent / reminder_1h_sent names, which stopped describing
+// anything once the times became a setting. Rename those in place so bookings
+// remember which reminders already went out, then add whatever is still missing.
+if (bookingColumns.includes('reminder_24h_sent')) {
+  console.log('Renaming bookings.reminder_24h_sent to reminder_first_sent...');
+  db.prepare('ALTER TABLE bookings RENAME COLUMN reminder_24h_sent TO reminder_first_sent').run();
 }
 
-if (!bookingColumns.includes('reminder_1h_sent')) {
-  console.log('Adding reminder_1h_sent column to bookings table...');
-  db.prepare('ALTER TABLE bookings ADD COLUMN reminder_1h_sent INTEGER DEFAULT 0').run();
+if (bookingColumns.includes('reminder_1h_sent')) {
+  console.log('Renaming bookings.reminder_1h_sent to reminder_second_sent...');
+  db.prepare('ALTER TABLE bookings RENAME COLUMN reminder_1h_sent TO reminder_second_sent').run();
+}
+
+const reminderColumns = db.prepare('PRAGMA table_info(bookings)').all().map(c => c.name);
+
+if (!reminderColumns.includes('reminder_first_sent')) {
+  console.log('Adding reminder_first_sent column to bookings table...');
+  db.prepare('ALTER TABLE bookings ADD COLUMN reminder_first_sent INTEGER DEFAULT 0').run();
+}
+
+if (!reminderColumns.includes('reminder_second_sent')) {
+  console.log('Adding reminder_second_sent column to bookings table...');
+  db.prepare('ALTER TABLE bookings ADD COLUMN reminder_second_sent INTEGER DEFAULT 0').run();
 }
 
 if (!bookingColumns.includes('client_timezone')) {

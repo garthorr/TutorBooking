@@ -34,8 +34,8 @@ CREATE TABLE IF NOT EXISTS bookings (
   meet_link TEXT,
   status TEXT DEFAULT 'confirmed',
   manage_token TEXT,
-  reminder_24h_sent INTEGER DEFAULT 0,
-  reminder_1h_sent INTEGER DEFAULT 0,
+  reminder_first_sent INTEGER DEFAULT 0,
+  reminder_second_sent INTEGER DEFAULT 0,
   client_timezone TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users (id),
@@ -71,6 +71,9 @@ CREATE TABLE IF NOT EXISTS settings (
   theme_color TEXT DEFAULT '#4f46e5',
   business_name TEXT,
   business_description TEXT,
+  reminders_enabled INTEGER DEFAULT 1,
+  reminder_first_minutes INTEGER DEFAULT 1440, -- 0 = this reminder is off
+  reminder_second_minutes INTEGER DEFAULT 60,  -- 0 = this reminder is off
   FOREIGN KEY (user_id) REFERENCES users (id)
 );
 
