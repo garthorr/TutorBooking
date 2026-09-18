@@ -5,6 +5,8 @@ import { loadCalendarConfig, saveCalendarConfig } from '../calendarStorage.js';
 import { getCaptchaConfig } from '../services/captchaService.js';
 import { normalizeAvailability } from '../services/availability.js';
 import { CUSTOM_LOCATION_AVAILABILITY } from '../customLocationConfig.js';
+import { clampLead, normalizeLeads, DEFAULT_REMINDERS } from '../services/reminderConfig.js';
+import { isEmailEnabled } from '../services/emailService.js';
 
 const ADMIN_ID = 1;
 
@@ -39,6 +41,14 @@ export const getSettings = (req, res) => {
     themeColor: settings.theme_color,
     businessName: settings.business_name,
     businessDescription: settings.business_description,
+    remindersEnabled: settings.reminders_enabled === null || settings.reminders_enabled === undefined
+      ? DEFAULT_REMINDERS.enabled
+      : Boolean(settings.reminders_enabled),
+    reminderFirstMinutes: settings.reminder_first_minutes ?? DEFAULT_REMINDERS.firstMinutes,
+    reminderSecondMinutes: settings.reminder_second_minutes ?? DEFAULT_REMINDERS.secondMinutes,
+    // Reminders need SMTP. Without it the schedule below is inert, and the
+    // panel says so rather than letting the admin configure a dead feature.
+    emailEnabled: isEmailEnabled(),
     googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY || ''
   });
 };
@@ -63,6 +73,11 @@ function clampAdvance(value, fallback) {
 
 export const updateSettings = (req, res) => {
   const current = dbService.getSettings(ADMIN_ID);
+  // Reordered so the earlier reminder is always first; see normalizeLeads.
+  const leads = normalizeLeads(
+    clampLead(req.body.reminderFirstMinutes, current.reminder_first_minutes ?? DEFAULT_REMINDERS.firstMinutes),
+    clampLead(req.body.reminderSecondMinutes, current.reminder_second_minutes ?? DEFAULT_REMINDERS.secondMinutes)
+  );
   const updated = {
     googleMeetDuration: req.body.googleMeetDuration || current.google_meet_duration,
     customLocationDuration: req.body.customLocationDuration || current.custom_location_duration,
@@ -71,7 +86,12 @@ export const updateSettings = (req, res) => {
     maxAdvanceDays: clampAdvance(req.body.maxAdvanceDays, current.max_advance_days ?? 90),
     themeColor: req.body.themeColor || current.theme_color,
     businessName: (req.body.businessName || current.business_name || '').trim(),
-    businessDescription: (req.body.businessDescription || current.business_description || '').trim()
+    businessDescription: (req.body.businessDescription || current.business_description || '').trim(),
+    remindersEnabled: req.body.remindersEnabled === undefined
+      ? Boolean(current.reminders_enabled ?? DEFAULT_REMINDERS.enabled)
+      : Boolean(req.body.remindersEnabled),
+    reminderFirstMinutes: leads.firstMinutes,
+    reminderSecondMinutes: leads.secondMinutes
   };
   dbService.updateSettings(ADMIN_ID, updated);
   res.json({ success: true, settings: updated });

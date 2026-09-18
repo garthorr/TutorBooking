@@ -680,6 +680,21 @@ gmp-placeautocomplete::part(input):focus {
   border-color: var(--sky-500);
   box-shadow: 0 0 0 3px rgba(151,202,232,0.45);
 }
+.settings-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.875rem;
+  color: var(--gray-700);
+  cursor: pointer;
+}
+.settings-toggle input[type="checkbox"] {
+  width: auto;
+  margin: 0;
+  accent-color: var(--navy-600);
+  flex-shrink: 0;
+}
+
 .settings-field-inline { flex-direction: row; align-items: center; gap: var(--space-3); }
 .settings-field-inline label { white-space: nowrap; }
 .settings-field-inline select {

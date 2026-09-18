@@ -280,12 +280,13 @@ Optional:
 - `ADMIN_EMAIL` - where your own new-booking notifications go. Falls back to
   `EMAIL_FROM`, then `SMTP_USER`.
 
-**Reminders** are sent automatically to the student 24 hours and 1 hour before a
-session, once SMTP is configured. The schedule is fixed in code
-(`server/jobs/reminderJob.js`) and has no setting in the admin panel. Each
-reminder fires at most once per booking, and rescheduling a booking resets both
-so they fire again against the new time. A booking made inside one of these
-windows skips the reminder it is already past.
+**Reminders** are sent automatically to the student before a session, once SMTP
+is configured. Two go out per booking, by default 1 day and 1 hour beforehand;
+turn them off or change either lead time in `/admin` → Settings → Reminder
+Emails. Setting one lead time to "Off" sends a single reminder. Each reminder
+fires at most once per booking, rescheduling resets both so they fire again
+against the new time, and a booking made inside one of these windows skips the
+reminder it is already past.
 
 ### Using a Gmail account for SMTP
 
@@ -319,6 +320,10 @@ Notes:
   where a Workspace admin has disabled them.
 
 **Booking rules** (set in `/admin` → Settings):
+- **Reminder emails** (default 1 day and 1 hour before) - whether reminders are
+  sent at all, and how long before a session each of the two goes out. Setting a
+  lead time to "Off" drops that reminder. Reminders need SMTP configured; the
+  panel says so when it is missing.
 - **Minimum booking notice** (default 2 hours) - students cannot book inside this
   window, so on an empty day the earliest slot offered is this far from now. It
   is a floor on the whole day and is separate from travel buffers, which space

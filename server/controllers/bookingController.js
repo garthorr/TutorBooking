@@ -9,6 +9,7 @@ import { sendConfirmation, sendReschedule, sendCancellation, notifyAdminOfBookin
 import { normalizeGuestEmails, parseGuestEmails } from '../services/guests.js';
 import { verifyCaptcha } from '../services/captchaService.js';
 import { getCalendar } from '../services/googleClient.js';
+import { loadReminderConfig } from '../services/reminderConfig.js';
 import {
   tzDate,
   toDateStr,
@@ -457,10 +458,13 @@ async function handleCreateBooking(req, res, options = {}) {
       booking.meetLink = calendarEvent.data.hangoutLink || null;
     }
     // Suppress reminders that would otherwise fire immediately for a booking
-    // made inside the reminder window.
+    // made inside the reminder window. Marking against the configured lead
+    // times, not a fixed 24h/1h, keeps a short-notice booking from triggering a
+    // "your session is in 2 days" email the moment it is made.
+    const reminders = loadReminderConfig();
     const msUntil = new Date(booking.time).getTime() - Date.now();
-    booking.reminder24hSent = msUntil <= DAY_MS;
-    booking.reminder1hSent = msUntil <= HOUR_MS;
+    booking.reminderFirstSent = msUntil <= reminders.firstMinutes * 60 * 1000;
+    booking.reminderSecondSent = msUntil <= reminders.secondMinutes * 60 * 1000;
     addBookingToDisk(booking);
     sendConfirmation(booking);
     // Tell the tutor too — otherwise a booking is only visible in the calendar
