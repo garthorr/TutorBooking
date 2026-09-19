@@ -70,15 +70,16 @@ export function loadReminderConfig() {
  * being configured. Read per call rather than at startup, so switching one on
  * in /admin takes effect without restarting the server.
  *
- * The confirmation is independent of the reminder schedule entirely — it fires
- * when a booking is made. The reminder rides the second lead time, so it is
- * only live while that lead time is.
+ * The confirmation and the change notices are independent of the reminder
+ * schedule entirely — they fire when a booking is made, moved or cancelled. The
+ * reminder rides the second lead time, so it is only live while that one is.
  */
 export function loadSmsChannels() {
   const settings = dbService.getSettings(ADMIN_ID);
   const config = loadReminderConfig();
   return {
     confirmation: isSmsEnabled() && Boolean(settings?.sms_confirmation_enabled),
+    changes: isSmsEnabled() && Boolean(settings?.sms_changes_enabled),
     reminder: config.smsEnabled && config.enabled && config.secondMinutes > 0
   };
 }

@@ -294,17 +294,23 @@ to "Off" sends a single reminder. Each reminder fires at most once per booking,
 rescheduling resets them so they fire again against the new time, and a booking
 made inside one of these windows skips the reminder it is already past.
 
-**Texts** are two separate channels, each with its own switch in `/admin` →
-Settings → Text Messages. Both start off, and neither does anything until the
-three Twilio variables above are set.
+**Texts** are three separate channels, each with its own switch in `/admin` →
+Settings → Text Messages. All start off, and none does anything until the three
+Twilio variables above are set.
 
 - **A confirmation** when a booking is made, sent once, straight away, carrying
-  the date, time and the reschedule link. Independent of the reminder schedule.
+  the date, time and the reschedule link.
+- **A change notice** when a booking is rescheduled or cancelled, however the
+  change was made — by you in the admin panel, or by the student on their own
+  manage page. A reschedule carries the new time and keeps the manage link; a
+  cancellation names the session that is off and offers the booking page.
 - **A reminder** before the session. This one has no lead time of its own — it
   uses the **second reminder's**, so changing that select moves the text with it
   and setting it to "Off" stops the text too.
 
-Both apply the same rules:
+The first two are independent of the reminder schedule entirely.
+
+All three apply the same rules:
 
 - They go only to students who **ticked the opt-in box** when they booked, which
   is what US law (TCPA) expects before an automated text. The wording of that box
@@ -321,11 +327,12 @@ Both apply the same rules:
 The reminder text has two extra protections. Immediately before sending, the
 booking is re-read and, when a Google Calendar is connected, re-checked against
 the calendar event, because a text cannot be recalled — a cancelled or moved
-session is not texted about. And a booking made *inside* the reminder window is
-marked as already reminded, so a short-notice booking gets the confirmation only
-rather than two texts seconds apart.
+session is not texted about. And a booking made or moved *inside* the reminder
+window is marked as already reminded, so it gets the confirmation or reschedule
+notice only, rather than two texts seconds apart.
 
-Note that **reschedules and cancellations are still email-only.**
+The reminder *email* does not do that second part: a booking rescheduled to
+start within the hour gets both a reschedule email and a reminder email.
 
 ### Using a Gmail account for SMTP
 

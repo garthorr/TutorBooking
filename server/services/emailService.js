@@ -52,9 +52,16 @@ function businessName() {
  * Without PUBLIC_BASE_URL this would be a bare "/manage/…" path, which is
  * useless in an email or a calendar invite, so the link is omitted instead.
  */
+// The site's own address, trimmed of a trailing slash, or null when unset.
+// Useful on its own for a "book again" link after a cancellation, where there
+// is no longer a booking to manage.
+export function publicBaseUrl() {
+  return (process.env.PUBLIC_BASE_URL || '').replace(/\/$/, '') || null;
+}
+
 export function manageUrl(token) {
   if (!token) return null;
-  const base = (process.env.PUBLIC_BASE_URL || '').replace(/\/$/, '');
+  const base = publicBaseUrl();
   if (!base) return null;
   return `${base}/manage/${token}`;
 }

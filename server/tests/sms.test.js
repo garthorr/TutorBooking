@@ -5,8 +5,11 @@ import assert from 'node:assert';
 // through it. Static imports are hoisted above this assignment, so the module
 // under test is pulled in afterwards, by hand.
 process.env.TIMEZONE = 'UTC';
-const { normalizeUsPhone, isSmsEnabled, sendSms, smsReminderBody, smsConfirmationBody, sendBookingConfirmationSms } =
-  await import('../services/smsService.js');
+const {
+  normalizeUsPhone, isSmsEnabled, sendSms,
+  smsReminderBody, smsConfirmationBody, smsRescheduleBody, smsCancellationBody,
+  sendBookingConfirmationSms, sendBookingRescheduleSms, sendBookingCancellationSms
+} = await import('../services/smsService.js');
 
 /*
  * tests/setup.js sets no Twilio vars, so isSmsEnabled() is false throughout the
@@ -230,7 +233,9 @@ test('smsConfirmationBody', async (t) => {
     try {
       for (const body of [
         smsConfirmationBody(realistic, 'Rivera Tutoring'),
-        smsReminderBody(realistic, 'in 1 hour', 'Rivera Tutoring')
+        smsReminderBody(realistic, 'in 1 hour', 'Rivera Tutoring'),
+        smsRescheduleBody(realistic, 'Rivera Tutoring'),
+        smsCancellationBody(realistic, 'Rivera Tutoring')
       ]) {
         assert.ok(body.length <= 160, `${body.length} chars would bill two segments: ${body}`);
       }
@@ -288,6 +293,99 @@ test('sendBookingConfirmationSms', async (t) => {
       const result = await withFetch(async () => { throw new Error('network down'); },
         () => sendBookingConfirmationSms(booking, 'Acme'));
       assert.strictEqual(result, false);
+    });
+  });
+});
+
+
+test('smsRescheduleBody and smsCancellationBody', async (t) => {
+  const booking = { time: '2026-06-10T15:00:00.000Z', timezone: 'UTC', manageToken: 'tok123' };
+
+  await t.test('a reschedule keeps the manage link, so it can be moved again', () => {
+    process.env.PUBLIC_BASE_URL = 'https://example.com';
+    try {
+      assert.strictEqual(
+        smsRescheduleBody(booking, 'Acme Tutoring'),
+        'Rescheduled: your Acme Tutoring session is now Wed, Jun 10 at 3:00 PM UTC. https://example.com/manage/tok123'
+      );
+    } finally {
+      delete process.env.PUBLIC_BASE_URL;
+    }
+  });
+
+  await t.test('a cancellation offers the booking page, not a dead manage link', () => {
+    process.env.PUBLIC_BASE_URL = 'https://example.com/';
+    try {
+      // Note the trailing slash on the base above: it must not double up.
+      assert.strictEqual(
+        smsCancellationBody(booking, 'Acme Tutoring'),
+        'Cancelled: your Acme Tutoring session on Wed, Jun 10 at 3:00 PM UTC. Book again: https://example.com'
+      );
+    } finally {
+      delete process.env.PUBLIC_BASE_URL;
+    }
+  });
+
+  await t.test('neither texts the word "null" without PUBLIC_BASE_URL', () => {
+    for (const body of [smsRescheduleBody(booking, 'Acme'), smsCancellationBody(booking, 'Acme')]) {
+      assert.ok(!body.includes('null'), body);
+      assert.ok(body.endsWith('UTC.'), body);
+    }
+  });
+
+  await t.test('both read a snake_case row identically', () => {
+    const row = { time: booking.time, client_timezone: 'UTC', manage_token: 'tok123' };
+    assert.strictEqual(smsRescheduleBody(row, 'Acme'), smsRescheduleBody(booking, 'Acme'));
+    assert.strictEqual(smsCancellationBody(row, 'Acme'), smsCancellationBody(booking, 'Acme'));
+  });
+});
+
+test('sendBookingRescheduleSms and sendBookingCancellationSms', async (t) => {
+  // A row as performCancel and performReschedule hand it over.
+  const row = {
+    time: '2026-06-10T15:00:00.000Z', client_timezone: 'UTC', manage_token: 'tok123',
+    phone: '(555) 234-5678', sms_consent: 1
+  };
+
+  await t.test('each sends its own wording', async () => {
+    await withTwilio(async () => {
+      for (const [send, opener] of [
+        [sendBookingRescheduleSms, 'Rescheduled:'],
+        [sendBookingCancellationSms, 'Cancelled:']
+      ]) {
+        let seen = null;
+        const ok = await withFetch(async (url, init) => {
+          seen = Object.fromEntries(new URLSearchParams(init.body.toString()));
+          return { ok: true, status: 201, json: async () => ({ sid: 'SM1' }) };
+        }, () => send(row, 'Acme Tutoring'));
+        assert.strictEqual(ok, true);
+        assert.strictEqual(seen.To, '+15552345678');
+        assert.ok(seen.Body.startsWith(opener), seen.Body);
+      }
+    });
+  });
+
+  await t.test('consent still gates both, so an unticked box is never texted', async () => {
+    await withTwilio(async () => {
+      for (const send of [sendBookingRescheduleSms, sendBookingCancellationSms]) {
+        let called = false;
+        await withFetch(() => { called = true; }, async () => {
+          assert.strictEqual(await send({ ...row, sms_consent: 0 }, 'Acme'), false);
+        });
+        assert.strictEqual(called, false);
+      }
+    });
+  });
+
+  await t.test('a Twilio failure resolves false rather than throwing', async () => {
+    // Both are called without awaiting, so a throw would surface as an
+    // unhandled rejection on an otherwise successful cancel or reschedule.
+    await withTwilio(async () => {
+      for (const send of [sendBookingRescheduleSms, sendBookingCancellationSms]) {
+        const result = await withFetch(async () => { throw new Error('network down'); },
+          () => send(row, 'Acme'));
+        assert.strictEqual(result, false);
+      }
     });
   });
 });

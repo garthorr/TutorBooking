@@ -40,7 +40,8 @@ class DBService {
         reminder_first_minutes = ?,
         reminder_second_minutes = ?,
         sms_reminders_enabled = ?,
-        sms_confirmation_enabled = ?
+        sms_confirmation_enabled = ?,
+        sms_changes_enabled = ?
       WHERE user_id = ?
     `).run(
       settings.googleMeetDuration,
@@ -56,6 +57,7 @@ class DBService {
       settings.reminderSecondMinutes,
       settings.smsRemindersEnabled ? 1 : 0,
       settings.smsConfirmationEnabled ? 1 : 0,
+      settings.smsChangesEnabled ? 1 : 0,
       userId
     );
   }

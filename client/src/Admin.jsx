@@ -85,7 +85,8 @@ function Admin() {
     reminderFirstMinutes: 1440,
     reminderSecondMinutes: 60,
     smsRemindersEnabled: false,
-    smsConfirmationEnabled: false
+    smsConfirmationEnabled: false,
+    smsChangesEnabled: false
   })
   const [settingsSaving, setSettingsSaving] = useState(false)
   // Whether the server has SMTP configured. Assume it does until told
@@ -118,7 +119,8 @@ function Admin() {
         reminderFirstMinutes: d.reminderFirstMinutes ?? 1440,
         reminderSecondMinutes: d.reminderSecondMinutes ?? 60,
         smsRemindersEnabled: d.smsRemindersEnabled ?? false,
-        smsConfirmationEnabled: d.smsConfirmationEnabled ?? false
+        smsConfirmationEnabled: d.smsConfirmationEnabled ?? false,
+        smsChangesEnabled: d.smsChangesEnabled ?? false
       })
       setEmailEnabled(d.emailEnabled !== false)
       setSmsEnabled(d.smsEnabled === true)
@@ -232,7 +234,8 @@ function Admin() {
             reminderFirstMinutes: data.settings.reminderFirstMinutes,
             reminderSecondMinutes: data.settings.reminderSecondMinutes,
             smsRemindersEnabled: data.settings.smsRemindersEnabled,
-            smsConfirmationEnabled: data.settings.smsConfirmationEnabled
+            smsConfirmationEnabled: data.settings.smsConfirmationEnabled,
+            smsChangesEnabled: data.settings.smsChangesEnabled
           }))
         }
         showMessage('Settings saved!', 'success')
@@ -853,6 +856,20 @@ function Admin() {
                   <span>Text a confirmation when a booking is made</span>
                 </label>
                 <p className="field-hint">Sent once, straight away, with the date, time and a link to reschedule.</p>
+              </div>
+              <div className="settings-field">
+                <label className="settings-toggle">
+                  <input
+                    type="checkbox"
+                    checked={settingsForm.smsChangesEnabled}
+                    onChange={e => setSettingsForm(f => ({ ...f, smsChangesEnabled: e.target.checked }))}
+                  />
+                  <span>Text when a booking is rescheduled or cancelled</span>
+                </label>
+                <p className="field-hint">
+                  Sent however the change was made — by you here, or by the student on
+                  their own manage page.
+                </p>
               </div>
               <div className="settings-field">
                 <label className="settings-toggle">

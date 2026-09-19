@@ -8,7 +8,10 @@ import { addBooking as addBookingToDisk, loadBookings } from '../bookingsStorage
 import { sendConfirmation, sendReschedule, sendCancellation, notifyAdminOfBooking, manageUrl } from '../services/emailService.js';
 import { normalizeGuestEmails, parseGuestEmails } from '../services/guests.js';
 import { verifyCaptcha } from '../services/captchaService.js';
-import { normalizeUsPhone, sendBookingConfirmationSms } from '../services/smsService.js';
+import {
+  normalizeUsPhone, sendBookingConfirmationSms,
+  sendBookingRescheduleSms, sendBookingCancellationSms
+} from '../services/smsService.js';
 import { getCalendar } from '../services/googleClient.js';
 import { loadReminderConfig, loadSmsChannels } from '../services/reminderConfig.js';
 import {
@@ -482,7 +485,7 @@ async function handleCreateBooking(req, res, options = {}) {
     // Fire-and-forget, like the email above: sendSms never throws, so Twilio
     // being down cannot turn a successful booking into a 500.
     if (loadSmsChannels().confirmation) {
-      sendBookingConfirmationSms(booking, dbService.getSettings(ADMIN_ID)?.business_name || '');
+      sendBookingConfirmationSms(booking, businessName());
     }
     // Tell the tutor too — otherwise a booking is only visible in the calendar
     // invite, and a same-day one suppresses both reminder emails.
@@ -629,10 +632,16 @@ function toPublicBooking(b) {
   };
 }
 
+// The business name every text is signed with.
+const businessName = () => dbService.getSettings(ADMIN_ID)?.business_name || '';
+
 async function performCancel(booking) {
   await deleteCalendarEvent(booking.calendar_event_id);
   dbService.updateBookingStatus(booking.user_id, booking.id, 'cancelled');
   sendCancellation(booking);
+  // Fire-and-forget beside the email. Both the admin and the student's own
+  // manage page reach this, so cancelling from either end tells the student.
+  if (loadSmsChannels().changes) sendBookingCancellationSms(booking, businessName());
 }
 
 async function performReschedule(booking, time, bypassNotice = false) {
@@ -641,8 +650,19 @@ async function performReschedule(booking, time, bypassNotice = false) {
   await patchCalendarEvent(booking.calendar_event_id, time, booking.session_duration);
   const date = new Date(time).toLocaleDateString('en-CA', { timeZone: TIMEZONE });
   dbService.updateBookingSchedule(booking.user_id, booking.id, { date, time });
+
+  // updateBookingSchedule clears sms_second_sent so the new time gets its own
+  // reminder. If the new time is already inside the reminder window, though,
+  // re-mark it: otherwise moving a session to start within the hour sends a
+  // "rescheduled" text and a "your session is in 1 hour" text back to back.
+  const reminders = loadReminderConfig();
+  if (new Date(time).getTime() - Date.now() <= reminders.secondMinutes * 60 * 1000) {
+    dbService.markReminderSent(booking.id, 'sms');
+  }
+
   const updated = dbService.getBookingById(booking.user_id, booking.id);
   sendReschedule(updated);
+  if (loadSmsChannels().changes) sendBookingRescheduleSms(updated, businessName());
   return { booking: updated };
 }
 

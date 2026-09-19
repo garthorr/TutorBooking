@@ -1112,8 +1112,17 @@ function GuestFields({ guests, addGuest, updateGuest, removeGuest }) {
  * promise the app never keeps.
  */
 function smsConsentCopy(sms) {
-  if (sms.confirmation && sms.reminder) return 'Text me about this booking \u2014 a confirmation now, and a reminder before my session.'
+  const bits = []
+  if (sms.confirmation) bits.push('a confirmation')
+  if (sms.changes) bits.push('any changes to it')
+  if (sms.reminder) bits.push('a reminder before my session')
+
+  if (bits.length > 1) {
+    const last = bits.pop()
+    return `Text me about this booking: ${bits.join(', ')} and ${last}.`
+  }
   if (sms.confirmation) return 'Text me a confirmation of this booking.'
+  if (sms.changes) return 'Text me if this booking is rescheduled or cancelled.'
   return 'Text me a reminder before my session.'
 }
 

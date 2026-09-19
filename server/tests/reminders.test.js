@@ -217,7 +217,7 @@ function saveSettings(over = {}) {
     minimumNoticeMinutes: 120, maxAdvanceDays: 90, themeColor: '#4f46e5',
     businessName: 'Test', businessDescription: '',
     remindersEnabled: true, reminderFirstMinutes: 1440, reminderSecondMinutes: 60,
-    smsRemindersEnabled: false, smsConfirmationEnabled: false,
+    smsRemindersEnabled: false, smsConfirmationEnabled: false, smsChangesEnabled: false,
     ...over
   });
 }
@@ -235,42 +235,48 @@ async function withTwilio(fn) {
   }
 }
 
+const NONE = { confirmation: false, reminder: false, changes: false };
+
 test('loadSmsChannels', async (t) => {
   await t.test('nothing is live without Twilio, whatever the toggles say', () => {
-    saveSettings({ smsRemindersEnabled: true, smsConfirmationEnabled: true });
-    assert.deepStrictEqual(loadSmsChannels(), { confirmation: false, reminder: false });
+    saveSettings({ smsRemindersEnabled: true, smsConfirmationEnabled: true, smsChangesEnabled: true });
+    assert.deepStrictEqual(loadSmsChannels(), NONE);
   });
 
-  await t.test('nothing is live with Twilio but both toggles off', async () => {
+  await t.test('nothing is live with Twilio but every toggle off', async () => {
     saveSettings();
     await withTwilio(() => {
-      assert.deepStrictEqual(loadSmsChannels(), { confirmation: false, reminder: false });
+      assert.deepStrictEqual(loadSmsChannels(), NONE);
     });
   });
 
   await t.test('each toggle switches on only its own channel', async () => {
     await withTwilio(() => {
       saveSettings({ smsConfirmationEnabled: true });
-      assert.deepStrictEqual(loadSmsChannels(), { confirmation: true, reminder: false });
+      assert.deepStrictEqual(loadSmsChannels(), { ...NONE, confirmation: true });
 
       saveSettings({ smsRemindersEnabled: true });
-      assert.deepStrictEqual(loadSmsChannels(), { confirmation: false, reminder: true });
+      assert.deepStrictEqual(loadSmsChannels(), { ...NONE, reminder: true });
 
-      saveSettings({ smsConfirmationEnabled: true, smsRemindersEnabled: true });
-      assert.deepStrictEqual(loadSmsChannels(), { confirmation: true, reminder: true });
+      saveSettings({ smsChangesEnabled: true });
+      assert.deepStrictEqual(loadSmsChannels(), { ...NONE, changes: true });
+
+      saveSettings({ smsConfirmationEnabled: true, smsRemindersEnabled: true, smsChangesEnabled: true });
+      assert.deepStrictEqual(loadSmsChannels(), { confirmation: true, reminder: true, changes: true });
     });
   });
 
-  await t.test('the reminder text depends on the schedule; the confirmation does not', async () => {
+  await t.test('only the reminder depends on the schedule', async () => {
+    const both = { smsConfirmationEnabled: true, smsChangesEnabled: true, smsRemindersEnabled: true };
     await withTwilio(() => {
-      // The text rides the second lead time, so turning that off stops it —
-      // but a confirmation is not a reminder and keeps going.
-      saveSettings({ smsConfirmationEnabled: true, smsRemindersEnabled: true, reminderSecondMinutes: 0 });
-      assert.deepStrictEqual(loadSmsChannels(), { confirmation: true, reminder: false });
+      // The reminder text rides the second lead time, so turning that off stops
+      // it — but a confirmation and a cancellation are not reminders.
+      saveSettings({ ...both, reminderSecondMinutes: 0 });
+      assert.deepStrictEqual(loadSmsChannels(), { confirmation: true, reminder: false, changes: true });
 
       // Same for the master reminder switch.
-      saveSettings({ smsConfirmationEnabled: true, smsRemindersEnabled: true, remindersEnabled: false });
-      assert.deepStrictEqual(loadSmsChannels(), { confirmation: true, reminder: false });
+      saveSettings({ ...both, remindersEnabled: false });
+      assert.deepStrictEqual(loadSmsChannels(), { confirmation: true, reminder: false, changes: true });
     });
   });
 

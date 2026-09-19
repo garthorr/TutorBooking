@@ -1,4 +1,4 @@
-import { manageUrl, formatTime, formatShortDate } from './emailService.js';
+import { manageUrl, publicBaseUrl, formatTime, formatShortDate } from './emailService.js';
 
 /*
  * Optional SMS reminders via Twilio.
@@ -112,21 +112,57 @@ export function smsConfirmationBody(booking, businessName) {
 }
 
 /*
- * Text the student that their booking is in. Returns false — silently — for
- * every normal reason not to send: no consent, no phone, or a number that is
- * not a textable US one. The caller decides whether the channel is switched on.
- *
- * Fire-and-forget from the request that creates the booking, like the
- * confirmation email: sendSms never throws, so a Twilio outage cannot turn a
- * successful booking into a 500.
+ * The reschedule text. The manage link still works — the booking is alive, just
+ * at a different time — so it stays, letting the student move it again.
  */
-export async function sendBookingConfirmationSms(booking, businessName) {
+export function smsRescheduleBody(booking, businessName) {
+  const b = smsFields(booking);
+  const who = businessName ? `${businessName} ` : '';
+  const when = `${formatShortDate(b.time, b.tz)} at ${formatTime(b.time, b.tz)}`;
+  return `Rescheduled: your ${who}session is now ${when}.${linkSuffix(b.token)}`;
+}
+
+/*
+ * The cancellation text, naming the session that is no longer happening.
+ *
+ * The manage link is pointless here — there is nothing left to manage — so this
+ * one offers the booking page instead, which is the thing a student actually
+ * wants next.
+ */
+export function smsCancellationBody(booking, businessName) {
+  const b = smsFields(booking);
+  const who = businessName ? `${businessName} ` : '';
+  const when = `${formatShortDate(b.time, b.tz)} at ${formatTime(b.time, b.tz)}`;
+  const base = publicBaseUrl();
+  return `Cancelled: your ${who}session on ${when}.${base ? ` Book again: ${base}` : ''}`;
+}
+
+/*
+ * Text a student about their own booking. Returns false — silently — for every
+ * normal reason not to send: no consent, no phone, or a number that is not a
+ * textable US one. Whether the channel is switched on at all is the caller's
+ * question, not this one's.
+ *
+ * Every caller fires this without awaiting, alongside the matching email, so
+ * nothing here may throw: a Twilio outage must not turn a successful booking,
+ * reschedule or cancellation into a 500.
+ */
+async function sendBookingSms(booking, body) {
   const b = smsFields(booking);
   if (!b.consent) return false;
   const to = normalizeUsPhone(b.phone);
   if (!to) return false;
-  return sendSms(to, smsConfirmationBody(booking, businessName));
+  return sendSms(to, body);
 }
+
+export const sendBookingConfirmationSms = (booking, businessName) =>
+  sendBookingSms(booking, smsConfirmationBody(booking, businessName));
+
+export const sendBookingRescheduleSms = (booking, businessName) =>
+  sendBookingSms(booking, smsRescheduleBody(booking, businessName));
+
+export const sendBookingCancellationSms = (booking, businessName) =>
+  sendBookingSms(booking, smsCancellationBody(booking, businessName));
 
 /*
  * Send one message. Resolves true on success and false on anything else, and

@@ -14,8 +14,8 @@ const ADMIN_ID = 1;
 // enabled is the gate for showing the checkbox at all; the two flags below it
 // decide what the checkbox promises.
 function smsChannelsForForm() {
-  const { confirmation, reminder } = loadSmsChannels();
-  return { enabled: confirmation || reminder, confirmation, reminder };
+  const { confirmation, reminder, changes } = loadSmsChannels();
+  return { enabled: confirmation || reminder || changes, confirmation, reminder, changes };
 }
 
 export const getConfig = (req, res) => {
@@ -60,6 +60,7 @@ export const getSettings = (req, res) => {
     reminderSecondMinutes: settings.reminder_second_minutes ?? DEFAULT_REMINDERS.secondMinutes,
     smsRemindersEnabled: Boolean(settings.sms_reminders_enabled),
     smsConfirmationEnabled: Boolean(settings.sms_confirmation_enabled),
+    smsChangesEnabled: Boolean(settings.sms_changes_enabled),
     // Reminders need SMTP. Without it the schedule below is inert, and the
     // panel says so rather than letting the admin configure a dead feature.
     emailEnabled: isEmailEnabled(),
@@ -114,7 +115,10 @@ export const updateSettings = (req, res) => {
       : Boolean(req.body.smsRemindersEnabled),
     smsConfirmationEnabled: req.body.smsConfirmationEnabled === undefined
       ? Boolean(current.sms_confirmation_enabled)
-      : Boolean(req.body.smsConfirmationEnabled)
+      : Boolean(req.body.smsConfirmationEnabled),
+    smsChangesEnabled: req.body.smsChangesEnabled === undefined
+      ? Boolean(current.sms_changes_enabled)
+      : Boolean(req.body.smsChangesEnabled)
   };
   dbService.updateSettings(ADMIN_ID, updated);
   res.json({ success: true, settings: updated });
