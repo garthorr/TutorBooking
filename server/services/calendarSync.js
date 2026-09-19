@@ -43,7 +43,9 @@ export function decideSyncAction(booking, event) {
 }
 
 // Fetch a single event by id; returns null if it was deleted (404/410).
-async function fetchEvent(calendar, calendarId, eventId) {
+// Exported so the reminder job can re-check one booking against Google right
+// before it sends a text, without duplicating the deleted-event handling.
+export async function fetchEvent(calendar, calendarId, eventId) {
   try {
     const res = await calendar.events.get({ calendarId, eventId });
     return res.data;

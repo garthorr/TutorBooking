@@ -3,6 +3,7 @@ import { loadSchools, saveSchools, loadDriveTimes, saveDriveTimes } from '../sch
 import { loadMeetingTypes, saveMeetingTypes } from '../meetingTypesStorage.js';
 import { loadCalendarConfig, saveCalendarConfig } from '../calendarStorage.js';
 import { getCaptchaConfig } from '../services/captchaService.js';
+import { isSmsEnabled } from '../services/smsService.js';
 import { normalizeAvailability } from '../services/availability.js';
 import { CUSTOM_LOCATION_AVAILABILITY } from '../customLocationConfig.js';
 import { clampLead, normalizeLeads, DEFAULT_REMINDERS } from '../services/reminderConfig.js';
@@ -25,7 +26,10 @@ export const getConfig = (req, res) => {
     // the times offered identical to the times the server will accept.
     customLocationAvailability: CUSTOM_LOCATION_AVAILABILITY,
     // Lets the public booking form know whether/how to render a CAPTCHA widget.
-    captcha: getCaptchaConfig()
+    captcha: getCaptchaConfig(),
+    // Whether to offer the text-reminder opt-in. Only the fact that SMS is
+    // configured is public — never the Twilio credentials themselves.
+    sms: { enabled: isSmsEnabled() }
   });
 };
 
@@ -46,9 +50,13 @@ export const getSettings = (req, res) => {
       : Boolean(settings.reminders_enabled),
     reminderFirstMinutes: settings.reminder_first_minutes ?? DEFAULT_REMINDERS.firstMinutes,
     reminderSecondMinutes: settings.reminder_second_minutes ?? DEFAULT_REMINDERS.secondMinutes,
+    smsRemindersEnabled: Boolean(settings.sms_reminders_enabled),
     // Reminders need SMTP. Without it the schedule below is inert, and the
     // panel says so rather than letting the admin configure a dead feature.
     emailEnabled: isEmailEnabled(),
+    // Same idea: texts need the Twilio env vars, and without them the SMS
+    // toggle is inert, so the panel says so there too.
+    smsEnabled: isSmsEnabled(),
     googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY || ''
   });
 };
@@ -91,7 +99,10 @@ export const updateSettings = (req, res) => {
       ? Boolean(current.reminders_enabled ?? DEFAULT_REMINDERS.enabled)
       : Boolean(req.body.remindersEnabled),
     reminderFirstMinutes: leads.firstMinutes,
-    reminderSecondMinutes: leads.secondMinutes
+    reminderSecondMinutes: leads.secondMinutes,
+    smsRemindersEnabled: req.body.smsRemindersEnabled === undefined
+      ? Boolean(current.sms_reminders_enabled)
+      : Boolean(req.body.smsRemindersEnabled)
   };
   dbService.updateSettings(ADMIN_ID, updated);
   res.json({ success: true, settings: updated });

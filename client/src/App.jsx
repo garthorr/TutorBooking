@@ -330,6 +330,7 @@ function App() {
           maxAdvanceDays: data.maxAdvanceDays || config.booking.advanceBookingDays
         })
         if (data.captcha?.enabled) setCaptcha(data.captcha)
+        if (data.sms?.enabled) setSms(data.sms)
         const name = data.businessName || config.businessName
         if (name) document.title = `Book a Session \u00b7 ${name}`
       })
@@ -346,6 +347,7 @@ function App() {
     name: '',
     email: '',
     phone: '',
+    smsConsent: false,
     notes: '',
     guests: []
   })
@@ -360,6 +362,8 @@ function App() {
   const [logoUrl, setLogoUrl] = useState(null)
   const [timezone, setTimezone] = useState(detectTimezone)
   const [captcha, setCaptcha] = useState({ enabled: false })
+  // Whether the server has Twilio configured. No Twilio, no opt-in checkbox.
+  const [sms, setSms] = useState({ enabled: false })
   const [captchaToken, setCaptchaToken] = useState('')
   const [captchaResetKey, setCaptchaResetKey] = useState(0)
   const [submitError, setSubmitError] = useState('')
@@ -624,8 +628,9 @@ function App() {
     { ...d, guests: d.guests.filter((_, i) => i !== index) }
   ))
   const handleInputChange = (e) => {
-    const { name, value } = e.target
-    setBookingData({ ...bookingData, [name]: value })
+    const { name, value, type, checked } = e.target
+    // A checkbox reports .checked; reading .value would store the string "on".
+    setBookingData({ ...bookingData, [name]: type === 'checkbox' ? checked : value })
   }
 
   // A solved CAPTCHA token can only be redeemed once, so a failed submit must
@@ -817,6 +822,7 @@ function App() {
               isSubmitting={isSubmitting}
               timezone={timezone}
               captcha={captcha}
+              sms={sms}
               onCaptchaToken={setCaptchaToken}
               captchaResetKey={captchaResetKey}
               submitError={submitError}
@@ -1103,7 +1109,7 @@ function Step3({
   bookingData, getFinalLocation, getSessionDurationDisplay,
   handleInputChange, addGuest, updateGuest, removeGuest,
   handleBack, handleSubmit, canSubmit, isSubmitting, timezone,
-  captcha, onCaptchaToken, captchaResetKey, submitError
+  captcha, sms, onCaptchaToken, captchaResetKey, submitError
 }) {
   return (
     <div className="form-section">
@@ -1131,8 +1137,20 @@ function Step3({
 
       <div className="form-group">
         <label>Phone number <span style={{ color: 'var(--gray-500)', fontWeight: 400 }}>(optional)</span></label>
-        <input type="tel" name="phone" value={bookingData.phone} onChange={handleInputChange} placeholder="(555) 123-4567" />
+        <input type="tel" name="phone" value={bookingData.phone} onChange={handleInputChange} placeholder="(555) 234-5678" />
       </div>
+
+      {/* Only offered when the server has Twilio configured, the same way the
+          CAPTCHA widget only appears when keys are set. */}
+      {sms?.enabled && (
+        <div className="form-group">
+          <label className="consent-row">
+            <input type="checkbox" name="smsConsent" checked={bookingData.smsConsent} onChange={handleInputChange} />
+            <span>Text me a reminder before my session. Message and data rates may apply. Reply STOP to opt out.</span>
+          </label>
+          <div className="field-hint">US phone numbers only.</div>
+        </div>
+      )}
 
       <div className="form-group">
         <label>Anything I should know before our first session? <span style={{ color: 'var(--gray-500)', fontWeight: 400 }}>(optional)</span></label>

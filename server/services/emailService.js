@@ -59,6 +59,20 @@ export function manageUrl(token) {
   return `${base}/manage/${token}`;
 }
 
+/*
+ * Just the clock time — "3:00 PM CDT" — for the reminder text, where
+ * formatWhen's full date would eat most of a 160-character SMS segment. Same
+ * timezone precedence as the emails: the client's, then the server default.
+ */
+export function formatTime(timeISO, tz) {
+  const d = new Date(timeISO);
+  if (isNaN(d.getTime())) return timeISO;
+  return new Intl.DateTimeFormat('en-US', {
+    hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
+    timeZone: tz || TIMEZONE
+  }).format(d);
+}
+
 function formatWhen(timeISO, tz) {
   const d = new Date(timeISO);
   if (isNaN(d.getTime())) return timeISO;

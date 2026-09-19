@@ -37,6 +37,11 @@ CREATE TABLE IF NOT EXISTS bookings (
   manage_token TEXT,
   reminder_first_sent INTEGER DEFAULT 0,
   reminder_second_sent INTEGER DEFAULT 0,
+  -- The student ticked the "text me a reminder" box. No tick, no text.
+  sms_consent INTEGER DEFAULT 0,
+  -- Its own flag, not a reuse of reminder_second_sent: sharing one would mean a
+  -- booking whose email already went out silently never gets a text.
+  sms_second_sent INTEGER DEFAULT 0,
   client_timezone TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users (id),
@@ -75,6 +80,8 @@ CREATE TABLE IF NOT EXISTS settings (
   reminders_enabled INTEGER DEFAULT 1,
   reminder_first_minutes INTEGER DEFAULT 1440, -- 0 = this reminder is off
   reminder_second_minutes INTEGER DEFAULT 60,  -- 0 = this reminder is off
+  -- Off by default: upgrading the app must never start texting people.
+  sms_reminders_enabled INTEGER DEFAULT 0,
   FOREIGN KEY (user_id) REFERENCES users (id)
 );
 

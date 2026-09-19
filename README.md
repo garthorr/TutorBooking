@@ -280,13 +280,39 @@ Optional:
 - `ADMIN_EMAIL` - where your own new-booking notifications go. Falls back to
   `EMAIL_FROM`, then `SMTP_USER`.
 
-**Reminders** are sent automatically to the student before a session, once SMTP
-is configured. Two go out per booking, by default 1 day and 1 hour beforehand;
-turn them off or change either lead time in `/admin` → Settings → Reminder
-Emails. Setting one lead time to "Off" sends a single reminder. Each reminder
-fires at most once per booking, rescheduling resets both so they fire again
-against the new time, and a booking made inside one of these windows skips the
-reminder it is already past.
+**Text message reminders** (optional — disabled unless all three are set):
+- `TWILIO_ACCOUNT_SID` - Twilio account SID
+- `TWILIO_AUTH_TOKEN` - Twilio auth token
+- `TWILIO_FROM_NUMBER` - the sending number in E.164, e.g. `+15551234567`. It must
+  be a number your Twilio account actually owns; a wrong one fails with Twilio
+  error `21606`.
+
+**Reminders** are sent automatically to the student before a session. Two emails
+go out per booking, by default 1 day and 1 hour beforehand; turn them off or
+change either lead time in `/admin` → Settings → Reminders. Setting one lead time
+to "Off" sends a single reminder. Each reminder fires at most once per booking,
+rescheduling resets them so they fire again against the new time, and a booking
+made inside one of these windows skips the reminder it is already past.
+
+A **text message** can be sent alongside the second reminder. It is off until you
+switch it on in `/admin` → Settings → Reminders, and the toggle only does
+anything once the three Twilio variables above are set. Specifically:
+
+- It uses the **second reminder's lead time**, so changing that select moves the
+  text with it. Setting the second reminder to "Off" stops the text as well.
+- It goes only to students who **ticked the opt-in box** when they booked, which
+  is what US law (TCPA) expects before an automated text. Twilio handles `STOP`
+  and `HELP` replies itself, so opting out needs nothing from this app.
+- **US numbers only.** The stored phone is free text, so it is normalized to
+  E.164 before sending; anything that is not a dialable North American number is
+  skipped silently rather than guessed at.
+- It is **independent of email** — texts go out with `SMTP_HOST` unset and no
+  mail server configured at all, and either channel works without the other.
+- Immediately before each text the booking is re-read and, when a Google Calendar
+  is connected, re-checked against the calendar event, because a text cannot be
+  recalled. A cancelled or moved session is not texted about.
+- One text is attempted per booking. A failure is logged and dropped rather than
+  retried, so a bad number cannot produce a reminder at 6am.
 
 ### Using a Gmail account for SMTP
 

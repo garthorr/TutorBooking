@@ -8,6 +8,7 @@ import { addBooking as addBookingToDisk, loadBookings } from '../bookingsStorage
 import { sendConfirmation, sendReschedule, sendCancellation, notifyAdminOfBooking, manageUrl } from '../services/emailService.js';
 import { normalizeGuestEmails, parseGuestEmails } from '../services/guests.js';
 import { verifyCaptcha } from '../services/captchaService.js';
+import { normalizeUsPhone } from '../services/smsService.js';
 import { getCalendar } from '../services/googleClient.js';
 import { loadReminderConfig } from '../services/reminderConfig.js';
 import {
@@ -344,6 +345,11 @@ function validateBookingInput(b) {
   if (typeof b.email !== 'string' || b.email.length > 200 || !EMAIL_RE.test(b.email)) return 'Invalid email address';
   if (String(b.name).length > 100) return 'Name is too long';
   if (b.phone && String(b.phone).length > 40) return 'Phone number is too long';
+  // Someone who ticks the box expects a text, so fail loudly here rather than
+  // silently skipping them at send time. US numbers only — see smsService.
+  if (b.smsConsent && !normalizeUsPhone(b.phone)) {
+    return 'Text reminders need a valid US phone number';
+  }
   if (b.notes && String(b.notes).length > 2000) return 'Notes are too long';
   if (b.location && String(b.location).length > 300) return 'Location is too long';
   if (b.timezone && String(b.timezone).length > 64) return 'Invalid timezone';
@@ -391,7 +397,7 @@ export function buildBookingEvent(booking, start, end) {
 async function handleCreateBooking(req, res, options = {}) {
   const { bypassNotice = false, requireCaptcha = true, createdBy = 'public' } = options;
   try {
-    const { time, meetingType, location, schoolId, name, email, phone, notes, timezone, captchaToken } = req.body;
+    const { time, meetingType, location, schoolId, name, email, phone, notes, timezone, captchaToken, smsConsent } = req.body;
     const validationError = validateBookingInput(req.body);
     if (validationError) return res.status(400).json({ error: validationError });
 
@@ -441,6 +447,8 @@ async function handleCreateBooking(req, res, options = {}) {
       guestEmails,
       sessionDuration: duration,
       timezone: timezone || null,
+      // Coerced, never stored as whatever truthy value arrived on the wire.
+      smsConsent: Boolean(smsConsent),
       status: 'confirmed',
       manageToken: crypto.randomBytes(16).toString('hex'),
       createdAt: new Date().toISOString()

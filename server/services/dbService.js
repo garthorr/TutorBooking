@@ -1,6 +1,15 @@
 import db from '../db/database.js';
 import { serializeGuestEmails } from './guests.js';
 
+// Which per-booking "already sent" flag each reminder channel owns. The text
+// has its own so a failed send can be retried apart from the email, and so a
+// booking whose email already went out is still eligible for a text.
+const REMINDER_FLAGS = {
+  first: 'reminder_first_sent',
+  second: 'reminder_second_sent',
+  sms: 'sms_second_sent'
+};
+
 class DBService {
   // Common database operations
   getUserByUsername(username) {
@@ -29,7 +38,8 @@ class DBService {
         business_description = ?,
         reminders_enabled = ?,
         reminder_first_minutes = ?,
-        reminder_second_minutes = ?
+        reminder_second_minutes = ?,
+        sms_reminders_enabled = ?
       WHERE user_id = ?
     `).run(
       settings.googleMeetDuration,
@@ -43,6 +53,7 @@ class DBService {
       settings.remindersEnabled ? 1 : 0,
       settings.reminderFirstMinutes,
       settings.reminderSecondMinutes,
+      settings.smsRemindersEnabled ? 1 : 0,
       userId
     );
   }
@@ -66,9 +77,9 @@ class DBService {
       INSERT INTO bookings (
         id, user_id, date, time, meeting_type, location, school_id,
         name, email, phone, notes, guest_emails, session_duration, calendar_event_id,
-        meet_link, status, manage_token, reminder_24h_sent, reminder_1h_sent,
-        client_timezone, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        meet_link, status, manage_token, reminder_first_sent, reminder_second_sent,
+        client_timezone, sms_consent, sms_second_sent, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       b.id, userId, b.date, b.time, b.meetingType, b.location,
       // Non-school bookings (phone / Google Meet / "other location") have no
@@ -79,6 +90,7 @@ class DBService {
       b.calendarEventId ?? null, b.meetLink ?? null, b.status || 'confirmed', b.manageToken || null,
       b.reminderFirstSent ? 1 : 0, b.reminderSecondSent ? 1 : 0,
       b.timezone || null,
+      b.smsConsent ? 1 : 0, b.smsSecondSent ? 1 : 0,
       b.createdAt || new Date().toISOString()
     );
   }
@@ -88,8 +100,10 @@ class DBService {
   }
 
   updateBookingSchedule(userId, id, { date, time }) {
-    // Reset reminder flags so reminders fire again for the new time.
-    return db.prepare('UPDATE bookings SET date = ?, time = ?, reminder_first_sent = 0, reminder_second_sent = 0 WHERE user_id = ? AND id = ?')
+    // Reset reminder flags so reminders fire again for the new time. sms_second_sent
+    // belongs here too: without it a rescheduled booking keeps the flag from its
+    // original slot and silently never gets a text.
+    return db.prepare('UPDATE bookings SET date = ?, time = ?, reminder_first_sent = 0, reminder_second_sent = 0, sms_second_sent = 0 WHERE user_id = ? AND id = ?')
       .run(date, time, userId, id);
   }
 
@@ -106,8 +120,10 @@ class DBService {
     return db.prepare("SELECT * FROM bookings WHERE status = 'confirmed' AND time > ? ORDER BY time ASC").all(afterISO);
   }
 
+  // `which` is mapped to a column here rather than passed in as one, so no
+  // caller can interpolate an arbitrary name into the statement.
   markReminderSent(id, which) {
-    const column = which === 'second' ? 'reminder_second_sent' : 'reminder_first_sent';
+    const column = REMINDER_FLAGS[which] || REMINDER_FLAGS.first;
     return db.prepare(`UPDATE bookings SET ${column} = 1 WHERE id = ?`).run(id);
   }
 

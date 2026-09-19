@@ -83,12 +83,16 @@ function Admin() {
     themeColor: '#4f46e5',
     remindersEnabled: true,
     reminderFirstMinutes: 1440,
-    reminderSecondMinutes: 60
+    reminderSecondMinutes: 60,
+    smsRemindersEnabled: false
   })
   const [settingsSaving, setSettingsSaving] = useState(false)
   // Whether the server has SMTP configured. Assume it does until told
   // otherwise, so the warning does not flash on every load.
   const [emailEnabled, setEmailEnabled] = useState(true)
+  // Whether the server has Twilio configured. Unlike email this starts false:
+  // SMS is the newer, opt-in channel, so assume off until told otherwise.
+  const [smsEnabled, setSmsEnabled] = useState(false)
   const [customColorInput, setCustomColorInput] = useState('')
   // Change password
   const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' })
@@ -111,9 +115,11 @@ function Admin() {
         themeColor: color,
         remindersEnabled: d.remindersEnabled ?? true,
         reminderFirstMinutes: d.reminderFirstMinutes ?? 1440,
-        reminderSecondMinutes: d.reminderSecondMinutes ?? 60
+        reminderSecondMinutes: d.reminderSecondMinutes ?? 60,
+        smsRemindersEnabled: d.smsRemindersEnabled ?? false
       })
       setEmailEnabled(d.emailEnabled !== false)
+      setSmsEnabled(d.smsEnabled === true)
       document.title = d.businessName ? `Booking Admin \u00b7 ${d.businessName}` : 'Booking Admin'
       const isPreset = THEME_PRESETS.some(p => p.primary.toLowerCase() === color.toLowerCase())
       if (!isPreset) setCustomColorInput(color)
@@ -222,7 +228,8 @@ function Admin() {
             ...f,
             remindersEnabled: data.settings.remindersEnabled,
             reminderFirstMinutes: data.settings.reminderFirstMinutes,
-            reminderSecondMinutes: data.settings.reminderSecondMinutes
+            reminderSecondMinutes: data.settings.reminderSecondMinutes,
+            smsRemindersEnabled: data.settings.smsRemindersEnabled
           }))
         }
         showMessage('Settings saved!', 'success')
@@ -237,11 +244,23 @@ function Admin() {
   // is readable without working out what 1440 minutes is. Mirrors what the
   // server stores: duplicates collapse, and the later reminder is listed second.
   const describeReminders = () => {
+    const labelFor = m => REMINDER_OPTIONS.find(o => o.value === m)?.label || `${m} minutes before`
     const picked = [settingsForm.reminderFirstMinutes, settingsForm.reminderSecondMinutes]
     const times = [...new Set(picked)].filter(m => m > 0).sort((a, b) => b - a)
-    if (times.length === 0) return 'Both reminders are off, so no reminder emails will be sent.'
-    const labels = times.map(m => REMINDER_OPTIONS.find(o => o.value === m)?.label || `${m} minutes before`)
-    return `Students will be emailed ${labels.join(' and ')}.`
+    if (times.length === 0) return 'Both reminders are off, so nothing will be sent.'
+
+    const parts = []
+    if (emailEnabled) parts.push(`Students will be emailed ${times.map(labelFor).join(' and ')}.`)
+    if (smsEnabled && settingsForm.smsRemindersEnabled) {
+      // The text rides the second reminder, so it moves with that select and
+      // stops entirely when that one is set to Off.
+      parts.push(settingsForm.reminderSecondMinutes > 0
+        ? `Students who opted in will also be texted ${labelFor(settingsForm.reminderSecondMinutes)}.`
+        : 'Texts follow the second reminder, which is off, so no texts will be sent.')
+    }
+    return parts.length
+      ? parts.join(' ')
+      : 'Neither email nor texts are configured on the server, so nothing will be sent.'
   }
 
   const handleThemePresetSelect = (primary) => {
@@ -606,7 +625,7 @@ function Admin() {
         {/* Bookings Tab */}
         {tab === 'bookings' && (
           <div className="tab-content">
-            <BookingsManager />
+            <BookingsManager smsEnabled={smsEnabled} />
           </div>
         )}
 
@@ -742,14 +761,14 @@ function Admin() {
               </div>
             </div>
 
-            {/* Reminder emails */}
+            {/* Reminders */}
             <div className="settings-section">
-              <h2>Reminder Emails</h2>
+              <h2>Reminders</h2>
               <p className="field-hint">
-                Automatic emails reminding the student about an upcoming session. Two can
-                be sent per booking. Rescheduling a booking resets them, so the new time
-                gets its own reminders, and a booking made inside one of these windows
-                skips the reminder it is already past.
+                Automatic reminders about an upcoming session. Two emails can be sent per
+                booking. Rescheduling a booking resets them, so the new time gets its own
+                reminders, and a booking made inside one of these windows skips the
+                reminder it is already past.
               </p>
               {!emailEnabled && (
                 <p className="field-hint error">
@@ -791,6 +810,26 @@ function Admin() {
                       ))}
                     </select>
                   </div>
+                  <div className="settings-field">
+                    <label className="settings-toggle">
+                      <input
+                        type="checkbox"
+                        checked={settingsForm.smsRemindersEnabled}
+                        onChange={e => setSettingsForm(f => ({ ...f, smsRemindersEnabled: e.target.checked }))}
+                      />
+                      <span>Also send a text message reminder</span>
+                    </label>
+                    <p className="field-hint">
+                      Sent at the second reminder's lead time, to US numbers only, and only
+                      to students who ticked the opt-in box when they booked.
+                    </p>
+                  </div>
+                  {settingsForm.smsRemindersEnabled && !smsEnabled && (
+                    <p className="field-hint error">
+                      Twilio is not configured on the server (<code>TWILIO_ACCOUNT_SID</code>),
+                      so no texts will be sent yet. See the README for setup.
+                    </p>
+                  )}
                   <p className="field-hint">{describeReminders()}</p>
                 </>
               )}
