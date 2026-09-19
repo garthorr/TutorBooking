@@ -8,9 +8,9 @@ import { addBooking as addBookingToDisk, loadBookings } from '../bookingsStorage
 import { sendConfirmation, sendReschedule, sendCancellation, notifyAdminOfBooking, manageUrl } from '../services/emailService.js';
 import { normalizeGuestEmails, parseGuestEmails } from '../services/guests.js';
 import { verifyCaptcha } from '../services/captchaService.js';
-import { normalizeUsPhone } from '../services/smsService.js';
+import { normalizeUsPhone, sendBookingConfirmationSms } from '../services/smsService.js';
 import { getCalendar } from '../services/googleClient.js';
-import { loadReminderConfig } from '../services/reminderConfig.js';
+import { loadReminderConfig, loadSmsChannels } from '../services/reminderConfig.js';
 import {
   tzDate,
   toDateStr,
@@ -473,8 +473,17 @@ async function handleCreateBooking(req, res, options = {}) {
     const msUntil = new Date(booking.time).getTime() - Date.now();
     booking.reminderFirstSent = msUntil <= reminders.firstMinutes * 60 * 1000;
     booking.reminderSecondSent = msUntil <= reminders.secondMinutes * 60 * 1000;
+    // The text rides the second lead time, so it needs the same suppression:
+    // without it a booking made half an hour out is told "your session is in
+    // 1 hour" moments after booking — and, with confirmations on, twice.
+    booking.smsSecondSent = booking.reminderSecondSent;
     addBookingToDisk(booking);
     sendConfirmation(booking);
+    // Fire-and-forget, like the email above: sendSms never throws, so Twilio
+    // being down cannot turn a successful booking into a 500.
+    if (loadSmsChannels().confirmation) {
+      sendBookingConfirmationSms(booking, dbService.getSettings(ADMIN_ID)?.business_name || '');
+    }
     // Tell the tutor too — otherwise a booking is only visible in the calendar
     // invite, and a same-day one suppresses both reminder emails.
     notifyAdminOfBooking(booking, { createdBy });

@@ -5,7 +5,7 @@ import assert from 'node:assert';
 // through it. Static imports are hoisted above this assignment, so the module
 // under test is pulled in afterwards, by hand.
 process.env.TIMEZONE = 'UTC';
-const { normalizeUsPhone, isSmsEnabled, sendSms, smsReminderBody } =
+const { normalizeUsPhone, isSmsEnabled, sendSms, smsReminderBody, smsConfirmationBody, sendBookingConfirmationSms } =
   await import('../services/smsService.js');
 
 /*
@@ -184,6 +184,110 @@ test('sendSms', async (t) => {
       const result = await withFetch(async () => { throw new Error('network down'); },
         () => sendSms('+15552345678', 'hi'));
       assert.strictEqual(result, false, 'one bad send must not kill the reminder tick');
+    });
+  });
+});
+
+
+test('smsConfirmationBody', async (t) => {
+  // The camelCase shape the controller has in hand when a booking is created,
+  // rather than the snake_case row the reminder job reads back.
+  const fresh = {
+    time: '2026-06-10T15:00:00.000Z',
+    timezone: 'UTC',
+    manageToken: 'tok123'
+  };
+
+  await t.test('spells out the date, because the session may be weeks away', () => {
+    process.env.PUBLIC_BASE_URL = 'https://example.com';
+    try {
+      assert.strictEqual(
+        smsConfirmationBody(fresh, 'Acme Tutoring'),
+        'Confirmed: your Acme Tutoring session is Wed, Jun 10 at 3:00 PM UTC. https://example.com/manage/tok123'
+      );
+    } finally {
+      delete process.env.PUBLIC_BASE_URL;
+    }
+  });
+
+  await t.test('reads a snake_case row identically', () => {
+    const row = { time: fresh.time, client_timezone: 'UTC', manage_token: 'tok123' };
+    assert.strictEqual(smsConfirmationBody(row, 'Acme Tutoring'), smsConfirmationBody(fresh, 'Acme Tutoring'));
+  });
+
+  await t.test('omits the link rather than texting the word "null"', () => {
+    const body = smsConfirmationBody(fresh, 'Acme Tutoring');
+    assert.ok(!body.includes('null'), body);
+    assert.ok(body.endsWith('UTC.'), body);
+  });
+
+  await t.test('both texts stay inside one Twilio segment for a realistic booking', () => {
+    // A real manage token is crypto.randomBytes(16).toString('hex') — 32 chars,
+    // not the short one used above — and the link is most of the message, so
+    // this is the assertion that actually guards the billing boundary.
+    process.env.PUBLIC_BASE_URL = 'https://booking.riveratutoring.com';
+    const realistic = { ...fresh, manageToken: '94317474077c69a3d2de05b4956d414e' };
+    try {
+      for (const body of [
+        smsConfirmationBody(realistic, 'Rivera Tutoring'),
+        smsReminderBody(realistic, 'in 1 hour', 'Rivera Tutoring')
+      ]) {
+        assert.ok(body.length <= 160, `${body.length} chars would bill two segments: ${body}`);
+      }
+    } finally {
+      delete process.env.PUBLIC_BASE_URL;
+    }
+  });
+});
+
+test('sendBookingConfirmationSms', async (t) => {
+  const booking = {
+    time: '2026-06-10T15:00:00.000Z',
+    timezone: 'UTC',
+    manageToken: 'tok123',
+    phone: '(555) 234-5678',
+    smsConsent: true
+  };
+
+  await t.test('texts an opted-in student with a textable number', async () => {
+    await withTwilio(async () => {
+      let seen = null;
+      const ok = await withFetch(async (url, init) => {
+        seen = Object.fromEntries(new URLSearchParams(init.body.toString()));
+        return { ok: true, status: 201, json: async () => ({ sid: 'SM1' }) };
+      }, () => sendBookingConfirmationSms(booking, 'Acme Tutoring'));
+
+      assert.strictEqual(ok, true);
+      assert.strictEqual(seen.To, '+15552345678');
+      assert.ok(seen.Body.startsWith('Confirmed: your Acme Tutoring session'), seen.Body);
+    });
+  });
+
+  await t.test('every normal reason not to send is a silent skip', async () => {
+    const skips = [
+      [{ ...booking, smsConsent: false }, 'no opt-in'],
+      [{ ...booking, phone: '' }, 'no phone'],
+      [{ ...booking, phone: '+44 7700 900000' }, 'not a US number'],
+      [{ ...booking, phone: '555-5678' }, 'not a whole number']
+    ];
+    await withTwilio(async () => {
+      for (const [b, why] of skips) {
+        let called = false;
+        await withFetch(() => { called = true; }, async () => {
+          assert.strictEqual(await sendBookingConfirmationSms(b, 'Acme'), false, why);
+        });
+        assert.strictEqual(called, false, `${why} must not reach Twilio`);
+      }
+    });
+  });
+
+  await t.test('a Twilio failure resolves false rather than throwing', async () => {
+    // The controller calls this without awaiting, so a throw here would become
+    // an unhandled rejection on an otherwise successful booking.
+    await withTwilio(async () => {
+      const result = await withFetch(async () => { throw new Error('network down'); },
+        () => sendBookingConfirmationSms(booking, 'Acme'));
+      assert.strictEqual(result, false);
     });
   });
 });

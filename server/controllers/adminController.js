@@ -6,10 +6,17 @@ import { getCaptchaConfig } from '../services/captchaService.js';
 import { isSmsEnabled } from '../services/smsService.js';
 import { normalizeAvailability } from '../services/availability.js';
 import { CUSTOM_LOCATION_AVAILABILITY } from '../customLocationConfig.js';
-import { clampLead, normalizeLeads, DEFAULT_REMINDERS } from '../services/reminderConfig.js';
+import { clampLead, normalizeLeads, DEFAULT_REMINDERS, loadSmsChannels } from '../services/reminderConfig.js';
 import { isEmailEnabled } from '../services/emailService.js';
 
 const ADMIN_ID = 1;
+
+// enabled is the gate for showing the checkbox at all; the two flags below it
+// decide what the checkbox promises.
+function smsChannelsForForm() {
+  const { confirmation, reminder } = loadSmsChannels();
+  return { enabled: confirmation || reminder, confirmation, reminder };
+}
 
 export const getConfig = (req, res) => {
   const settings = dbService.getSettings(ADMIN_ID);
@@ -27,9 +34,10 @@ export const getConfig = (req, res) => {
     customLocationAvailability: CUSTOM_LOCATION_AVAILABILITY,
     // Lets the public booking form know whether/how to render a CAPTCHA widget.
     captcha: getCaptchaConfig(),
-    // Whether to offer the text-reminder opt-in. Only the fact that SMS is
-    // configured is public — never the Twilio credentials themselves.
-    sms: { enabled: isSmsEnabled() }
+    // Which texts the student would actually get, so the opt-in box is only
+    // offered when something would act on it and its wording matches. Only the
+    // fact that SMS is live is public — never the Twilio credentials.
+    sms: smsChannelsForForm()
   });
 };
 
@@ -51,6 +59,7 @@ export const getSettings = (req, res) => {
     reminderFirstMinutes: settings.reminder_first_minutes ?? DEFAULT_REMINDERS.firstMinutes,
     reminderSecondMinutes: settings.reminder_second_minutes ?? DEFAULT_REMINDERS.secondMinutes,
     smsRemindersEnabled: Boolean(settings.sms_reminders_enabled),
+    smsConfirmationEnabled: Boolean(settings.sms_confirmation_enabled),
     // Reminders need SMTP. Without it the schedule below is inert, and the
     // panel says so rather than letting the admin configure a dead feature.
     emailEnabled: isEmailEnabled(),
@@ -102,7 +111,10 @@ export const updateSettings = (req, res) => {
     reminderSecondMinutes: leads.secondMinutes,
     smsRemindersEnabled: req.body.smsRemindersEnabled === undefined
       ? Boolean(current.sms_reminders_enabled)
-      : Boolean(req.body.smsRemindersEnabled)
+      : Boolean(req.body.smsRemindersEnabled),
+    smsConfirmationEnabled: req.body.smsConfirmationEnabled === undefined
+      ? Boolean(current.sms_confirmation_enabled)
+      : Boolean(req.body.smsConfirmationEnabled)
   };
   dbService.updateSettings(ADMIN_ID, updated);
   res.json({ success: true, settings: updated });

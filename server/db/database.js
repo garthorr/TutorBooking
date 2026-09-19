@@ -95,6 +95,11 @@ if (!settingsColumns.includes('sms_reminders_enabled')) {
   db.prepare('ALTER TABLE settings ADD COLUMN sms_reminders_enabled INTEGER DEFAULT 0').run();
 }
 
+if (!settingsColumns.includes('sms_confirmation_enabled')) {
+  console.log('Adding sms_confirmation_enabled column to settings table...');
+  db.prepare('ALTER TABLE settings ADD COLUMN sms_confirmation_enabled INTEGER DEFAULT 0').run();
+}
+
 // Migration: Add available_dates and unavailable_dates to meeting_types if they don't exist
 const meetingTypesInfo = db.prepare("PRAGMA table_info(meeting_types)").all();
 const mtColumns = meetingTypesInfo.map(c => c.name);

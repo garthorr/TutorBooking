@@ -65,6 +65,24 @@ export function loadReminderConfig() {
   };
 }
 
+/*
+ * Which SMS channels are actually live right now: the tutor's toggle AND Twilio
+ * being configured. Read per call rather than at startup, so switching one on
+ * in /admin takes effect without restarting the server.
+ *
+ * The confirmation is independent of the reminder schedule entirely — it fires
+ * when a booking is made. The reminder rides the second lead time, so it is
+ * only live while that lead time is.
+ */
+export function loadSmsChannels() {
+  const settings = dbService.getSettings(ADMIN_ID);
+  const config = loadReminderConfig();
+  return {
+    confirmation: isSmsEnabled() && Boolean(settings?.sms_confirmation_enabled),
+    reminder: config.smsEnabled && config.enabled && config.secondMinutes > 0
+  };
+}
+
 function plural(count, unit) {
   return `in ${count} ${count === 1 ? unit : `${unit}s`}`;
 }

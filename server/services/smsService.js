@@ -1,4 +1,4 @@
-import { manageUrl, formatTime } from './emailService.js';
+import { manageUrl, formatTime, formatShortDate } from './emailService.js';
 
 /*
  * Optional SMS reminders via Twilio.
@@ -63,6 +63,29 @@ export function normalizeUsPhone(raw) {
 }
 
 /*
+ * Read either a camelCase booking (freshly created, straight off the request)
+ * or a snake_case one (a row read back from SQLite), the same way
+ * emailService.normalize does. The confirmation is sent from the controller
+ * with the first shape and the reminder from the job with the second.
+ */
+function smsFields(booking) {
+  return {
+    time: booking.time,
+    tz: booking.timezone ?? booking.client_timezone ?? null,
+    token: booking.manageToken ?? booking.manage_token ?? null,
+    phone: booking.phone,
+    consent: Boolean(booking.smsConsent ?? booking.sms_consent)
+  };
+}
+
+// The trailing manage link, or '' when PUBLIC_BASE_URL is unset. Omitted rather
+// than texting somebody the word "null".
+function linkSuffix(token) {
+  const url = manageUrl(token);
+  return url ? ` ${url}` : '';
+}
+
+/*
  * The reminder text.
  *
  * Kept short on purpose: past 160 characters Twilio bills two segments. The
@@ -71,12 +94,38 @@ export function normalizeUsPhone(raw) {
  * ("in 1 hour"), so the wording matches the reminder email.
  */
 export function smsReminderBody(booking, label, businessName) {
+  const b = smsFields(booking);
   const who = businessName ? `${businessName} ` : '';
-  const when = formatTime(booking.time, booking.client_timezone);
-  // manageUrl is null without PUBLIC_BASE_URL. Omit the link rather than
-  // texting somebody the word "null".
-  const url = manageUrl(booking.manage_token);
-  return `Reminder: your ${who}session is ${label}, at ${when}.${url ? ` ${url}` : ''}`;
+  return `Reminder: your ${who}session is ${label}, at ${formatTime(b.time, b.tz)}.${linkSuffix(b.token)}`;
+}
+
+/*
+ * The confirmation text, sent once when a booking is made. Same sentence shape
+ * as the reminder, with the date spelled out because the session may be weeks
+ * away rather than within the hour.
+ */
+export function smsConfirmationBody(booking, businessName) {
+  const b = smsFields(booking);
+  const who = businessName ? `${businessName} ` : '';
+  const when = `${formatShortDate(b.time, b.tz)} at ${formatTime(b.time, b.tz)}`;
+  return `Confirmed: your ${who}session is ${when}.${linkSuffix(b.token)}`;
+}
+
+/*
+ * Text the student that their booking is in. Returns false — silently — for
+ * every normal reason not to send: no consent, no phone, or a number that is
+ * not a textable US one. The caller decides whether the channel is switched on.
+ *
+ * Fire-and-forget from the request that creates the booking, like the
+ * confirmation email: sendSms never throws, so a Twilio outage cannot turn a
+ * successful booking into a 500.
+ */
+export async function sendBookingConfirmationSms(booking, businessName) {
+  const b = smsFields(booking);
+  if (!b.consent) return false;
+  const to = normalizeUsPhone(b.phone);
+  if (!to) return false;
+  return sendSms(to, smsConfirmationBody(booking, businessName));
 }
 
 /*

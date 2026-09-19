@@ -97,11 +97,13 @@ test('additive SMS migrations on a pre-feature database', async (t) => {
     // Importing runs the migrations as a side effect, exactly as server startup does.
     migrated = (await import('../db/database.js?migration-test=1')).default;
 
-    await t.test('adds the three new columns', () => {
+    await t.test('adds the four new columns', () => {
       const bookingCols = columnsOf(migrated, 'bookings');
       assert.ok(bookingCols.includes('sms_consent'));
       assert.ok(bookingCols.includes('sms_second_sent'));
-      assert.ok(columnsOf(migrated, 'settings').includes('sms_reminders_enabled'));
+      const settingsCols = columnsOf(migrated, 'settings');
+      assert.ok(settingsCols.includes('sms_reminders_enabled'));
+      assert.ok(settingsCols.includes('sms_confirmation_enabled'));
     });
 
     await t.test('the existing booking reads 0 for both flags, with no backfill', () => {
@@ -127,6 +129,7 @@ test('additive SMS migrations on a pre-feature database', async (t) => {
     await t.test('SMS starts off, so upgrading never begins texting anyone', () => {
       const settings = migrated.prepare('SELECT * FROM settings WHERE user_id = 1').get();
       assert.strictEqual(settings.sms_reminders_enabled, 0);
+      assert.strictEqual(settings.sms_confirmation_enabled, 0);
       // The existing schedule is left exactly as the tutor had it.
       assert.strictEqual(settings.reminders_enabled, 1);
       assert.strictEqual(settings.reminder_first_minutes, 1440);

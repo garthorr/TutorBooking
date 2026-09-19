@@ -73,6 +73,19 @@ export function formatTime(timeISO, tz) {
   }).format(d);
 }
 
+/*
+ * "Tue, Jun 10" — the date half of the SMS copy, kept apart from formatTime so
+ * each caller composes only the pieces it has room for.
+ */
+export function formatShortDate(timeISO, tz) {
+  const d = new Date(timeISO);
+  if (isNaN(d.getTime())) return timeISO;
+  return new Intl.DateTimeFormat('en-US', {
+    weekday: 'short', month: 'short', day: 'numeric',
+    timeZone: tz || TIMEZONE
+  }).format(d);
+}
+
 function formatWhen(timeISO, tz) {
   const d = new Date(timeISO);
   if (isNaN(d.getTime())) return timeISO;

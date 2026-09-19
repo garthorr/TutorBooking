@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert';
 import { decideReminder, decideSmsReminder } from '../jobs/reminderJob.js';
-import { clampLead, normalizeLeads, leadLabel, DEFAULT_REMINDERS } from '../services/reminderConfig.js';
+import { clampLead, normalizeLeads, leadLabel, DEFAULT_REMINDERS, loadSmsChannels } from '../services/reminderConfig.js';
+import dbService from '../services/dbService.js';
 
 const NOW = Date.parse('2026-06-10T09:00:00.000Z');
 const MIN = 60 * 1000;
@@ -199,4 +200,80 @@ test('a text goes out on an install with no email configured', () => {
   // decideSmsReminder never consults the email side; runReminderCheck simply
   // skips the email branch when SMTP is unset.
   assert.ok(decideSmsReminder(smsBooking(30), smsConfig, NOW));
+});
+
+
+/* ── Which SMS channels are live ────────────────────────────────────────────
+ *
+ * loadSmsChannels is the one place that answers this, and both the public
+ * booking form and the create-booking path read it. Getting it wrong shows a
+ * consent box for texts that never arrive.
+ */
+
+// updateSettings writes every column, so a partial save would blank the rest.
+function saveSettings(over = {}) {
+  dbService.updateSettings(1, {
+    googleMeetDuration: 60, customLocationDuration: 60, walkTime: 5,
+    minimumNoticeMinutes: 120, maxAdvanceDays: 90, themeColor: '#4f46e5',
+    businessName: 'Test', businessDescription: '',
+    remindersEnabled: true, reminderFirstMinutes: 1440, reminderSecondMinutes: 60,
+    smsRemindersEnabled: false, smsConfirmationEnabled: false,
+    ...over
+  });
+}
+
+async function withTwilio(fn) {
+  process.env.TWILIO_ACCOUNT_SID = 'ACtestsid';
+  process.env.TWILIO_AUTH_TOKEN = 'test-token';
+  process.env.TWILIO_FROM_NUMBER = '+15550001111';
+  try {
+    return await fn();
+  } finally {
+    delete process.env.TWILIO_ACCOUNT_SID;
+    delete process.env.TWILIO_AUTH_TOKEN;
+    delete process.env.TWILIO_FROM_NUMBER;
+  }
+}
+
+test('loadSmsChannels', async (t) => {
+  await t.test('nothing is live without Twilio, whatever the toggles say', () => {
+    saveSettings({ smsRemindersEnabled: true, smsConfirmationEnabled: true });
+    assert.deepStrictEqual(loadSmsChannels(), { confirmation: false, reminder: false });
+  });
+
+  await t.test('nothing is live with Twilio but both toggles off', async () => {
+    saveSettings();
+    await withTwilio(() => {
+      assert.deepStrictEqual(loadSmsChannels(), { confirmation: false, reminder: false });
+    });
+  });
+
+  await t.test('each toggle switches on only its own channel', async () => {
+    await withTwilio(() => {
+      saveSettings({ smsConfirmationEnabled: true });
+      assert.deepStrictEqual(loadSmsChannels(), { confirmation: true, reminder: false });
+
+      saveSettings({ smsRemindersEnabled: true });
+      assert.deepStrictEqual(loadSmsChannels(), { confirmation: false, reminder: true });
+
+      saveSettings({ smsConfirmationEnabled: true, smsRemindersEnabled: true });
+      assert.deepStrictEqual(loadSmsChannels(), { confirmation: true, reminder: true });
+    });
+  });
+
+  await t.test('the reminder text depends on the schedule; the confirmation does not', async () => {
+    await withTwilio(() => {
+      // The text rides the second lead time, so turning that off stops it —
+      // but a confirmation is not a reminder and keeps going.
+      saveSettings({ smsConfirmationEnabled: true, smsRemindersEnabled: true, reminderSecondMinutes: 0 });
+      assert.deepStrictEqual(loadSmsChannels(), { confirmation: true, reminder: false });
+
+      // Same for the master reminder switch.
+      saveSettings({ smsConfirmationEnabled: true, smsRemindersEnabled: true, remindersEnabled: false });
+      assert.deepStrictEqual(loadSmsChannels(), { confirmation: true, reminder: false });
+    });
+  });
+
+  // Leave the row as the rest of the suite expects to find it.
+  saveSettings();
 });

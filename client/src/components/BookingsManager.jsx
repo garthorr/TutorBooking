@@ -345,7 +345,7 @@ export default function BookingsManager({ smsEnabled = false }) {
                     checked={draft.smsConsent}
                     onChange={e => setDraft(d => ({ ...d, smsConsent: e.target.checked }))}
                   />
-                  <span>Student agreed to a text reminder</span>
+                  <span>Student agreed to text messages</span>
                 </label>
                 <span className="field-hint-inline">Needs a US phone number above.</span>
               </div>

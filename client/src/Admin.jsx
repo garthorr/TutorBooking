@@ -84,7 +84,8 @@ function Admin() {
     remindersEnabled: true,
     reminderFirstMinutes: 1440,
     reminderSecondMinutes: 60,
-    smsRemindersEnabled: false
+    smsRemindersEnabled: false,
+    smsConfirmationEnabled: false
   })
   const [settingsSaving, setSettingsSaving] = useState(false)
   // Whether the server has SMTP configured. Assume it does until told
@@ -116,7 +117,8 @@ function Admin() {
         remindersEnabled: d.remindersEnabled ?? true,
         reminderFirstMinutes: d.reminderFirstMinutes ?? 1440,
         reminderSecondMinutes: d.reminderSecondMinutes ?? 60,
-        smsRemindersEnabled: d.smsRemindersEnabled ?? false
+        smsRemindersEnabled: d.smsRemindersEnabled ?? false,
+        smsConfirmationEnabled: d.smsConfirmationEnabled ?? false
       })
       setEmailEnabled(d.emailEnabled !== false)
       setSmsEnabled(d.smsEnabled === true)
@@ -229,7 +231,8 @@ function Admin() {
             remindersEnabled: data.settings.remindersEnabled,
             reminderFirstMinutes: data.settings.reminderFirstMinutes,
             reminderSecondMinutes: data.settings.reminderSecondMinutes,
-            smsRemindersEnabled: data.settings.smsRemindersEnabled
+            smsRemindersEnabled: data.settings.smsRemindersEnabled,
+            smsConfirmationEnabled: data.settings.smsConfirmationEnabled
           }))
         }
         showMessage('Settings saved!', 'success')
@@ -243,6 +246,17 @@ function Admin() {
   // Plain-English summary of the two lead times, so the effect of the selects
   // is readable without working out what 1440 minutes is. Mirrors what the
   // server stores: duplicates collapse, and the later reminder is listed second.
+  // The reminder text has no lead time of its own — it rides the second
+  // reminder — so say which one that currently is, and be plain when that
+  // select is switched off and the text therefore cannot fire.
+  const describeSmsReminder = () => {
+    const m = settingsForm.reminderSecondMinutes
+    if (!settingsForm.remindersEnabled) return 'Reminders are switched off above, so no reminder text will be sent.'
+    if (!m) return 'Uses the second reminder\u2019s lead time, which is set to Off above, so no reminder text will be sent.'
+    const label = REMINDER_OPTIONS.find(o => o.value === m)?.label || `${m} minutes before`
+    return `Uses the second reminder\u2019s lead time \u2014 currently ${label.toLowerCase()}. Change it under Reminders.`
+  }
+
   const describeReminders = () => {
     const labelFor = m => REMINDER_OPTIONS.find(o => o.value === m)?.label || `${m} minutes before`
     const picked = [settingsForm.reminderFirstMinutes, settingsForm.reminderSecondMinutes]
@@ -810,29 +824,47 @@ function Admin() {
                       ))}
                     </select>
                   </div>
-                  <div className="settings-field">
-                    <label className="settings-toggle">
-                      <input
-                        type="checkbox"
-                        checked={settingsForm.smsRemindersEnabled}
-                        onChange={e => setSettingsForm(f => ({ ...f, smsRemindersEnabled: e.target.checked }))}
-                      />
-                      <span>Also send a text message reminder</span>
-                    </label>
-                    <p className="field-hint">
-                      Sent at the second reminder's lead time, to US numbers only, and only
-                      to students who ticked the opt-in box when they booked.
-                    </p>
-                  </div>
-                  {settingsForm.smsRemindersEnabled && !smsEnabled && (
-                    <p className="field-hint error">
-                      Twilio is not configured on the server (<code>TWILIO_ACCOUNT_SID</code>),
-                      so no texts will be sent yet. See the README for setup.
-                    </p>
-                  )}
                   <p className="field-hint">{describeReminders()}</p>
                 </>
               )}
+            </div>
+
+            {/* Text messages */}
+            <div className="settings-section">
+              <h2>Text Messages</h2>
+              <p className="field-hint">
+                Texts go only to students who ticked the opt-in box when they booked,
+                and only to US numbers. Each is independent of email, so these work
+                even with no mail server configured.
+              </p>
+              {!smsEnabled && (
+                <p className="field-hint error">
+                  Twilio is not configured on the server (<code>TWILIO_ACCOUNT_SID</code>),
+                  so nothing here will be sent yet. See the README for setup.
+                </p>
+              )}
+              <div className="settings-field">
+                <label className="settings-toggle">
+                  <input
+                    type="checkbox"
+                    checked={settingsForm.smsConfirmationEnabled}
+                    onChange={e => setSettingsForm(f => ({ ...f, smsConfirmationEnabled: e.target.checked }))}
+                  />
+                  <span>Text a confirmation when a booking is made</span>
+                </label>
+                <p className="field-hint">Sent once, straight away, with the date, time and a link to reschedule.</p>
+              </div>
+              <div className="settings-field">
+                <label className="settings-toggle">
+                  <input
+                    type="checkbox"
+                    checked={settingsForm.smsRemindersEnabled}
+                    onChange={e => setSettingsForm(f => ({ ...f, smsRemindersEnabled: e.target.checked }))}
+                  />
+                  <span>Text a reminder before the session</span>
+                </label>
+                <p className="field-hint">{describeSmsReminder()}</p>
+              </div>
             </div>
 
             {/* Color theme */}

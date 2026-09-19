@@ -80,8 +80,10 @@ CREATE TABLE IF NOT EXISTS settings (
   reminders_enabled INTEGER DEFAULT 1,
   reminder_first_minutes INTEGER DEFAULT 1440, -- 0 = this reminder is off
   reminder_second_minutes INTEGER DEFAULT 60,  -- 0 = this reminder is off
-  -- Off by default: upgrading the app must never start texting people.
+  -- Both off by default: upgrading the app must never start texting people.
   sms_reminders_enabled INTEGER DEFAULT 0,
+  -- Independent of the reminder schedule: this one fires when a booking is made.
+  sms_confirmation_enabled INTEGER DEFAULT 0,
   FOREIGN KEY (user_id) REFERENCES users (id)
 );
 

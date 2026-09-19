@@ -1105,6 +1105,18 @@ function GuestFields({ guests, addGuest, updateGuest, removeGuest }) {
 }
 
 /* ── Step 3: Your info ──────────────────────────────────────────────────── */
+/*
+ * What the opt-in box promises, matching the texts the tutor actually has
+ * switched on. Consent has to describe what will be sent, so this is not
+ * cosmetic: with only confirmations on, promising a reminder would be a
+ * promise the app never keeps.
+ */
+function smsConsentCopy(sms) {
+  if (sms.confirmation && sms.reminder) return 'Text me about this booking \u2014 a confirmation now, and a reminder before my session.'
+  if (sms.confirmation) return 'Text me a confirmation of this booking.'
+  return 'Text me a reminder before my session.'
+}
+
 function Step3({
   bookingData, getFinalLocation, getSessionDurationDisplay,
   handleInputChange, addGuest, updateGuest, removeGuest,
@@ -1146,7 +1158,7 @@ function Step3({
         <div className="form-group">
           <label className="consent-row">
             <input type="checkbox" name="smsConsent" checked={bookingData.smsConsent} onChange={handleInputChange} />
-            <span>Text me a reminder before my session. Message and data rates may apply. Reply STOP to opt out.</span>
+            <span>{smsConsentCopy(sms)} Message and data rates may apply. Reply STOP to opt out.</span>
           </label>
           <div className="field-hint">US phone numbers only.</div>
         </div>
