@@ -19,7 +19,8 @@ import {
   toDateStr,
   dayOfWeekFromStr,
   isDateInOverrides,
-  getAvailableSlotsForDay
+  getAvailableSlotsForDay,
+  matchSchoolForEvent
 } from '../services/availability.js';
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -51,7 +52,30 @@ async function fetchEventsForPeriod(timeMin, timeMax) {
       }).then(r => r.data.items || []).catch(() => [])
     )
   );
-  return results.flat();
+  return tagManualEventSchools(results.flat());
+}
+
+// Travel buffers are keyed on an event's schoolId, which only the app's own
+// events carry. A session added to Google Calendar by hand has none, so it
+// would block its own time but get no drive time either side. Work out its
+// school from the event's location or title instead. Events the app created
+// keep their stored schoolId, even when it is '' (phone and video sessions).
+function tagManualEventSchools(events) {
+  const schools = loadSchools();
+  if (schools.length === 0) return events;
+  return events.map(event => {
+    const props = event.extendedProperties?.private;
+    if (props?.schoolId !== undefined) return event;
+    const school = matchSchoolForEvent(event, schools);
+    if (!school) return event;
+    return {
+      ...event,
+      extendedProperties: {
+        ...event.extendedProperties,
+        private: { ...props, schoolId: school.id }
+      }
+    };
+  });
 }
 
 /*
