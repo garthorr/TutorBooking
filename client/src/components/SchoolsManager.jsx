@@ -269,7 +269,7 @@ export default function SchoolsManager({ mapsApiKey, mapsLoaded }) {
             </button>
           </div>
           <p className="field-hint">
-            Actual driving time in minutes between each pair of schools. The walk/parking buffer below is added to every drive time when checking for scheduling conflicts, then rounded to the nearest 5.
+            Actual driving time in minutes between each pair of schools. The walk/parking buffer below is added to every drive time when checking for scheduling conflicts, then rounded to the nearest 5. A blank cell is treated as 20 minutes.
             Use <strong>Calculate from Addresses</strong> to auto-fill using Google Maps (requires Maps API key), then save.
           </p>
           <div className="settings-field settings-field-inline" style={{ marginBottom: '1rem' }}>

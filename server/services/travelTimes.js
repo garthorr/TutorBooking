@@ -14,15 +14,11 @@
  * database, so an address pair costs one lookup ever, not one per request.
  */
 import dbService from './dbService.js';
-import { loadSchools, createDriveTimeResolver, bufferMinutes } from '../schoolsStorage.js';
+import { loadSchools, createDriveTimeResolver, bufferMinutes, DEFAULT_DRIVE_MINUTES } from '../schoolsStorage.js';
 import { matchSchoolForEvent } from './availability.js';
 import { CUSTOM_LOCATION_ID } from '../customLocationConfig.js';
 
 export const ADDRESS_PLACE_PREFIX = 'address:';
-
-// Drive time assumed when an address cannot be looked up: Maps found no route,
-// Maps is unreachable, or no API key is configured. Walk time is added on top.
-export const UNKNOWN_ADDRESS_MINUTES = 20;
 
 // A vague location ("Home", "Gym") can make Maps pick a namesake hundreds of
 // miles away, and its drive time would block the whole day. Treat answers this
@@ -157,6 +153,6 @@ export async function createTravelResolver(events, slotPlace) {
     if (!from || !to || from === to) return 0;
     if (!isAddress(from) && !isAddress(to)) return schoolDriveTime(from, to, walkTime);
     const drive = minutes.get(`${placeAddress(from)}\n${placeAddress(to)}`);
-    return bufferMinutes(drive ?? UNKNOWN_ADDRESS_MINUTES, walkTime);
+    return bufferMinutes(drive ?? DEFAULT_DRIVE_MINUTES, walkTime);
   };
 }

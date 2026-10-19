@@ -129,6 +129,8 @@ test('school to school still uses the drive-time table, and phone slots need no 
   const resolve = await createTravelResolver([tagged('shelton')], 'stmarks');
 
   assert.strictEqual(resolve('shelton', 'stmarks', 5), 30);
+  // No table entry for St. Mark's → Shelton: 20 min default + 5 walk.
+  assert.strictEqual(resolve('stmarks', 'shelton', 5), 25);
   assert.strictEqual(resolve('address:1 Elm St', '', 5), 0);
   assert.strictEqual(calls.length, 0, 'no Maps lookups for school pairs');
 });

@@ -25,6 +25,10 @@ export function saveDriveTimes(driveTimes) {
   return dbService.saveDriveTimes(ADMIN_ID, driveTimes);
 }
 
+// Drive time assumed when the real one is not known: two schools with no entry
+// in the drive-time table, or an address Google Maps could not look up.
+export const DEFAULT_DRIVE_MINUTES = 20;
+
 // A travel buffer: drive plus walk/parking time, rounded to the nearest 5.
 export function bufferMinutes(driveMinutes, walkTime = 5) {
   return Math.round((driveMinutes + walkTime) / 5) * 5;
@@ -34,7 +38,7 @@ export function bufferMinutes(driveMinutes, walkTime = 5) {
 function resolveDriveTime(driveTimes, fromSchoolId, toSchoolId, walkTime = 5) {
   if (!fromSchoolId || !toSchoolId || fromSchoolId === toSchoolId) return 0;
   const minutes = driveTimes[fromSchoolId]?.[toSchoolId];
-  return bufferMinutes(minutes === undefined ? 30 : minutes, walkTime);
+  return bufferMinutes(minutes === undefined ? DEFAULT_DRIVE_MINUTES : minutes, walkTime);
 }
 
 /*
