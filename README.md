@@ -25,6 +25,9 @@ Designed for a scalable tutor/admin workflow:
 - **Availability engine**
   - Pulls events from one or more Google calendars
   - Applies drive-time buffers between school locations
+  - Also applies them around sessions added to Google Calendar by hand: the
+    event is matched to a school by its location or title, or else its address
+    is looked up with Google Maps (cached; 20 min when it cannot be found)
   - Automatic conflict detection with double-booking prevention
 
 - **Booking flow**
@@ -255,7 +258,7 @@ Set these in `server/.env`:
 
 Optional:
 - `TIMEZONE` (default `America/Chicago`)
-- `GOOGLE_MAPS_API_KEY` (enables address autocomplete + drive-time matrix)
+- `GOOGLE_MAPS_API_KEY` (enables address autocomplete, the drive-time matrix, and drive times from calendar event addresses)
 - `PORT` (default `5000`)
 - `DATA_DIR` (defaults to /app/data in Docker)
 - `TRUST_PROXY` - number of proxies in front of the app, counted outwards.

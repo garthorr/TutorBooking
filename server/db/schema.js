@@ -108,6 +108,17 @@ CREATE TABLE IF NOT EXISTS drive_times (
   FOREIGN KEY (to_school_id) REFERENCES schools (id)
 );
 
+-- Google Maps drive times between a calendar event's address and a school's,
+-- cached so each pair is looked up once. NULL minutes means Maps found no
+-- route, which is cached too so an unfindable address is not paid for again.
+CREATE TABLE IF NOT EXISTS address_drive_times (
+  from_address TEXT NOT NULL,
+  to_address TEXT NOT NULL,
+  minutes INTEGER,
+  fetched_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (from_address, to_address)
+);
+
 CREATE TABLE IF NOT EXISTS calendar_config (
   user_id INTEGER PRIMARY KEY,
   check_calendars TEXT NOT NULL, -- JSON string array
