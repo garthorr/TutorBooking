@@ -1,3 +1,7 @@
+// Sentinel the client sends, and Google events store, for the "Other location"
+// tile.
+export const CUSTOM_LOCATION_ID = '__CUSTOM__';
+
 /*
  * Weekly availability for "Other location" bookings.
  *

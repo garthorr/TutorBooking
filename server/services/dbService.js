@@ -209,6 +209,29 @@ class DBService {
     return true;
   }
 
+  // Cached Google Maps drive times for [from, to] address pairs. Returns a Map
+  // keyed "from\nto"; a pair is present only once it has been looked up, with
+  // null minutes when Maps found no route.
+  getAddressDriveTimes(pairs) {
+    const stmt = db.prepare('SELECT minutes FROM address_drive_times WHERE from_address = ? AND to_address = ?');
+    const found = new Map();
+    for (const [from, to] of pairs) {
+      const row = stmt.get(from, to);
+      if (row) found.set(`${from}\n${to}`, row.minutes);
+    }
+    return found;
+  }
+
+  saveAddressDriveTimes(results) {
+    const stmt = db.prepare(`
+      INSERT INTO address_drive_times (from_address, to_address, minutes) VALUES (?, ?, ?)
+      ON CONFLICT(from_address, to_address) DO UPDATE SET minutes = excluded.minutes, fetched_at = CURRENT_TIMESTAMP
+    `);
+    db.transaction(rows => {
+      for (const { from, to, minutes } of rows) stmt.run(from, to, minutes);
+    })(results);
+  }
+
   // OAuth Tokens
   getTokens(userId) {
     const row = db.prepare('SELECT tokens FROM oauth_tokens WHERE user_id = ?').get(userId);

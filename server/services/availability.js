@@ -91,6 +91,70 @@ export function isDateInOverrides(date, overrides) {
   });
 }
 
+// Street-type spellings Google and people use interchangeably.
+const STREET_WORDS = {
+  road: 'rd', street: 'st', avenue: 'ave', drive: 'dr', boulevard: 'blvd',
+  lane: 'ln', parkway: 'pkwy', highway: 'hwy', court: 'ct', place: 'pl'
+};
+
+// Lowercases a place name or address and drops punctuation so "St. Mark's",
+// "St Marks" and "Saint Mark's" all compare equal.
+function normalizePlace(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/['’.]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .split(' ')
+    .filter(Boolean)
+    .map(word => (word === 'saint' ? 'st' : STREET_WORDS[word] || word))
+    .join(' ');
+}
+
+// Whole-word containment, so "st marks" does not match inside "east marksville".
+function containsPlace(haystack, needle) {
+  return needle.length > 0 && ` ${haystack} `.includes(` ${needle} `);
+}
+
+// A school's name as written in full and as people shorten it: "Shelton
+// School" is often just "Shelton", "St. Mark's School of Texas" just "St Marks".
+function schoolNames(school) {
+  const full = normalizePlace(school.name);
+  const short = full.split(/ (?:school|academy)\b/)[0];
+  return short !== full && short.length >= 4 ? [full, short] : [full];
+}
+
+/*
+ * The school a calendar event takes place at, or null.
+ *
+ * Events the app creates carry a schoolId. Sessions the tutor adds to Google
+ * Calendar by hand only have free text, so match it against each school: the
+ * event's location against the school's street line and name first, then its
+ * title against the school's name. When several schools match, the longest
+ * match wins, so "Shelton Upper School" beats "Shelton".
+ */
+export function matchSchoolForEvent(event, schools) {
+  if (!event || !Array.isArray(schools)) return null;
+  const location = normalizePlace(event.location);
+  const title = normalizePlace(event.summary);
+  const streetLine = s => [normalizePlace(String(s.address || '').split(',')[0])];
+  const searches = [[location, streetLine], [location, schoolNames], [title, schoolNames]];
+  for (const [text, keysFor] of searches) {
+    if (!text) continue;
+    let best = null;
+    let bestLength = 0;
+    for (const school of schools) {
+      for (const needle of keysFor(school)) {
+        if (containsPlace(text, needle) && needle.length > bestLength) {
+          best = school;
+          bestLength = needle.length;
+        }
+      }
+    }
+    if (best) return best;
+  }
+  return null;
+}
+
 // A no-op drive-time resolver, used when callers don't supply one (e.g. tests
 // for meeting types that never incur travel buffers).
 const NO_DRIVE_TIME = () => 0;

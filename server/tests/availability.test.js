@@ -12,7 +12,8 @@ import {
   hasSchedulingConflict,
   getAvailableSlotsForDay,
   normalizeTime,
-  normalizeAvailability
+  normalizeAvailability,
+  matchSchoolForEvent
 } from '../services/availability.js';
 
 const DAY = new Date('2026-06-10T12:00:00.000Z'); // a Wednesday in UTC
@@ -200,4 +201,51 @@ test('minStart and maxStart bound the day from both ends', () => {
   const slots = getAvailableSlotsForDay(day, blocks, 60, [], '', 5, () => 0, from, to);
   assert.strictEqual(slots[0].time, '2026-10-05T10:00:00.000Z');
   assert.strictEqual(slots[slots.length - 1].time, '2026-10-05T12:00:00.000Z');
+});
+
+const SCHOOLS = [
+  { id: 'shelton', name: 'Shelton School', address: '15720 Hillcrest Road, Dallas, TX 75248' },
+  { id: 'stmarks', name: "St. Mark's", address: '10600 Preston Rd, Dallas, TX 75230' }
+];
+
+test('matchSchoolForEvent matches a hand-made event by street address', () => {
+  // Google writes "Rd" where the school was saved with "Road".
+  const event = { summary: 'Tutoring', location: '15720 Hillcrest Rd, Dallas, TX 75248, USA' };
+  assert.strictEqual(matchSchoolForEvent(event, SCHOOLS)?.id, 'shelton');
+});
+
+test('matchSchoolForEvent matches by school name despite punctuation', () => {
+  const event = { location: "Saint Marks School of Texas, Dallas" };
+  assert.strictEqual(matchSchoolForEvent(event, SCHOOLS)?.id, 'stmarks');
+});
+
+test('matchSchoolForEvent falls back to the event title, full or shortened name', () => {
+  assert.strictEqual(matchSchoolForEvent({ summary: 'Shelton School - Jamie' }, SCHOOLS)?.id, 'shelton');
+  assert.strictEqual(matchSchoolForEvent({ summary: 'Shelton - Jamie' }, SCHOOLS)?.id, 'shelton');
+});
+
+test('matchSchoolForEvent prefers the longest matching school name', () => {
+  const schools = [{ id: 'a', name: 'Shelton' }, { id: 'b', name: 'Shelton Upper School' }];
+  assert.strictEqual(matchSchoolForEvent({ location: 'Shelton Upper School' }, schools)?.id, 'b');
+});
+
+test('matchSchoolForEvent returns null for unrelated events and partial words', () => {
+  assert.strictEqual(matchSchoolForEvent({ summary: 'Dentist' }, SCHOOLS), null);
+  assert.strictEqual(matchSchoolForEvent({ location: 'East St Marksville' }, SCHOOLS), null);
+  assert.strictEqual(matchSchoolForEvent({}, SCHOOLS), null);
+});
+
+test('a hand-made school session gets drive time before the next school', () => {
+  // A Shelton session typed straight into Google Calendar, 09:00–10:00.
+  const manual = {
+    summary: 'Shelton - Jamie',
+    start: { dateTime: '2026-06-10T09:00:00.000Z' },
+    end: { dateTime: '2026-06-10T10:00:00.000Z' }
+  };
+  const school = matchSchoolForEvent(manual, SCHOOLS);
+  const tagged = { ...manual, extendedProperties: { private: { schoolId: school.id } } };
+  const getDriveTime = (from, to) => (from === 'shelton' && to === 'stmarks' ? 30 : 0);
+  const slots = getAvailableSlotsForDay(DAY, [{ start: '10:00', end: '12:00' }], 60, [tagged], 'stmarks', 5, getDriveTime);
+  // 30 min of driving after a 10:00 finish: St. Mark's opens at 10:30, not 10:00.
+  assert.strictEqual(slots[0].time, '2026-06-10T10:30:00.000Z');
 });

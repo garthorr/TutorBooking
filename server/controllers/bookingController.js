@@ -1,9 +1,10 @@
 import crypto from 'crypto';
 import dbService from '../services/dbService.js';
-import { loadSchools, createDriveTimeResolver } from '../schoolsStorage.js';
+import { loadSchools } from '../schoolsStorage.js';
+import { createTravelResolver, eventPlace, addressPlace } from '../services/travelTimes.js';
 import { loadCalendarConfig } from '../calendarStorage.js';
 import { loadMeetingTypes } from '../meetingTypesStorage.js';
-import { CUSTOM_LOCATION_AVAILABILITY } from '../customLocationConfig.js';
+import { CUSTOM_LOCATION_AVAILABILITY, CUSTOM_LOCATION_ID } from '../customLocationConfig.js';
 import { addBooking as addBookingToDisk, loadBookings } from '../bookingsStorage.js';
 import { sendConfirmation, sendReschedule, sendCancellation, notifyAdminOfBooking, manageUrl } from '../services/emailService.js';
 import { normalizeGuestEmails, parseGuestEmails } from '../services/guests.js';
@@ -28,8 +29,6 @@ const DAY_MS = 24 * HOUR_MS;
 const TIMEZONE = process.env.TIMEZONE || 'America/Chicago';
 const ADMIN_ID = 1;
 
-// Sentinel the client sends for the "Other location" tile.
-const CUSTOM_LOCATION_ID = '__CUSTOM__';
 // Drive-time key used for custom locations. Matches what the client sends to
 // the availability endpoints, so travel buffers resolve identically whether a
 // slot is being listed or booked.
@@ -51,7 +50,28 @@ async function fetchEventsForPeriod(timeMin, timeMax) {
       }).then(r => r.data.items || []).catch(() => [])
     )
   );
-  return results.flat();
+  return tagEventPlaces(results.flat());
+}
+
+// Travel buffers are keyed on an event's schoolId, which only the app's own
+// events carry. A session added to Google Calendar by hand has none, so it
+// would block its own time but get no drive time either side. Record where it
+// is instead, a matched school or its address, so travel is worked out from
+// there. Events the app created keep their stored schoolId, even when it is ''
+// (phone and video sessions).
+function tagEventPlaces(events) {
+  const schools = loadSchools();
+  return events.map(event => {
+    const place = eventPlace(event, schools);
+    if (!place) return event;
+    return {
+      ...event,
+      extendedProperties: {
+        ...event.extendedProperties,
+        private: { ...event.extendedProperties?.private, schoolId: place }
+      }
+    };
+  });
 }
 
 /*
@@ -111,6 +131,9 @@ function bookingsAsEvents(timeMin, timeMax, excludeBookingId = null) {
     new Date(timeMin.getTime() - pad).toISOString(),
     new Date(timeMax.getTime() + pad).toISOString()
   );
+  // "Other location" bookings are stored without a school, like phone calls,
+  // but unlike phone calls they happen somewhere: travel is from their address.
+  const inPerson = new Set(loadMeetingTypes().filter(t => t.requiresSchool).map(t => t.id));
   const events = [];
   for (const b of rows) {
     if (excludeBookingId && b.id === excludeBookingId) continue;
@@ -120,7 +143,9 @@ function bookingsAsEvents(timeMin, timeMax, excludeBookingId = null) {
       id: `booking:${b.id}`,
       start: { dateTime: start.toISOString() },
       end: { dateTime: new Date(start.getTime() + (b.session_duration || 60) * 60 * 1000).toISOString() },
-      extendedProperties: { private: { schoolId: b.school_id || '' } }
+      extendedProperties: { private: {
+        schoolId: b.school_id || (inPerson.has(b.meeting_type) && addressPlace(b.location)) || ''
+      } }
     });
   }
   return events;
@@ -166,7 +191,8 @@ async function handleAvailability(req, res, bypassNotice = false) {
     const timeMax = tzDate(noonUTC, 23, 59);
     const events = await fetchBusyForPeriod(timeMin, timeMax);
     const walkTime = dbService.getSettings(1)?.walk_time ?? 5;
-    const slots = getAvailableSlotsForDay(noonUTC, blocks, sessionDuration, events, schoolId, walkTime, createDriveTimeResolver(), earliestBookableStart(bypassNotice, notice), latestBookableStart(bypassNotice));
+    const getDriveTime = await createTravelResolver(events, schoolId);
+    const slots = getAvailableSlotsForDay(noonUTC, blocks, sessionDuration, events, schoolId, walkTime, getDriveTime, earliestBookableStart(bypassNotice, notice), latestBookableStart(bypassNotice));
     res.json({ slots });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch availability' });
@@ -201,8 +227,8 @@ async function handleAvailableDays(req, res, bypassNotice = false) {
     const availableDates = [];
     const allEvents = await fetchBusyForPeriod(timeMin, timeMax);
     const walkTime = dbService.getSettings(1)?.walk_time ?? 5;
-    // One drive-time read for the whole month, not one per lookup.
-    const getDriveTime = createDriveTimeResolver();
+    // One drive-time resolver for the whole month, not one per day.
+    const getDriveTime = await createTravelResolver(allEvents, schoolId);
     const now = earliestBookableStart(bypassNotice, notice);
     const latest = latestBookableStart(bypassNotice);
     const latestDateStr = latest ? latest.toLocaleDateString('en-CA', { timeZone: TIMEZONE }) : null;
@@ -337,7 +363,8 @@ async function isSlotAvailable(cfg, startISO, exclude = {}, bypassNotice = false
   if (exclude.eventId) events = events.filter(e => e.id !== exclude.eventId);
 
   const walkTime = dbService.getSettings(ADMIN_ID)?.walk_time ?? 5;
-  const slots = getAvailableSlotsForDay(noonUTC, blocks, cfg.sessionDuration, events, cfg.schoolId, walkTime, createDriveTimeResolver(), earliestBookableStart(bypassNotice, cfg.minimumNoticeMinutes ?? null), latestBookableStart(bypassNotice));
+  const getDriveTime = await createTravelResolver(events, cfg.schoolId);
+  const slots = getAvailableSlotsForDay(noonUTC, blocks, cfg.sessionDuration, events, cfg.schoolId, walkTime, getDriveTime, earliestBookableStart(bypassNotice, cfg.minimumNoticeMinutes ?? null), latestBookableStart(bypassNotice));
   return slots.some(s => new Date(s.time).getTime() === start.getTime());
 }
 
