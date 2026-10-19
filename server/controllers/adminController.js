@@ -169,6 +169,12 @@ export const updateDriveTimes = (req, res) => {
       return res.status(400).json({ error: `Unknown school "${fromId}"` });
     }
     for (const [toId, minutes] of Object.entries(targets)) {
+      // Blank means "unknown": drop it so the default buffer applies, rather
+      // than letting Number('') === 0 store a walk-only buffer.
+      if (minutes === null || minutes === '') {
+        delete targets[toId];
+        continue;
+      }
       if (!knownSchools.has(toId)) {
         return res.status(400).json({ error: `Unknown school "${toId}"` });
       }
@@ -221,6 +227,7 @@ export const calculateDriveTimes = async (req, res) => {
   }
 
   const driveTimes = {};
+  const failed = [];
   valid.forEach((from, i) => {
     driveTimes[from.id] = {};
     const row = data.rows?.[i];
@@ -230,12 +237,15 @@ export const calculateDriveTimes = async (req, res) => {
       if (element?.status === 'OK' && element.duration) {
         driveTimes[from.id][to.id] = Math.round(element.duration.value / 60);
       } else {
-        driveTimes[from.id][to.id] = 0;
+        // Leave the pair out rather than writing 0: a 0 means "no drive at all"
+        // and shrinks the travel buffer to walk time only, whereas a missing
+        // entry falls back to the safe default.
+        failed.push({ from: from.id, to: to.id });
       }
     });
   });
 
-  res.json({ driveTimes });
+  res.json({ driveTimes, failed });
 };
 
 export const getMeetingTypes = (req, res) => {

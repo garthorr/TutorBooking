@@ -128,13 +128,14 @@ export default function SchoolsManager({ mapsApiKey, mapsLoaded }) {
 
   const handleDriveTimeChange = (fromId, toId, value) => {
     const mins = parseInt(value, 10)
-    setDriveTimes(prev => ({
-      ...prev,
-      [fromId]: {
-        ...(prev[fromId] || {}),
-        [toId]: isNaN(mins) ? 0 : mins,
-      }
-    }))
+    setDriveTimes(prev => {
+      const row = { ...(prev[fromId] || {}) }
+      // A cleared box means "unknown", not "0 minutes". Dropping the entry lets
+      // the server fall back to its safe default instead of a walk-only buffer.
+      if (isNaN(mins)) delete row[toId]
+      else row[toId] = mins
+      return { ...prev, [fromId]: row }
+    })
   }
 
   const handleSaveDriveTimes = async () => {
@@ -175,7 +176,13 @@ export default function SchoolsManager({ mapsApiKey, mapsLoaded }) {
       const data = await res.json()
       if (res.ok) {
         setDriveTimes(data.driveTimes)
-        showMessage('Drive times calculated — review and save when ready.', 'success')
+        if (data.failed?.length) {
+          const names = id => schools.find(s => s.id === id)?.name || id
+          const pairs = data.failed.map(f => `${names(f.from)} → ${names(f.to)}`).join(', ')
+          showMessage(`No route found for: ${pairs}. Fill these in by hand before saving.`, 'error')
+        } else {
+          showMessage('Drive times calculated — review and save when ready.', 'success')
+        }
       } else {
         showMessage(data.error || 'Calculation failed', 'error')
       }
